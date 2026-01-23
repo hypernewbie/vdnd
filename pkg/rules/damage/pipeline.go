@@ -29,7 +29,7 @@ func ProcessDamage(target *entity.Entity, damage DamageInstance, isCritical bool
 	amount := damage.Amount
 
 	// 2. Critical doubling (already handled in DamageRoll.RollCritical usually)
-	// If it wasn't doubled yet, we might want to double it here, 
+	// If it wasn't doubled yet, we might want to double it here,
 	// but the standard is to pass in the rolled instance.
 
 	// 3. Check immunity

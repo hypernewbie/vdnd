@@ -25,11 +25,11 @@ func CheckImmunity(target *entity.Entity, damageType string, isPrecision bool, t
 func CalculateWeakness(target *entity.Entity, damageType string, traits []trait.TraitID) int {
 	weakness := target.GetWeakness(damageType)
 
-	// In PF2E, you usually take the highest applicable weakness, 
+	// In PF2E, you usually take the highest applicable weakness,
 	// but multiple weaknesses to different things can apply if they are distinct.
-	// For simplicity, we'll follow the guideline: "highest that applies" 
+	// For simplicity, we'll follow the guideline: "highest that applies"
 	// for a single damage instance of a single type.
-	
+
 	// Check traits too (e.g. weakness to silver)
 	for _, tr := range traits {
 		trW := target.GetWeakness(string(tr))
@@ -44,7 +44,7 @@ func CalculateWeakness(target *entity.Entity, damageType string, traits []trait.
 // CalculateResistance returns total resistance value for damage type
 func CalculateResistance(target *entity.Entity, damageType string, traits []trait.TraitID) int {
 	resEntry := target.GetResistanceEntry(damageType)
-	
+
 	// Check exceptions
 	for _, ex := range resEntry.Except {
 		for _, tr := range traits {
@@ -57,7 +57,7 @@ func CalculateResistance(target *entity.Entity, damageType string, traits []trai
 			return 0
 		}
 	}
-	
+
 	resistance := resEntry.Amount
 
 	// Check trait-based resistances (e.g. resistance to physical)
