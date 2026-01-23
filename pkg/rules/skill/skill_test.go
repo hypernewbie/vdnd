@@ -42,27 +42,32 @@ func TestExhaustiveSkills(t *testing.T) {
 			actor.Conditions.Remove(condition.Prone)
 			res := Balance(actor, dc, tt.Roll)
 			if res.Degree != tt.Want { t.Errorf("%s: got %v, want %v", tt.Name, res.Degree, tt.Want) }
+			if tt.Want == check.CriticalFailure && !actor.Conditions.Has(condition.Prone) { t.Error("Crit Fail should apply Prone") }
 		}
 	})
 
 	t.Run("TumbleThrough", func(t *testing.T) {
 		for _, tt := range standardDegrees {
-			_, checkRes := TumbleThrough(actor, target, tt.Roll)
+			res, checkRes := TumbleThrough(actor, target, tt.Roll)
 			if checkRes.Degree != tt.Want { t.Errorf("%s: got %v, want %v", tt.Name, checkRes.Degree, tt.Want) }
+			if tt.Want >= check.Success && !res.Success { t.Error("Success should return success=true") }
 		}
 	})
 
 	t.Run("ManeuverInFlight", func(t *testing.T) {
 		for _, tt := range standardDegrees {
-			res := ManeuverInFlight(actor, dc, tt.Roll)
+			dist, res := ManeuverInFlight(actor, dc, tt.Roll)
 			if res.Degree != tt.Want { t.Errorf("%s: got %v, want %v", tt.Name, res.Degree, tt.Want) }
+			if tt.Want >= check.Success && dist != actor.BaseSpeed { t.Errorf("Success should return %d, got %d", actor.BaseSpeed, dist) }
 		}
 	})
 
 	t.Run("Squeeze", func(t *testing.T) {
 		for _, tt := range standardDegrees {
-			res := Squeeze(actor, dc, tt.Roll)
+			dist, res := Squeeze(actor, dc, tt.Roll)
 			if res.Degree != tt.Want { t.Errorf("%s: got %v, want %v", tt.Name, res.Degree, tt.Want) }
+			if tt.Want == check.CriticalSuccess && dist != 10 { t.Errorf("Crit Success should return 10, got %d", dist) }
+			if tt.Want == check.Success && dist != 5 { t.Errorf("Success should return 5, got %d", dist) }
 		}
 	})
 
@@ -73,34 +78,41 @@ func TestExhaustiveSkills(t *testing.T) {
 			move, res := Climb(actor, dc, tt.Roll)
 			if res.Degree != tt.Want { t.Errorf("%s: got %v, want %v", tt.Name, res.Degree, tt.Want) }
 			if tt.Want == check.CriticalSuccess && move.Speed != 8 { t.Error("Crit Success speed should be 8") }
+			if tt.Want == check.Success && move.Speed != 5 { t.Error("Success speed should be 5") }
 		}
 	})
 
 	t.Run("Swim", func(t *testing.T) {
 		for _, tt := range standardDegrees {
-			_, res := Swim(actor, dc, tt.Roll)
+			move, res := Swim(actor, dc, tt.Roll)
 			if res.Degree != tt.Want { t.Errorf("%s: got %v, want %v", tt.Name, res.Degree, tt.Want) }
+			if tt.Want == check.CriticalSuccess && move.Speed != 10 { t.Error("Crit Success speed 10") }
+			if tt.Want == check.Success && move.Speed != 5 { t.Error("Success speed 5") }
 		}
 	})
 
 	t.Run("HighJump", func(t *testing.T) {
 		for _, tt := range standardDegrees {
-			_, res := HighJump(actor, dc, tt.Roll)
+			dist, res := HighJump(actor, dc, tt.Roll)
 			if res.Degree != tt.Want { t.Errorf("%s: got %v, want %v", tt.Name, res.Degree, tt.Want) }
+			if tt.Want == check.Success && dist != 5 { t.Error("Success dist 5") }
 		}
 	})
 
 	t.Run("LongJump", func(t *testing.T) {
 		for _, tt := range standardDegrees {
-			_, res := LongJump(actor, dc, tt.Roll)
+			dist, res := LongJump(actor, dc, tt.Roll)
 			if res.Degree != tt.Want { t.Errorf("%s: got %v, want %v", tt.Name, res.Degree, tt.Want) }
+			if tt.Want == check.Success && dist != 10 { t.Error("Success dist Total (10)") }
 		}
 	})
 
 	t.Run("Disarm", func(t *testing.T) {
 		for _, tt := range standardDegrees {
+			target.Conditions.Remove("DisarmWeakness")
 			res := Disarm(actor, target, tt.Roll)
 			if res.Degree != tt.Want { t.Errorf("%s: got %v, want %v", tt.Name, res.Degree, tt.Want) }
+			if tt.Want == check.Success && !target.Conditions.Has("DisarmWeakness") { t.Error("Success should apply DisarmWeakness") }
 		}
 	})
 
@@ -117,6 +129,8 @@ func TestExhaustiveSkills(t *testing.T) {
 			target.Conditions.Remove(condition.Restrained)
 			res := Grapple(actor, target, nil, tt.Roll)
 			if res.Degree != tt.Want { t.Errorf("%s: got %v, want %v", tt.Name, res.Degree, tt.Want) }
+			if tt.Want == check.Success && !target.Conditions.Has(condition.Grabbed) { t.Error("Success: Grabbed") }
+			if tt.Want == check.CriticalSuccess && !target.Conditions.Has(condition.Restrained) { t.Error("Crit Success: Restrained") }
 		}
 	})
 
@@ -126,11 +140,13 @@ func TestExhaustiveSkills(t *testing.T) {
 			actor.Conditions.Remove(condition.Prone)
 			res := Trip(actor, target, nil, tt.Roll)
 			if res.Degree != tt.Want { t.Errorf("%s: got %v, want %v", tt.Name, res.Degree, tt.Want) }
+			if tt.Want >= check.Success && !target.Conditions.Has(condition.Prone) { t.Error("Success: target Prone") }
 		}
 	})
 
 	t.Run("Shove", func(t *testing.T) {
 		for _, tt := range standardDegrees {
+			actor.Conditions.Remove(condition.Prone)
 			res := Shove(actor, target, nil, tt.Roll)
 			if res.Degree != tt.Want { t.Errorf("%s: got %v, want %v", tt.Name, res.Degree, tt.Want) }
 		}
@@ -139,15 +155,19 @@ func TestExhaustiveSkills(t *testing.T) {
 	// --- Deception ---
 	t.Run("CreateDiversion", func(t *testing.T) {
 		for _, tt := range standardDegrees {
+			actor.Conditions.RemoveRelative(condition.Hidden, target.ID)
 			res := CreateADiversion(actor, []*entity.Entity{target}, tt.Roll)
 			if res[0].Degree != tt.Want { t.Errorf("%s: got %v, want %v", tt.Name, res[0].Degree, tt.Want) }
+			if tt.Want >= check.Success && !actor.Conditions.HasRelative(condition.Hidden, target.ID) { t.Error("Success: Hidden") }
 		}
 	})
 
 	t.Run("Feint", func(t *testing.T) {
 		for _, tt := range standardDegrees {
+			target.Conditions.Remove(condition.FlatFooted)
 			res := Feint(actor, target, tt.Roll)
 			if res.Degree != tt.Want { t.Errorf("%s: got %v, want %v", tt.Name, res.Degree, tt.Want) }
+			if tt.Want >= check.Success && !target.Conditions.HasRelative(condition.FlatFooted, actor.ID) { t.Error("Success: FlatFooted relative") }
 		}
 	})
 
@@ -176,14 +196,14 @@ func TestExhaustiveSkills(t *testing.T) {
 	t.Run("MakeImpression", func(t *testing.T) {
 		for _, tt := range standardDegrees {
 			res := MakeAnImpression(actor, target, tt.Roll)
-			if res.Degree != tt.Want { t.Errorf("%s: got %v, want %v (Roll: %d, DC: %d)", tt.Name, res.Degree, tt.Want, tt.Roll, res.DC) }
+			if res.Degree != tt.Want { t.Errorf("%s: got %v, want %v", tt.Name, res.Degree, tt.Want) }
 		}
 	})
 
 	t.Run("Request", func(t *testing.T) {
 		for _, tt := range standardDegrees {
 			res := Request(actor, target, tt.Roll)
-			if res.Degree != tt.Want { t.Errorf("%s: got %v, want %v (Roll: %d, DC: %d)", tt.Name, res.Degree, tt.Want, tt.Roll, res.DC) }
+			if res.Degree != tt.Want { t.Errorf("%s: got %v, want %v", tt.Name, res.Degree, tt.Want) }
 		}
 	})
 
@@ -191,15 +211,18 @@ func TestExhaustiveSkills(t *testing.T) {
 	t.Run("Coerce", func(t *testing.T) {
 		for _, tt := range standardDegrees {
 			res := Coerce(actor, target, tt.Roll)
-			if res.Degree != tt.Want { t.Errorf("%s: got %v, want %v (Roll: %d, DC: %d)", tt.Name, res.Degree, tt.Want, tt.Roll, res.DC) }
+			if res.Degree != tt.Want { t.Errorf("%s: got %v, want %v", tt.Name, res.Degree, tt.Want) }
 		}
 	})
 
 	t.Run("Demoralize", func(t *testing.T) {
 		for _, tt := range standardDegrees {
 			target.TemporaryImmunities = make(map[string]int)
+			target.Conditions.Remove(condition.Frightened)
 			res := Demoralize(actor, target, tt.Roll)
-			if res.Degree != tt.Want { t.Errorf("%s: got %v, want %v (Roll: %d, DC: %d)", tt.Name, res.Degree, tt.Want, tt.Roll, res.DC) }
+			if res.Degree != tt.Want { t.Errorf("%s: got %v, want %v", tt.Name, res.Degree, tt.Want) }
+			if tt.Want == check.CriticalSuccess && target.Conditions.Value(condition.Frightened) != 2 { t.Error("Crit Success: Frightened 2") }
+			if tt.Want == check.Success && target.Conditions.Value(condition.Frightened) != 1 { t.Error("Success: Frightened 1") }
 		}
 	})
 
@@ -209,7 +232,7 @@ func TestExhaustiveSkills(t *testing.T) {
 		for _, tt := range []DegreeTest{
 			{"Critical Success", 20, check.CriticalSuccess},
 			{"Success", 10, check.Success},
-			{"Failure", 2, check.Failure}, // 2 + 3 bonus = 5 (Fail vs 10)
+			{"Failure", 2, check.Failure},
 			{"Critical Failure", 1, check.CriticalFailure},
 		} {
 			_, res := TreatWounds(actor, target, dc, tt.Roll)
@@ -246,7 +269,7 @@ func TestExhaustiveSkills(t *testing.T) {
 			actor.Conditions.RemoveRelative(condition.Undetected, target.ID)
 			actor.Conditions.RemoveRelative(condition.Observed, target.ID)
 			res := Sneak(actor, target, tt.Roll)
-			if res.Degree != tt.Want { t.Errorf("%s: got %v, want %v (Roll: %d, DC: %d)", tt.Name, res.Degree, tt.Want, tt.Roll, res.DC) }
+			if res.Degree != tt.Want { t.Errorf("%s: got %v, want %v", tt.Name, res.Degree, tt.Want) }
 		}
 	})
 
@@ -260,8 +283,10 @@ func TestExhaustiveSkills(t *testing.T) {
 	// --- Thievery ---
 	t.Run("PickLock", func(t *testing.T) {
 		for _, tt := range standardDegrees {
-			_, res := PickLock(actor, dc, 3, tt.Roll)
+			prog, res := PickLock(actor, dc, 3, tt.Roll)
 			if res.Degree != tt.Want { t.Errorf("%s: got %v, want %v", tt.Name, res.Degree, tt.Want) }
+			if tt.Want == check.CriticalSuccess && prog != 2 { t.Error("Crit Success: 2 successes") }
+			if tt.Want == check.Success && prog != 1 { t.Error("Success: 1 success") }
 		}
 	})
 
@@ -282,7 +307,7 @@ func TestExhaustiveSkills(t *testing.T) {
 	t.Run("Steal", func(t *testing.T) {
 		for _, tt := range standardDegrees {
 			res := Steal(actor, target, tt.Roll)
-			if res.Degree != tt.Want { t.Errorf("%s: got %v, want %v (Roll: %d, DC: %d)", tt.Name, res.Degree, tt.Want, tt.Roll, res.DC) }
+			if res.Degree != tt.Want { t.Errorf("%s: got %v, want %v", tt.Name, res.Degree, tt.Want) }
 		}
 	})
 
