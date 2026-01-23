@@ -1,6 +1,7 @@
 package combat
 
 import (
+	"fmt"
 	"uaa/vdnd/pkg/rules/ability"
 	"uaa/vdnd/pkg/rules/check"
 	"uaa/vdnd/pkg/rules/damage"
@@ -17,8 +18,8 @@ func NewStrike(weapon *item.Weapon) *StrikeAction {
 	return &StrikeAction{Weapon: weapon}
 }
 
-func (s *StrikeAction) Name() string     { return "Strike" }
-func (s *StrikeAction) Cost() ActionCost { return CostOne }
+func (s *StrikeAction) Name() string            { return "Strike" }
+func (s *StrikeAction) Cost() ability.ActionCost { return ability.CostOne }
 func (s *StrikeAction) HasTrait(id trait.TraitID) bool {
 	if id == trait.TraitAttack {
 		return true
@@ -28,12 +29,12 @@ func (s *StrikeAction) HasTrait(id trait.TraitID) bool {
 
 func (s *StrikeAction) Validate(actor, target *entity.Entity, turn *TurnState) error {
 	if !turn.CanAct() {
-		return interface{}(nil).(error) // placeholder for "cannot act" error
+		return fmt.Errorf("actor cannot act")
 	}
 	return nil
 }
 
-func (s *StrikeAction) Execute(actor, target *entity.Entity, turn *TurnState) ActionResult {
+func (s *StrikeAction) Execute(actor, target *entity.Entity, turn *TurnState) ability.ActionResult {
 	// Calculate attack modifier
 	abilityMod := s.calculateAttackAbilityModifier(actor)
 	profBonus := actor.GetWeaponProficiency(s.Weapon).Bonus(actor.Level)
@@ -62,16 +63,16 @@ func (s *StrikeAction) Execute(actor, target *entity.Entity, turn *TurnState) Ac
 		dmg := s.rollDamageInstance(actor, true)
 		pipelineRes := damage.ProcessDamage(target, dmg, true)
 		turn.RecordStrike(StrikeRecord{TargetID: target.ID, Hit: true, WeaponID: s.Weapon.ID})
-		return ActionResult{Success: true, Degree: res.Degree, Damage: pipelineRes.FinalDamage}
+		return ability.ActionResult{Success: true, Degree: res.Degree, Damage: pipelineRes.FinalDamage}
 	} else if res.Degree == check.Success {
 		dmg := s.rollDamageInstance(actor, false)
 		pipelineRes := damage.ProcessDamage(target, dmg, false)
 		turn.RecordStrike(StrikeRecord{TargetID: target.ID, Hit: true, WeaponID: s.Weapon.ID})
-		return ActionResult{Success: true, Degree: res.Degree, Damage: pipelineRes.FinalDamage}
+		return ability.ActionResult{Success: true, Degree: res.Degree, Damage: pipelineRes.FinalDamage}
 	}
 
 	turn.RecordStrike(StrikeRecord{TargetID: target.ID, Hit: false, WeaponID: s.Weapon.ID})
-	return ActionResult{Success: false, Degree: res.Degree}
+	return ability.ActionResult{Success: false, Degree: res.Degree}
 }
 
 func (s *StrikeAction) calculateAttackAbilityModifier(actor *entity.Entity) int {

@@ -2,7 +2,6 @@ package spell
 
 import (
 	"uaa/vdnd/pkg/rules/ability"
-	"uaa/vdnd/pkg/rules/combat"
 	"uaa/vdnd/pkg/rules/dice"
 	"uaa/vdnd/pkg/rules/item"
 )
@@ -14,7 +13,7 @@ var (
 		Name:        "Electric Arc",
 		Rank:        1,
 		Traditions:  []SpellTradition{TraditionArcane, TraditionPrimal},
-		ActionCost:  combat.CostTwo,
+		ActionCost:  ability.CostTwo,
 		Components:  []SpellComponent{ComponentSomatic, ComponentVerbal},
 		Range:       30,
 		Targets:     2,
@@ -32,7 +31,7 @@ var (
 		Name:        "Fireball",
 		Rank:        3,
 		Traditions:  []SpellTradition{TraditionArcane, TraditionPrimal},
-		ActionCost:  combat.CostTwo,
+		ActionCost:  ability.CostTwo,
 		Components:  []SpellComponent{ComponentSomatic, ComponentVerbal},
 		Range:       500,
 		Area:        AreaBurst,
@@ -51,7 +50,7 @@ var (
 		Name:        "Fear",
 		Rank:        1,
 		Traditions:  []SpellTradition{TraditionArcane, TraditionDivine, TraditionOccult, TraditionPrimal},
-		ActionCost:  combat.CostTwo,
+		ActionCost:  ability.CostTwo,
 		Range:       30,
 		Targets:     1,
 		Save:        ability.SaveWill,

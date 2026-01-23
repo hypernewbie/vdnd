@@ -2,10 +2,11 @@ package entity
 
 import (
 	"uaa/vdnd/pkg/rules/ability"
+	"uaa/vdnd/pkg/rules/affliction"
 	"uaa/vdnd/pkg/rules/condition"
+	"uaa/vdnd/pkg/rules/feat"
 	"uaa/vdnd/pkg/rules/item"
 	"uaa/vdnd/pkg/rules/trait"
-	"uaa/vdnd/pkg/rules/affliction"
 )
 
 type ResistanceEntry struct {
@@ -57,6 +58,7 @@ type Entity struct {
 	// Runtime State
 	Conditions  *condition.ConditionTracker
 	Afflictions *affliction.AfflictionTracker
+	Feats       *feat.FeatTracker
 
 	// Position (zone-based)
 	Position    string   // Zone ID
@@ -84,6 +86,7 @@ func NewEntity(id, name string, level int) *Entity {
 		SpellcastingAbility: ability.Intelligence, // Default
 		Conditions:          condition.NewTracker(),
 		Afflictions:         affliction.NewTracker(),
+		Feats:               feat.NewFeatTracker(),
 		Resistances:         make(map[string]ResistanceEntry),
 		Weaknesses:          make(map[string]int),
 		WieldedWeapons:      make([]*item.Weapon, 0),
@@ -96,6 +99,38 @@ func NewPC(id, name string, level int, ancestry, class, background string) *Enti
 	e.Class = class
 	e.Background = background
 	return e
+}
+
+func (e *Entity) GetName() string {
+	return e.Name
+}
+
+func (e *Entity) GetID() string {
+	return e.ID
+}
+
+func (e *Entity) GetLevel() int {
+	return e.Level
+}
+
+func (e *Entity) GetAbilityScore(ab ability.Ability) int {
+	return e.Abilities.Get(ab)
+}
+
+func (e *Entity) HasFeat(featID string) bool {
+	return e.Feats.Has(featID)
+}
+
+func (e *Entity) HasSkillRank(skillID ability.SkillID, rank ability.ProficiencyRank) bool {
+	prof := ability.Untrained
+	if p, ok := e.SkillProficiencies[skillID]; ok {
+		prof = p
+	}
+	return prof >= rank
+}
+
+func (e *Entity) HasTrait(traitID trait.TraitID) bool {
+	return e.Traits.HasTrait(traitID)
 }
 
 // Clone creates a deep copy of the entity
@@ -158,6 +193,12 @@ func (e *Entity) Clone() *Entity {
 			inst.TimeToOnset = a.TimeToOnset
 			inst.TimeToNextSave = a.TimeToNextSave
 		}
+	}
+
+	// Feats tracker needs a deep clone
+	clone.Feats = feat.NewFeatTracker()
+	for _, f := range e.Feats.All() {
+		clone.Feats.Add(f)
 	}
 
 	return &clone

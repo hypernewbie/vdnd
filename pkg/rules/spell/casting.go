@@ -23,7 +23,7 @@ func NewCastSpell(spell *Spell, caster *entity.Entity, targets []*entity.Entity)
 }
 
 func (c *CastSpellAction) Name() string            { return "Cast a Spell: " + c.Spell.Name }
-func (c *CastSpellAction) Cost() combat.ActionCost { return c.Spell.ActionCost }
+func (c *CastSpellAction) Cost() ability.ActionCost { return c.Spell.ActionCost }
 
 func (c *CastSpellAction) Execute(turn *combat.TurnState) []EffectResult {
 	results := []EffectResult{}

@@ -1,8 +1,8 @@
 package combat
 
 import (
-	"uaa/vdnd/pkg/rules/ability" // Needed for SeekAction
-	"uaa/vdnd/pkg/rules/check"   // Kept for types if needed, or removing if unused
+	"uaa/vdnd/pkg/rules/ability"
+	"uaa/vdnd/pkg/rules/check"
 	"uaa/vdnd/pkg/rules/entity"
 	"uaa/vdnd/pkg/rules/skill"
 	"uaa/vdnd/pkg/rules/trait"
@@ -11,8 +11,8 @@ import (
 // Demoralize - Intimidation vs Will DC, applies Frightened
 type DemoralizeAction struct{}
 
-func (d *DemoralizeAction) Name() string     { return "Demoralize" }
-func (d *DemoralizeAction) Cost() ActionCost { return CostOne }
+func (d *DemoralizeAction) Name() string            { return "Demoralize" }
+func (d *DemoralizeAction) Cost() ability.ActionCost { return ability.CostOne }
 func (d *DemoralizeAction) HasTrait(id trait.TraitID) bool {
 	return id == trait.TraitAuditory || id == trait.TraitMental || id == trait.TraitEmotion || id == trait.TraitFear
 }
@@ -21,9 +21,9 @@ func (d *DemoralizeAction) Validate(actor, target *entity.Entity, turn *TurnStat
 	return nil
 }
 
-func (d *DemoralizeAction) Execute(actor, target *entity.Entity, turn *TurnState) ActionResult {
+func (d *DemoralizeAction) Execute(actor, target *entity.Entity, turn *TurnState) ability.ActionResult {
 	if err := turn.SpendActions(d.Cost()); err != nil {
-		return ActionResult{Success: false, Description: err.Error()}
+		return ability.ActionResult{Success: false, Description: err.Error()}
 	}
 
 	res := skill.Demoralize(actor, target)
@@ -38,14 +38,14 @@ func (d *DemoralizeAction) Execute(actor, target *entity.Entity, turn *TurnState
 		}
 	}
 
-	return ActionResult{Success: res.Degree >= check.Success, Degree: res.Degree, Description: desc}
+	return ability.ActionResult{Success: res.Degree >= check.Success, Degree: res.Degree, Description: desc}
 }
 
 // Grapple - Athletics vs Fortitude DC, applies Grabbed
 type GrappleAction struct{}
 
-func (g *GrappleAction) Name() string     { return "Grapple" }
-func (g *GrappleAction) Cost() ActionCost { return CostOne }
+func (g *GrappleAction) Name() string            { return "Grapple" }
+func (g *GrappleAction) Cost() ability.ActionCost { return ability.CostOne }
 func (g *GrappleAction) HasTrait(id trait.TraitID) bool {
 	return id == trait.TraitAttack
 }
@@ -54,9 +54,9 @@ func (g *GrappleAction) Validate(actor, target *entity.Entity, turn *TurnState) 
 	return nil
 }
 
-func (g *GrappleAction) Execute(actor, target *entity.Entity, turn *TurnState) ActionResult {
+func (g *GrappleAction) Execute(actor, target *entity.Entity, turn *TurnState) ability.ActionResult {
 	if err := turn.SpendActions(g.Cost()); err != nil {
-		return ActionResult{Success: false, Description: err.Error()}
+		return ability.ActionResult{Success: false, Description: err.Error()}
 	}
 
 	mapPenalty := turn.GetMAP(false)
@@ -73,20 +73,16 @@ func (g *GrappleAction) Execute(actor, target *entity.Entity, turn *TurnState) A
 		if res.Degree == check.CriticalSuccess {
 			desc += " (Restrained)"
 		}
-		// Flat-footed is applied by skill.Grapple call implicitly?
-		// Actually, standard Grapple only implies Grabbed which IMPLIES Flat-Footed/Off-Guard.
-		// The previous implementation applied both. skill.Grapple should ideally handle it or condition logic should.
-		// For now we assume skill.Grapple handles condition application.
 	}
 
-	return ActionResult{Success: res.Degree >= check.Success, Degree: res.Degree, Description: desc}
+	return ability.ActionResult{Success: res.Degree >= check.Success, Degree: res.Degree, Description: desc}
 }
 
 // Trip - Athletics vs Reflex DC
 type TripAction struct{}
 
-func (t *TripAction) Name() string     { return "Trip" }
-func (t *TripAction) Cost() ActionCost { return CostOne }
+func (t *TripAction) Name() string            { return "Trip" }
+func (t *TripAction) Cost() ability.ActionCost { return ability.CostOne }
 func (t *TripAction) HasTrait(id trait.TraitID) bool {
 	return id == trait.TraitAttack
 }
@@ -94,9 +90,9 @@ func (t *TripAction) Validate(actor, target *entity.Entity, turn *TurnState) err
 	return nil
 }
 
-func (t *TripAction) Execute(actor, target *entity.Entity, turn *TurnState) ActionResult {
+func (t *TripAction) Execute(actor, target *entity.Entity, turn *TurnState) ability.ActionResult {
 	if err := turn.SpendActions(t.Cost()); err != nil {
-		return ActionResult{Success: false, Description: err.Error()}
+		return ability.ActionResult{Success: false, Description: err.Error()}
 	}
 
 	mapPenalty := turn.GetMAP(false)
@@ -117,14 +113,14 @@ func (t *TripAction) Execute(actor, target *entity.Entity, turn *TurnState) Acti
 		desc = "Attacker fell Prone!"
 	}
 
-	return ActionResult{Success: res.Degree >= check.Success, Degree: res.Degree, Description: desc}
+	return ability.ActionResult{Success: res.Degree >= check.Success, Degree: res.Degree, Description: desc}
 }
 
 // Shove - Athletics vs Fortitude DC
 type ShoveAction struct{}
 
-func (s *ShoveAction) Name() string     { return "Shove" }
-func (s *ShoveAction) Cost() ActionCost { return CostOne }
+func (s *ShoveAction) Name() string            { return "Shove" }
+func (s *ShoveAction) Cost() ability.ActionCost { return ability.CostOne }
 func (s *ShoveAction) HasTrait(id trait.TraitID) bool {
 	return id == trait.TraitAttack
 }
@@ -132,9 +128,9 @@ func (s *ShoveAction) Validate(actor, target *entity.Entity, turn *TurnState) er
 	return nil
 }
 
-func (s *ShoveAction) Execute(actor, target *entity.Entity, turn *TurnState) ActionResult {
+func (s *ShoveAction) Execute(actor, target *entity.Entity, turn *TurnState) ability.ActionResult {
 	if err := turn.SpendActions(s.Cost()); err != nil {
-		return ActionResult{Success: false, Description: err.Error()}
+		return ability.ActionResult{Success: false, Description: err.Error()}
 	}
 
 	mapPenalty := turn.GetMAP(false)
@@ -147,32 +143,31 @@ func (s *ShoveAction) Execute(actor, target *entity.Entity, turn *TurnState) Act
 
 	desc := "Shove failed"
 	if res.Degree >= check.Success {
-		desc = "Target Shoved 5ft" // Actual movement left to user or managed elsewhere
+		desc = "Target Shoved 5ft"
 	} else if res.Degree == check.CriticalFailure {
 		desc = "Attacker fell Prone!"
 	}
 
-	return ActionResult{Success: res.Degree >= check.Success, Degree: res.Degree, Description: desc}
+	return ability.ActionResult{Success: res.Degree >= check.Success, Degree: res.Degree, Description: desc}
 }
 
 // Hide - Stealth vs DC (Secret)
 type HideAction struct{}
 
 func (h *HideAction) Name() string                   { return "Hide" }
-func (h *HideAction) Cost() ActionCost               { return CostOne }
+func (h *HideAction) Cost() ability.ActionCost       { return ability.CostOne }
 func (h *HideAction) HasTrait(id trait.TraitID) bool { return id == trait.TraitSecret }
 func (h *HideAction) Validate(actor, target *entity.Entity, turn *TurnState) error {
 	return nil
 }
 
-func (h *HideAction) Execute(actor, target *entity.Entity, turn *TurnState) ActionResult {
+func (h *HideAction) Execute(actor, target *entity.Entity, turn *TurnState) ability.ActionResult {
 	if err := turn.SpendActions(h.Cost()); err != nil {
-		return ActionResult{Success: false, Description: err.Error()}
+		return ability.ActionResult{Success: false, Description: err.Error()}
 	}
 
 	dc := 20 // Default standard DC
 	if target != nil {
-		// If hiding from specific target, use their Perception DC
 		dc = 10 + target.GetPerception()
 	}
 
@@ -183,27 +178,26 @@ func (h *HideAction) Execute(actor, target *entity.Entity, turn *TurnState) Acti
 		desc += " (Hidden)"
 	}
 
-	return ActionResult{Success: res.Degree >= check.Success, Degree: res.Degree, Description: desc}
+	return ability.ActionResult{Success: res.Degree >= check.Success, Degree: res.Degree, Description: desc}
 }
 
 // Seek - Perception vs Stealth DC (Secret)
 type SeekAction struct{}
 
 func (s *SeekAction) Name() string                   { return "Seek" }
-func (s *SeekAction) Cost() ActionCost               { return CostOne }
+func (s *SeekAction) Cost() ability.ActionCost       { return ability.CostOne }
 func (s *SeekAction) HasTrait(id trait.TraitID) bool { return id == trait.TraitSecret }
 func (s *SeekAction) Validate(actor, target *entity.Entity, turn *TurnState) error {
 	return nil
 }
 
-func (s *SeekAction) Execute(actor, target *entity.Entity, turn *TurnState) ActionResult {
+func (s *SeekAction) Execute(actor, target *entity.Entity, turn *TurnState) ability.ActionResult {
 	if err := turn.SpendActions(s.Cost()); err != nil {
-		return ActionResult{Success: false, Description: err.Error()}
+		return ability.ActionResult{Success: false, Description: err.Error()}
 	}
 
 	dc := 20 // Default standard DC
 	if target != nil {
-		// If seeking specific target, use their Stealth DC
 		mod := target.GetSkillModifier(ability.SkillStealth)
 		dc = 10 + mod
 	}
@@ -212,7 +206,7 @@ func (s *SeekAction) Execute(actor, target *entity.Entity, turn *TurnState) Acti
 
 	desc := "Seek result: " + res.Degree.String()
 
-	return ActionResult{Success: res.Degree >= check.Success, Degree: res.Degree, Description: desc}
+	return ability.ActionResult{Success: res.Degree >= check.Success, Degree: res.Degree, Description: desc}
 }
 
 // RecallKnowledge - Check against LevelBasedDC
@@ -220,8 +214,8 @@ type RecallKnowledgeAction struct {
 	Skill ability.SkillID
 }
 
-func (r *RecallKnowledgeAction) Name() string     { return "Recall Knowledge" }
-func (r *RecallKnowledgeAction) Cost() ActionCost { return CostOne }
+func (r *RecallKnowledgeAction) Name() string            { return "Recall Knowledge" }
+func (r *RecallKnowledgeAction) Cost() ability.ActionCost { return ability.CostOne }
 func (r *RecallKnowledgeAction) HasTrait(id trait.TraitID) bool {
 	return id == trait.TraitConcentrate || id == trait.TraitSecret
 }
@@ -229,9 +223,9 @@ func (r *RecallKnowledgeAction) Validate(actor, target *entity.Entity, turn *Tur
 	return nil
 }
 
-func (r *RecallKnowledgeAction) Execute(actor, target *entity.Entity, turn *TurnState) ActionResult {
+func (r *RecallKnowledgeAction) Execute(actor, target *entity.Entity, turn *TurnState) ability.ActionResult {
 	if err := turn.SpendActions(r.Cost()); err != nil {
-		return ActionResult{Success: false, Description: err.Error()}
+		return ability.ActionResult{Success: false, Description: err.Error()}
 	}
 
 	dc := 15 // Default
@@ -239,8 +233,6 @@ func (r *RecallKnowledgeAction) Execute(actor, target *entity.Entity, turn *Turn
 		dc = skill.LevelBasedDC(target.Level)
 	}
 
-	// Use generic PerformSkillCheck from skill package via RecallKnowledge wrapper?
-	// skill.RecallKnowledge returns string, result.
 	info, res := skill.RecallKnowledge(actor, r.Skill, dc)
 
 	desc := "Recall Knowledge: " + res.Degree.String()
@@ -248,5 +240,5 @@ func (r *RecallKnowledgeAction) Execute(actor, target *entity.Entity, turn *Turn
 		desc += " - " + info
 	}
 
-	return ActionResult{Success: res.Degree >= check.Success, Degree: res.Degree, Description: desc}
+	return ability.ActionResult{Success: res.Degree >= check.Success, Degree: res.Degree, Description: desc}
 }

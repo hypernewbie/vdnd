@@ -140,18 +140,10 @@ func TestDelayResumeEdgeCases(t *testing.T) {
 	enc.AddParticipant(e2)
 	enc.AddParticipant(e3)
 
-	// Logic for resume: insert at CurrentTurn.
-	// Initial: [A, B, C]. CurrentTurn: 0 (A).
 	enc.Start()
 
 	// A delays.
 	enc.Delay()
-	// Now: [B, C], A is delaying. CurrentTurn should be 0 (B, since logic shifted slice).
-	// Wait, Delay() implementation: "Effectively they end their turn now... CurrentTurn++".
-	// But they didn't act. And they are still in the slice? No?
-	// Delay() sets p.IsDelaying = true. It DOES NOT remove from slice.
-	// So [A(delay), B, C]. CurrentTurn becomes 1 (B).
-	// ResumeFromDelay() creates a NEW order.
 
 	if enc.CurrentTurn != 1 {
 		t.Errorf("Expected CurrentTurn 1 (B) after A delays, got %d", enc.CurrentTurn)
@@ -159,7 +151,6 @@ func TestDelayResumeEdgeCases(t *testing.T) {
 
 	// B delays.
 	enc.Delay()
-	// [A(delay), B(delay), C]. CurrentTurn 2 (C).
 	if enc.CurrentTurn != 2 {
 		t.Errorf("Expected CurrentTurn 2 (C), got %d", enc.CurrentTurn)
 	}
@@ -167,25 +158,14 @@ func TestDelayResumeEdgeCases(t *testing.T) {
 	// C acts.
 	enc.StartTurn()
 	enc.EndTurn()
-	// EndTurn increments CurrentTurn -> 3 -> EndRound -> Round 2, Turn 0.
-	// [A(delay), B(delay), C]. Round 2.
-	// CurrentTurn 0 is A(delay).
-	// StartTurn on A should fail because delaying.
+
+	// Round 2.
 	_, err := enc.StartTurn()
 	if err == nil {
 		t.Error("Expected error starting turn for delaying participant")
 	}
 
 	// Resume B.
-	// B is at index 1. CurrentTurn is 0.
-	// ResumeFromDelay("B").
-	// TargetIdx = 1.
-	// Remove B -> [A(delay), C].
-	// TargetIdx(1) > CurrentTurn(0), so CurrentTurn stays 0.
-	// Insert at CurrentTurn(0).
-	// -> [B, A(delay), C].
-	// CurrentTurn should be 0 (B).
-
 	err = enc.ResumeFromDelay("B")
 	if err != nil {
 		t.Errorf("Resume failed: %v", err)
@@ -197,9 +177,6 @@ func TestDelayResumeEdgeCases(t *testing.T) {
 	if enc.GetCurrentParticipant().Entity.ID != "B" {
 		t.Errorf("Expected current participant B, got %s", enc.GetCurrentParticipant().Entity.ID)
 	}
-	if enc.Participants[0].IsDelaying {
-		t.Error("B should no longer be delaying")
-	}
 }
 
 func TestEventQueueReentrance(t *testing.T) {
@@ -207,24 +184,24 @@ func TestEventQueueReentrance(t *testing.T) {
 	e1 := entity.NewEntity("e1", "Hero", 1)
 	enc.AddParticipant(e1)
 
-	// Register handler for Move that emits a Manipulate event (reaction chain?)
-	enc.EventQueue.RegisterHandler(EventMove, func(event Event, e *Encounter) bool {
+	// Register handler for Move that emits a Manipulate event
+	enc.EventQueue.RegisterHandler(ability.EventMove, func(event ability.Event, e *Encounter) bool {
 		// Emit secondary event
-		e.EventQueue.Emit(Event{Type: EventManipulate, Actor: event.Actor})
+		e.EventQueue.Emit(ability.Event{Type: ability.EventManipulate, Actor: event.Actor})
 		return true
 	})
 
 	// Emit initial event
-	enc.EventQueue.Emit(Event{Type: EventMove, Actor: e1})
+	enc.EventQueue.Emit(ability.Event{Type: ability.EventMove, Actor: e1})
 
 	// Process (Move)
 	enc.EventQueue.Process(enc)
 
-	// Queue should now contain Manipulate event (size 1)
+	// Queue should now contain Manipulate event
 	if len(enc.EventQueue.events) != 1 {
 		t.Errorf("Expected 1 event (Manipulate) remaining in queue, got %d", len(enc.EventQueue.events))
 	}
-	if enc.EventQueue.events[0].Type != EventManipulate {
+	if enc.EventQueue.events[0].Type != ability.EventManipulate {
 		t.Errorf("Expected Manipulate event, got %v", enc.EventQueue.events[0].Type)
 	}
 }

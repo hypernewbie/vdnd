@@ -3,7 +3,6 @@ package spell
 import (
 	"uaa/vdnd/pkg/rules/ability"
 	"uaa/vdnd/pkg/rules/check"
-	"uaa/vdnd/pkg/rules/combat"
 	"uaa/vdnd/pkg/rules/condition"
 	"uaa/vdnd/pkg/rules/entity"
 	"uaa/vdnd/pkg/rules/item"
@@ -44,7 +43,7 @@ type Spell struct {
 	Name               string
 	Rank               SpellRank
 	Traditions         []SpellTradition
-	ActionCost         combat.ActionCost
+	ActionCost         ability.ActionCost
 	Components         []SpellComponent
 	Range              int // Feet, 0 = touch, -1 = self
 	Area               SpellAreaType

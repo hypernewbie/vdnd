@@ -2,6 +2,7 @@ package combat
 
 import (
 	"fmt"
+	"uaa/vdnd/pkg/rules/ability"
 	"uaa/vdnd/pkg/rules/condition"
 	"uaa/vdnd/pkg/rules/entity"
 )
@@ -47,14 +48,14 @@ func NewTurn(e *entity.Entity) *TurnState {
 }
 
 // SpendActions deducts actions, returns error if not enough
-func (t *TurnState) SpendActions(cost ActionCost) error {
+func (t *TurnState) SpendActions(cost ability.ActionCost) error {
 	costInt := 0
 	switch cost {
-	case CostOne:
+	case ability.CostOne:
 		costInt = 1
-	case CostTwo:
+	case ability.CostTwo:
 		costInt = 2
-	case CostThree:
+	case ability.CostThree:
 		costInt = 3
 	}
 

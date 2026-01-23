@@ -44,6 +44,26 @@ const (
 	TraitPoison      TraitID = "poison"
 	TraitPositive    TraitID = "positive"
 	TraitNegative    TraitID = "negative"
+
+	// Class traits
+	TraitFighter TraitID = "fighter"
+	TraitWizard  TraitID = "wizard"
+	TraitRogue   TraitID = "rogue"
+	TraitCleric  TraitID = "cleric"
+
+	// Ancestry traits
+	TraitHuman TraitID = "human"
+	TraitElf   TraitID = "elf"
+	TraitDwarf TraitID = "dwarf"
+
+	// Misc
+	TraitHealing TraitID = "healing"
+
+	// Hazard traits
+	TraitMechanical    TraitID = "mechanical"
+	TraitTrap          TraitID = "trap"
+	TraitHaunt         TraitID = "haunt"
+	TraitEnvironmental TraitID = "environmental"
 )
 
 type TraitCategory int
