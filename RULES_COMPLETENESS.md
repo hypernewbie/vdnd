@@ -1,119 +1,111 @@
-# Rules Completeness Survey - Exhaustive
+# Implementation Plan: Completing the Rules Engine
 
-This document lists every mechanical item found in the source material (`rules/`) that is currently missing from the implementation (`pkg/rules/`).
+**Role**: You are a Senior Go Engineer.
+**Task**: methodically implement the missing game components identified in the completeness survey.
 
-## Skills
-*   **Lore**: Missing the entire Lore skill system (including dynamic subcategories like *Vampire Lore*, *Sailing Lore*, *Military Lore*, *Planar Lore*, etc.).
+## Instructions
+1.  **Iterative Approach**: Do not try to do everything in one massive file write. Tackle one section at a time.
+2.  **Test-Driven**: For *every* new mechanic or logic piece, write a test in the corresponding `_test.go` file.
+    - Example: If you add `Tumble Through` action, add a test case in `skill_test.go` checking the DC and Success/Failure results.
+3.  **Strict Typing**: Use Enums/Constants where possible (e.g., for Languages, Alignments), not raw strings.
 
-## Missing Skill Actions
-Compiled from `rules/rules/actions/` and `rules/compendium/skills.md`:
+---
 
-### Acrobatics
-*   Balance
-*   Tumble Through
-*   Maneuver in Flight
-*   Squeeze
+## 1. Missing Data Structures (Enums & Registries)
+**Location**: `pkg/rules/entity/`, `pkg/rules/trait/`
 
-### Athletics
-*   Climb
-*   Swim
-*   High Jump
-*   Long Jump
-*   Disarm
-*   Force Open
+*   [ ] **Languages**: Create `Language` string enum (Common, Draconic, etc.). Add `Languages []Language` to Entity struct.
+*   [ ] **Alignment**: Create `Alignment` enum (LG, NE, etc.). Add `Alignment` field to Entity.
+*   [ ] **Rarity**: Add `Rarity` trait category and default traits (Common/Uncommon/Rare/Unique).
+*   [ ] **Traditions & Schools**: Add `MagicTradition` (Arcane...) and `MagicSchool` (Evocation...) traits.
+*   [ ] **Light Levels**: Define constants for Bright, Dim, Darkness.
 
-### Deception
-*   Create a Diversion
-*   Feint
-*   Impersonate
-*   Lie
+## 2. Missing Conditions
+**Location**: `pkg/rules/condition/`
 
-### Diplomacy
-*   Gather Information
-*   Make an Impression
-*   Request
+Implement the logic for these missing conditions. Ensure they integrate with the new `Relational` system if applicable (indicated by *).
 
-### Intimidation
-*   Coerce
+*   [ ] **Object States**: `Broken` (affects items).
+*   [ ] **Visibility* (Relational)**: `Concealed`, `Dazzled`, `Observed`, `Undetected`, `Unnoticed`.
+*   [ ] **Encumbrance**: `Encumbered` (affects Speed).
+*   [ ] **Status**: `Petrified`.
+*   [ ] **Attitudes* (Relational)**: `Friendly`, `Helpful`, `Hostile`, `Indifferent`, `Unfriendly`.
 
-### Medicine
-*   Administer First Aid
-*   Treat Disease
-*   Treat Poison
+## 3. Missing Skill Actions
+**Location**: `pkg/rules/skill/actions.go` (or new files like `athletics.go` if it gets too big).
 
-### Stealth
-*   Sneak
-*   Conceal an Object
+Implement the checks for these actions.
+*   **Acrobatics**: `Balance` (Reflex vs DC), `Tumble Through` (Acrobatics vs Reflex DC), `Maneuver in Flight`, `Squeeze`.
+*   **Athletics**: `Climb`, `Swim`, `High/Long Jump` (DC calculation logic), `Disarm` (Attack vs Reflex), `Force Open`.
+*   **Deception**: `Create a Diversion`, `Feint` (Bluff vs Perception), `Impersonate`, `Lie`.
+*   **Diplomacy**: `Gather Information`, `Make an Impression`, `Request`.
+*   **Intimidation**: `Coerce`.
+*   **Medicine**: `Administer First Aid` (Stabilize/Stop Bleeding), `Treat Poison/Disease`.
+*   **Stealth**: `Sneak` (Movement + Stealth vs Perception), `Conceal Object`.
+*   **Thievery**: `Pick Lock` (Thievery vs DC), `Disable Device`, `Palm Object`, `Steal`.
 
-### Thievery
-*   Disable a Device
-*   Pick a Lock
-*   Steal
-*   Palm an Object
+## 4. Complex Logic Implementation
+These items require more than just data entry.
 
-### Nature
-*   Command an Animal
+### A. Advanced Weapon Traits
+**Location**: `pkg/rules/combat/`
+*   [ ] **Sweep**: +1 bonus if attacking a *different* target this turn.
+    *   *Logic*: Check `Turn.StrikesMade`. If `WeaponID` matches AND `TargetID` is different from current target, apply +1.
+*   [ ] **Forceful**: Bonus damage on 2nd/3rd attack with same weapon.
+    *   *Logic*: Check `Turn.StrikesMade`. Count previous strikes with same `WeaponID`.
+*   [ ] **Twin**: Bonus damage if wielding two of same weapon.
+*   [ ] **Backswing/Shove/Trip**: Implement weapon property flags.
 
-### General / Combat / Exploration Actions
-*   Aid, Escape, Point Out, Ready, Delay, Stand, Drop Prone, Crawl, Mount, Release, Take Cover, Interact, Activate an Item, Cast a Spell (Base action), Sustain a Spell, Dismiss, Identify Magic, Decipher Writing, Learn a Spell, Earn Income, Identify Alchemy, Repair, Subsist, Sense Direction, Track, Sense Motive, Investigate, Scout, Search.
+### B. Persistent Damage
+**Location**: `pkg/rules/damage/`, `pkg/rules/condition/tracker.go`
+*   [ ] Allow multiple `PersistentDamage` instances of *different* types (Fire + Acid).
+*   [ ] If adding same type (Fire 5 + Fire 2), keep only the higher value.
+*   [ ] Implement `EndTurn` logic: Apply damage -> Roll DC 15 Flat Check -> Remove if success.
 
-## Missing Conditions
-Found in `rules/rules/conditions.md` but not in `pkg/rules/condition/registry.go`:
+### C. Afflictions (Poisons/Diseases)
+**Location**: `pkg/rules/affliction/`
+*   [ ] Implement `Stage` logic.
+*   [ ] `Tick` function: triggers saving throw.
+    *   Success: Stage -1 (or -2 crit).
+    *   Failure: Stage +1 (or +2 crit).
+    *   End: If Stage 0, removed. If > MaxStage, apply max stage effect + keep duration? (Check rules).
 
-*   **Broken** (Object condition)
-*   **Concealed**
-*   **Dazzled**
-*   **Encumbered**
-*   **Observed**
-*   **Petrified**
-*   **Undetected**
-*   **Unnoticed**
-*   **Attitudes**: Friendly, Helpful, Hostile, Indifferent, Unfriendly.
+---
 
-## Missing Traits
-Categorized from `rules/rules/traits/`:
+## 5. Mandatory Test Coverage
 
-### Rarity
-*   Common, Uncommon, Rare, Unique.
+A simple "it runs" is not enough. You must implement the following tests for each new component:
 
-### Traditions & Schools
-*   **Traditions**: Arcane, Divine, Occult, Primal.
-*   **Schools**: Abjuration, Conjuration, Divination, Enchantment, Evocation, Illusion, Necromancy, Transmutation.
+### A. Skill Action Test Matrix (Exhaustive Degrees)
+For *every* skill action (e.g., `Tumble Through`, `Trip`, `Feint`), you must test all 4 Degrees of Success:
+- [ ] **Critical Success**: Verify double effects/extra bonuses (e.g., Trip deals 1d6 damage, Feint lasts longer).
+- [ ] **Success**: Verify standard effect (e.g., target is Prone/Flat-footed).
+- [ ] **Failure**: Verify no effect + check for "failure" specific penalties if any.
+- [ ] **Critical Failure**: Verify "backfire" effects (e.g., Tripper falls prone, Shove backfires).
 
-### Classes
-Alchemist, Barbarian, Bard, Champion, Cleric, Druid, Fighter, Gunslinger, Inventor, Investigator, Kineticist, Magus, Monk, Oracle, Ranger, Rogue, Sorcerer, Summoner, Swashbuckler, Thaumaturge, Witch, Wizard.
+### B. Condition Logic & Stacking
+- [ ] **Valued Conditions**: Test that `Frightened 2` correctly reduces to `Frightened 1` at end of turn.
+- [ ] **Relational States**: Verify observer-specific visibility.
+    - Rogue is `Hidden` (Relative: Guard A), `Observed` (Relative: Guard B).
+    - Rogue attacks Guard A -> `Hidden` removed relative to A.
+- [ ] **Persistent Damage Stacking**:
+    - Apply `Fire 5` and `Fire 10` -> Resolve to `Fire 10` only.
+    - Apply `Fire 5` and `Acid 5` -> Resolve to BOTH `Fire 5` AND `Acid 5`.
+    - Apply `EndTurn` logic -> Verify damage is dealt BEFORE the flat check to remove.
 
-### Ancestries
-Dwarf, Elf, Gnome, Halfling, Human, Lizardfolk, Ratfolk, Kobold, Orc, etc. (Totaling ~30+ missing).
+### C. Advanced Combat Logic
+- [ ] **MAP Integration**: Verify skill actions with the `Attack` trait correctly increment the character's MAP and *suffer* from current MAP.
+- [ ] **Trait History**:
+    - **Sweep**: Strike T1, then Strike T2 -> +1 bonus. Strike T1, then Strike T1 again -> 0 bonus.
+    - **Forceful**: Strike 1 (base), Strike 2 (+damage), Strike 3 (+double damage).
+- [ ] **Reaction Tracking**: Verify reactions are properly exhausted and cannot be used twice in one round.
 
-### Weapon Properties (Missing as Traits/Enums)
-Backswing, Brace, Bulwark, Capacity, Combination, Concussive, Disarm, Double-Barrel, Fatal Aim, Free-Hand, Injection, Integrated, Jousting, Kickback, Nonlethal, Parry, Range-Increment, Repeating, Scatter, Shove, Trip, Twin, Unarmed, Volley.
+### D. Affliction Lifecycle
+- [ ] **Stage Progression**:
+    - Start at Stage 1. Fail save -> Move to Stage 2.
+    - Crit Pass save -> Move to Stage 0 (Removed).
+- [ ] **Latency/Tick**: Verify intervals (Round vs Day) correctly trigger checks in a mock time system.
 
-### Miscellaneous Tags
-Aura, Bomb, Cantrip, Consumable, Curse, Death, Downtime, Emotion, Environmental, Exploration, Extradimensional, Flourish, Fortune, Grimoire, Healing, Incapacitation, Infused, Invested, Light, Metamagic, Morph, Mutagen, Oil, Open, Persistent Damage, Poison, Polymorph, Potion, Precious, Scroll, Scrying, Secret, Shadow, Sleep, Stance, Summoned, Talisman, Teleportation, Trap, Virulent, Wand.
+## 6. Verification
+Run `go test -v ./pkg/rules/...` and ensure 100% of the newly added logic paths are hit. If a branch (like Critical Failure backfire) isn't tested, the implementation is incomplete.
 
-## Missing Tables and Lists (Data)
-
-### Languages
-*   **Common**: Common, Draconic, Dwarven, Elven, Gnomish, Goblin, Halfling, Jotun, Orcish, Sylvan, Undercommon.
-*   **Uncommon**: Abyssal, Aklo, Aquan, Auran, Celestial, Gnoll, Ignan, Necril, Shadowtongue, Terran.
-
-### Alignments
-*   Lawful Good (LG), Lawful Neutral (LN), Lawful Evil (LE)
-*   Neutral Good (NG), True Neutral (N), Neutral Evil (NE)
-*   Chaotic Good (CG), Chaotic Neutral (CN), Chaotic Evil (CE)
-
-### Materials
-*   Silver, Cold Iron, Adamantine, Mithral, Darkwood.
-
-### Light Levels
-*   Bright Light, Dim Light, Darkness.
-
-### Terrain Types
-*   Normal Terrain, Difficult Terrain, Greater Difficult Terrain, Hazardous Terrain.
-
-## Missing Systems
-*   **Feat System**: No registry for General, Skill, or Class Feats (~1000+ entries).
-*   **Afflictions**: No staged progression system for Poisons, Diseases, Curses.
-*   **Hazards**: Registry for traps and environmental dangers.
-*   **Spells**: Massive compendium of 1,200+ spells from `rules/compendium/spells/`.
