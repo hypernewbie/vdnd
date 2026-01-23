@@ -98,17 +98,32 @@ func (t *ConditionTracker) Remove(id ConditionID) {
 
 // RemoveRelative removes a condition relative to a specific target
 func (t *ConditionTracker) RemoveRelative(id ConditionID, targetID string) {
+	newConds := make([]*ConditionInstance, 0)
 	for _, c := range t.conditions {
 		if c.ID == id {
-			newSpecific := make([]string, 0)
-			for _, sid := range c.SpecificTo {
-				if sid != targetID {
-					newSpecific = append(newSpecific, sid)
+			// If it's global, we don't remove it via RemoveRelative usually, 
+			// but if it has targets, we filter it.
+			if len(c.SpecificTo) > 0 {
+				newSpecific := make([]string, 0)
+				for _, sid := range c.SpecificTo {
+					if sid != targetID {
+						newSpecific = append(newSpecific, sid)
+					}
 				}
+				c.SpecificTo = newSpecific
+				// If it now has no targets, we don't keep it (unless it was global, but it had targets)
+				if len(c.SpecificTo) > 0 {
+					newConds = append(newConds, c)
+				}
+			} else {
+				// Global stays
+				newConds = append(newConds, c)
 			}
-			c.SpecificTo = newSpecific
+		} else {
+			newConds = append(newConds, c)
 		}
 	}
+	t.conditions = newConds
 }
 
 // Reduce decreases a valued condition's value

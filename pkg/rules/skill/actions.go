@@ -14,6 +14,12 @@ func PerformSkillCheck(actor *entity.Entity, id ability.SkillID, dc int) check.C
 	return check.PerformCheck(mod, nil, dc)
 }
 
+// PerformSkillCheckWithModifiers makes a skill check with extra modifiers
+func PerformSkillCheckWithModifiers(actor *entity.Entity, id ability.SkillID, dc int, modifiers []check.Modifier) check.CheckResult {
+	mod := actor.GetSkillModifier(id)
+	return check.PerformCheck(mod, modifiers, dc)
+}
+
 // PerformSkillCheckWithRoll makes a skill check with a fixed natural roll
 func PerformSkillCheckWithRoll(actor *entity.Entity, id ability.SkillID, dc, naturalRoll int) check.CheckResult {
 	mod := actor.GetSkillModifier(id)
@@ -22,46 +28,95 @@ func PerformSkillCheckWithRoll(actor *entity.Entity, id ability.SkillID, dc, nat
 
 // --- Acrobatics ---
 
-func Balance(actor *entity.Entity, dc int) check.CheckResult {
-	res := PerformSkillCheck(actor, ability.SkillAcrobatics, dc)
+func Balance(actor *entity.Entity, dc int, naturalRoll int) check.CheckResult {
+	var res check.CheckResult
+	if naturalRoll > 0 {
+		res = PerformSkillCheckWithRoll(actor, ability.SkillAcrobatics, dc, naturalRoll)
+	} else {
+		res = PerformSkillCheck(actor, ability.SkillAcrobatics, dc)
+	}
+
 	if res.Degree == check.CriticalFailure {
 		actor.Conditions.Apply(condition.NewCondition(condition.Prone, "Balance (Crit Fail)"))
 	}
 	return res
 }
 
-func TumbleThrough(actor, target *entity.Entity) check.CheckResult {
+func TumbleThrough(actor, target *entity.Entity, naturalRoll int) check.CheckResult {
 	dc := target.GetSaveDC(ability.SaveReflex)
-	res := PerformSkillCheck(actor, ability.SkillAcrobatics, dc)
-	// Success: Move through enemy space. Failure: Movement ends.
-	return res
-}
-
-func ManeuverInFlight(actor *entity.Entity, dc int) check.CheckResult {
+	if naturalRoll > 0 {
+		return PerformSkillCheckWithRoll(actor, ability.SkillAcrobatics, dc, naturalRoll)
+	}
 	return PerformSkillCheck(actor, ability.SkillAcrobatics, dc)
 }
 
-func Squeeze(actor *entity.Entity, dc int) check.CheckResult {
+func ManeuverInFlight(actor *entity.Entity, dc int, naturalRoll int) check.CheckResult {
+	if naturalRoll > 0 {
+		return PerformSkillCheckWithRoll(actor, ability.SkillAcrobatics, dc, naturalRoll)
+	}
+	return PerformSkillCheck(actor, ability.SkillAcrobatics, dc)
+}
+
+func Squeeze(actor *entity.Entity, dc int, naturalRoll int) check.CheckResult {
+	if naturalRoll > 0 {
+		return PerformSkillCheckWithRoll(actor, ability.SkillAcrobatics, dc, naturalRoll)
+	}
 	return PerformSkillCheck(actor, ability.SkillAcrobatics, dc)
 }
 
 // --- Athletics ---
 
-func Climb(actor *entity.Entity, dc int) check.CheckResult {
-	res := PerformSkillCheck(actor, ability.SkillAthletics, dc)
-	if res.Degree == check.CriticalFailure {
-		actor.Conditions.Apply(condition.NewCondition(condition.Prone, "Climb (Crit Fail)"))
-		// Fall damage logic would be handled by caller based on height
+type MovementResult struct {
+	Speed  int
+	Damage int
+}
+
+func Climb(actor *entity.Entity, dc int, naturalRoll int) (MovementResult, check.CheckResult) {
+	var res check.CheckResult
+	if naturalRoll > 0 {
+		res = PerformSkillCheckWithRoll(actor, ability.SkillAthletics, dc, naturalRoll)
+	} else {
+		res = PerformSkillCheck(actor, ability.SkillAthletics, dc)
 	}
-	return res
+
+	move := MovementResult{}
+	switch res.Degree {
+	case check.CriticalSuccess:
+		move.Speed = 10 // Success + 5? PF2E says move at full speed (usually 10ft)
+	case check.Success:
+		move.Speed = 5
+	case check.CriticalFailure:
+		actor.Conditions.Apply(condition.NewCondition(condition.Prone, "Climb (Crit Fail)"))
+		move.Damage = dice.DieRoll{Count: 1, Sides: 6}.Roll() // Fall damage placeholder
+	}
+	return move, res
 }
 
-func Swim(actor *entity.Entity, dc int) check.CheckResult {
-	return PerformSkillCheck(actor, ability.SkillAthletics, dc)
+func Swim(actor *entity.Entity, dc int, naturalRoll int) (MovementResult, check.CheckResult) {
+	var res check.CheckResult
+	if naturalRoll > 0 {
+		res = PerformSkillCheckWithRoll(actor, ability.SkillAthletics, dc, naturalRoll)
+	} else {
+		res = PerformSkillCheck(actor, ability.SkillAthletics, dc)
+	}
+
+	move := MovementResult{}
+	if res.Degree == check.CriticalSuccess {
+		move.Speed = 10
+	} else if res.Degree == check.Success {
+		move.Speed = 5
+	}
+	return move, res
 }
 
-func HighJump(actor *entity.Entity, dc int) (int, check.CheckResult) {
-	res := PerformSkillCheck(actor, ability.SkillAthletics, dc)
+func HighJump(actor *entity.Entity, dc int, naturalRoll int) (int, check.CheckResult) {
+	var res check.CheckResult
+	if naturalRoll > 0 {
+		res = PerformSkillCheckWithRoll(actor, ability.SkillAthletics, dc, naturalRoll)
+	} else {
+		res = PerformSkillCheck(actor, ability.SkillAthletics, dc)
+	}
+
 	dist := 0
 	if res.Degree == check.CriticalSuccess {
 		dist = 8 
@@ -71,21 +126,32 @@ func HighJump(actor *entity.Entity, dc int) (int, check.CheckResult) {
 	return dist, res
 }
 
-func LongJump(actor *entity.Entity, dc int) (int, check.CheckResult) {
-	res := PerformSkillCheck(actor, ability.SkillAthletics, dc)
+func LongJump(actor *entity.Entity, dc int, naturalRoll int) (int, check.CheckResult) {
+	var res check.CheckResult
+	if naturalRoll > 0 {
+		res = PerformSkillCheckWithRoll(actor, ability.SkillAthletics, dc, naturalRoll)
+	} else {
+		res = PerformSkillCheck(actor, ability.SkillAthletics, dc)
+	}
+
 	dist := 0
 	if res.Degree >= check.Success {
-		dist = res.Total // Total result in feet
+		dist = res.Total 
 	}
 	return dist, res
 }
 
-func Disarm(actor, target *entity.Entity) check.CheckResult {
+func Disarm(actor, target *entity.Entity, naturalRoll int) check.CheckResult {
 	dc := target.GetSaveDC(ability.SaveReflex)
-	res := PerformSkillCheck(actor, ability.SkillAthletics, dc)
+	var res check.CheckResult
+	if naturalRoll > 0 {
+		res = PerformSkillCheckWithRoll(actor, ability.SkillAthletics, dc, naturalRoll)
+	} else {
+		res = PerformSkillCheck(actor, ability.SkillAthletics, dc)
+	}
+
 	switch res.Degree {
 	case check.Success:
-		// +2 bonus to further disarm until target turn (Caller handles or use temp immunity system for "penalty")
 		target.AddTemporaryImmunity("disarm-bonus", actor.ID, 1)
 	case check.CriticalFailure:
 		actor.Conditions.Apply(condition.NewCondition(condition.FlatFooted, "Disarm (Crit Fail)"))
@@ -93,45 +159,26 @@ func Disarm(actor, target *entity.Entity) check.CheckResult {
 	return res
 }
 
-func ForceOpen(actor *entity.Entity, dc int) check.CheckResult {
+func ForceOpen(actor *entity.Entity, dc int, naturalRoll int) check.CheckResult {
+	if naturalRoll > 0 {
+		return PerformSkillCheckWithRoll(actor, ability.SkillAthletics, dc, naturalRoll)
+	}
 	return PerformSkillCheck(actor, ability.SkillAthletics, dc)
-}
-
-func Grapple(attacker, target *entity.Entity, modifiers []check.Modifier) check.CheckResult {
-	dc := target.GetSaveDC(ability.SaveFortitude)
-	athletics := attacker.GetSkillModifier(ability.SkillAthletics)
-	res := check.PerformCheck(athletics, modifiers, dc)
-	switch res.Degree {
-	case check.CriticalSuccess:
-		target.Conditions.Apply(condition.NewCondition(condition.Restrained, "Grapple"))
-	case check.Success:
-		target.Conditions.Apply(condition.NewCondition(condition.Grabbed, "Grapple"))
-	}
-	return res
-}
-
-func Trip(attacker, target *entity.Entity, modifiers []check.Modifier) check.CheckResult {
-	dc := target.GetSaveDC(ability.SaveReflex)
-	athletics := attacker.GetSkillModifier(ability.SkillAthletics)
-	res := check.PerformCheck(athletics, modifiers, dc)
-	switch res.Degree {
-	case check.CriticalSuccess:
-		target.Conditions.Apply(condition.NewCondition(condition.Prone, "Trip"))
-		target.ApplyDamage(dice.DieRoll{Count: 1, Sides: 6}.Roll())
-	case check.Success:
-		target.Conditions.Apply(condition.NewCondition(condition.Prone, "Trip"))
-	case check.CriticalFailure:
-		attacker.Conditions.Apply(condition.NewCondition(condition.Prone, "Trip (Crit Fail)"))
-	}
-	return res
 }
 
 // --- Deception ---
 
-func CreateADiversion(actor *entity.Entity, observers []*entity.Entity) []check.CheckResult {
+func CreateADiversion(actor *entity.Entity, observers []*entity.Entity, naturalRoll int) []check.CheckResult {
 	results := make([]check.CheckResult, 0)
 	for _, obs := range observers {
-		res := PerformSkillCheck(actor, ability.SkillDeception, 10 + obs.GetPerception())
+		dc := 10 + obs.GetPerception()
+		var res check.CheckResult
+		if naturalRoll > 0 {
+			res = PerformSkillCheckWithRoll(actor, ability.SkillDeception, dc, naturalRoll)
+		} else {
+			res = PerformSkillCheck(actor, ability.SkillDeception, dc)
+		}
+		
 		if res.Degree >= check.Success {
 			actor.Conditions.ApplyRelative(condition.Hidden, obs.ID, "Diversion")
 		}
@@ -140,13 +187,21 @@ func CreateADiversion(actor *entity.Entity, observers []*entity.Entity) []check.
 	return results
 }
 
-func Feint(actor, target *entity.Entity) check.CheckResult {
+func Feint(actor, target *entity.Entity, naturalRoll int) check.CheckResult {
 	dc := 10 + target.GetPerception()
-	res := PerformSkillCheck(actor, ability.SkillDeception, dc)
+	var res check.CheckResult
+	if naturalRoll > 0 {
+		res = PerformSkillCheckWithRoll(actor, ability.SkillDeception, dc, naturalRoll)
+	} else {
+		res = PerformSkillCheck(actor, ability.SkillDeception, dc)
+	}
+
 	switch res.Degree {
 	case check.CriticalSuccess:
+		// Target flat-footed against actor until end of NEXT turn
 		target.Conditions.Apply(condition.NewRelationalCondition(condition.FlatFooted, []string{actor.ID}, "Feint (Crit)"))
 	case check.Success:
+		// Target flat-footed against NEXT melee attack
 		target.Conditions.Apply(condition.NewRelationalCondition(condition.FlatFooted, []string{actor.ID}, "Feint"))
 	case check.CriticalFailure:
 		actor.Conditions.Apply(condition.NewRelationalCondition(condition.FlatFooted, []string{target.ID}, "Feint (Crit Fail)"))
@@ -154,31 +209,91 @@ func Feint(actor, target *entity.Entity) check.CheckResult {
 	return res
 }
 
+func Impersonate(actor *entity.Entity, dc int, naturalRoll int) check.CheckResult {
+	if naturalRoll > 0 {
+		return PerformSkillCheckWithRoll(actor, ability.SkillDeception, dc, naturalRoll)
+	}
+	return PerformSkillCheck(actor, ability.SkillDeception, dc)
+}
+
+func Lie(actor *entity.Entity, observer *entity.Entity, naturalRoll int) check.CheckResult {
+	dc := 10 + observer.GetPerception()
+	if naturalRoll > 0 {
+		return PerformSkillCheckWithRoll(actor, ability.SkillDeception, dc, naturalRoll)
+	}
+	return PerformSkillCheck(actor, ability.SkillDeception, dc)
+}
+
+// --- Diplomacy ---
+
+func GatherInformation(actor *entity.Entity, dc int, naturalRoll int) check.CheckResult {
+	if naturalRoll > 0 {
+		return PerformSkillCheckWithRoll(actor, ability.SkillDiplomacy, dc, naturalRoll)
+	}
+	return PerformSkillCheck(actor, ability.SkillDiplomacy, dc)
+}
+
+func MakeAnImpression(actor, target *entity.Entity, naturalRoll int) check.CheckResult {
+	dc := 10 + target.GetSaveDC(ability.SaveWill) 
+	if naturalRoll > 0 {
+		return PerformSkillCheckWithRoll(actor, ability.SkillDiplomacy, dc, naturalRoll)
+	}
+	return PerformSkillCheck(actor, ability.SkillDiplomacy, dc)
+}
+
+func Request(actor, target *entity.Entity, naturalRoll int) check.CheckResult {
+	dc := 10 + target.GetSaveDC(ability.SaveWill)
+	if naturalRoll > 0 {
+		return PerformSkillCheckWithRoll(actor, ability.SkillDiplomacy, dc, naturalRoll)
+	}
+	return PerformSkillCheck(actor, ability.SkillDiplomacy, dc)
+}
+
 // --- Intimidation ---
 
-func Demoralize(actor, target *entity.Entity) check.CheckResult {
+func Coerce(actor, target *entity.Entity, naturalRoll int) check.CheckResult {
+	dc := 10 + target.GetSaveDC(ability.SaveWill)
+	if naturalRoll > 0 {
+		return PerformSkillCheckWithRoll(actor, ability.SkillIntimidation, dc, naturalRoll)
+	}
+	return PerformSkillCheck(actor, ability.SkillIntimidation, dc)
+}
+
+func Demoralize(actor, target *entity.Entity, naturalRoll int) check.CheckResult {
 	if target.IsTemporarilyImmune("demoralize", actor.ID) {
 		return check.CheckResult{Degree: check.Failure}
 	}
 	dc := target.GetSaveDC(ability.SaveWill)
-	res := PerformSkillCheck(actor, ability.SkillIntimidation, dc)
+	var res check.CheckResult
+	if naturalRoll > 0 {
+		res = PerformSkillCheckWithRoll(actor, ability.SkillIntimidation, dc, naturalRoll)
+	} else {
+		res = PerformSkillCheck(actor, ability.SkillIntimidation, dc)
+	}
+
 	switch res.Degree {
 	case check.CriticalSuccess:
 		target.Conditions.Apply(condition.NewValuedCondition(condition.Frightened, 2, "Demoralize"))
 	case check.Success:
 		target.Conditions.Apply(condition.NewValuedCondition(condition.Frightened, 1, "Demoralize"))
 	}
-	target.AddTemporaryImmunity("demoralize", actor.ID, 100) // 10 mins
+	target.AddTemporaryImmunity("demoralize", actor.ID, 100) 
 	return res
 }
 
 // --- Medicine ---
 
-func TreatWounds(healer, patient *entity.Entity, dc int) (int, check.CheckResult) {
+func TreatWounds(healer, patient *entity.Entity, dc int, naturalRoll int) (int, check.CheckResult) {
 	if healer.SkillProficiencies[ability.SkillMedicine] < ability.Trained {
 		return 0, check.CheckResult{Degree: check.Failure}
 	}
-	res := PerformSkillCheck(healer, ability.SkillMedicine, dc)
+	var res check.CheckResult
+	if naturalRoll > 0 {
+		res = PerformSkillCheckWithRoll(healer, ability.SkillMedicine, dc, naturalRoll)
+	} else {
+		res = PerformSkillCheck(healer, ability.SkillMedicine, dc)
+	}
+
 	healing := 0
 	switch res.Degree {
 	case check.CriticalSuccess:
@@ -192,15 +307,46 @@ func TreatWounds(healer, patient *entity.Entity, dc int) (int, check.CheckResult
 	return healing, res
 }
 
-func AdministerFirstAid(healer, patient *entity.Entity, dc int, stabilize bool) check.CheckResult {
+func AdministerFirstAid(healer, patient *entity.Entity, dc int, stabilize bool, naturalRoll int) check.CheckResult {
+	if naturalRoll > 0 {
+		return PerformSkillCheckWithRoll(healer, ability.SkillMedicine, dc, naturalRoll)
+	}
+	return PerformSkillCheck(healer, ability.SkillMedicine, dc)
+}
+
+func TreatPoison(healer, patient *entity.Entity, dc int, naturalRoll int) check.CheckResult {
+	if naturalRoll > 0 {
+		return PerformSkillCheckWithRoll(healer, ability.SkillMedicine, dc, naturalRoll)
+	}
 	return PerformSkillCheck(healer, ability.SkillMedicine, dc)
 }
 
 // --- Stealth ---
 
-func Sneak(actor *entity.Entity, observer *entity.Entity) check.CheckResult {
+func Hide(actor *entity.Entity, observer *entity.Entity, naturalRoll int) check.CheckResult {
 	dc := 10 + observer.GetPerception()
-	res := PerformSkillCheck(actor, ability.SkillStealth, dc)
+	var res check.CheckResult
+	if naturalRoll > 0 {
+		res = PerformSkillCheckWithRoll(actor, ability.SkillStealth, dc, naturalRoll)
+	} else {
+		res = PerformSkillCheck(actor, ability.SkillStealth, dc)
+	}
+
+	if res.Degree >= check.Success {
+		actor.Conditions.ApplyRelative(condition.Hidden, observer.ID, "Hide")
+	}
+	return res
+}
+
+func Sneak(actor *entity.Entity, observer *entity.Entity, naturalRoll int) check.CheckResult {
+	dc := 10 + observer.GetPerception()
+	var res check.CheckResult
+	if naturalRoll > 0 {
+		res = PerformSkillCheckWithRoll(actor, ability.SkillStealth, dc, naturalRoll)
+	} else {
+		res = PerformSkillCheck(actor, ability.SkillStealth, dc)
+	}
+
 	if res.Degree >= check.Success {
 		actor.Conditions.ApplyRelative(condition.Hidden, observer.ID, "Sneak")
 	} else {
@@ -209,18 +355,125 @@ func Sneak(actor *entity.Entity, observer *entity.Entity) check.CheckResult {
 	return res
 }
 
+func ConcealObject(actor *entity.Entity, dc int, naturalRoll int) check.CheckResult {
+	if naturalRoll > 0 {
+		return PerformSkillCheckWithRoll(actor, ability.SkillStealth, dc, naturalRoll)
+	}
+	return PerformSkillCheck(actor, ability.SkillStealth, dc)
+}
+
 // --- Thievery ---
 
-func PickLock(actor *entity.Entity, dc int, successesRequired int) (int, check.CheckResult) {
-	res := PerformSkillCheck(actor, ability.SkillThievery, dc)
+func PickLock(actor *entity.Entity, dc int, successesRequired int, naturalRoll int) (int, check.CheckResult) {
+	var res check.CheckResult
+	if naturalRoll > 0 {
+		res = PerformSkillCheckWithRoll(actor, ability.SkillThievery, dc, naturalRoll)
+	} else {
+		res = PerformSkillCheck(actor, ability.SkillThievery, dc)
+	}
+
 	progress := 0
 	if res.Degree == check.CriticalSuccess { progress = 2 } else if res.Degree == check.Success { progress = 1 }
 	return progress, res
 }
 
-func LevelBasedDC(level int) int {
-	dcs := []int{14, 15, 16, 18, 19, 20, 22, 23, 24, 26, 27, 28, 30, 31, 32, 34, 35, 36, 38, 39, 40, 42, 44, 46, 48, 50}
-	if level < 0 { return 13 }
-	if level >= len(dcs) { return dcs[len(dcs)-1] + (level-25)*2 }
-	return dcs[level]
+func DisableDevice(actor *entity.Entity, dc int, naturalRoll int) check.CheckResult {
+	if naturalRoll > 0 {
+		return PerformSkillCheckWithRoll(actor, ability.SkillThievery, dc, naturalRoll)
+	}
+	return PerformSkillCheck(actor, ability.SkillThievery, dc)
+}
+
+func PalmObject(actor *entity.Entity, dc int, naturalRoll int) check.CheckResult {
+	if naturalRoll > 0 {
+		return PerformSkillCheckWithRoll(actor, ability.SkillThievery, dc, naturalRoll)
+	}
+	return PerformSkillCheck(actor, ability.SkillThievery, dc)
+}
+
+func Steal(actor, target *entity.Entity, naturalRoll int) check.CheckResult {
+	dc := 10 + target.GetPerception()
+	if naturalRoll > 0 {
+		return PerformSkillCheckWithRoll(actor, ability.SkillThievery, dc, naturalRoll)
+	}
+	return PerformSkillCheck(actor, ability.SkillThievery, dc)
+}
+
+// --- General ---
+
+func Seek(actor *entity.Entity, dc int, modifiers []check.Modifier, naturalRoll int) check.CheckResult {
+	if naturalRoll > 0 {
+		mod := actor.GetSkillModifier(ability.SkillPerception)
+		return check.PerformCheckWithRoll(naturalRoll, mod, modifiers, dc)
+	}
+	return PerformSkillCheckWithModifiers(actor, ability.SkillPerception, dc, modifiers)
+}
+
+func RecallKnowledge(actor *entity.Entity, skillID ability.SkillID, dc int, naturalRoll int) (string, check.CheckResult) {
+	var res check.CheckResult
+	if naturalRoll > 0 {
+		res = PerformSkillCheckWithRoll(actor, skillID, dc, naturalRoll)
+	} else {
+		res = PerformSkillCheck(actor, skillID, dc)
+	}
+
+	info := ""
+	if res.Degree >= check.Success {
+		info = "General Information"
+	}
+	return info, res
+}
+
+func Grapple(attacker, target *entity.Entity, modifiers []check.Modifier, naturalRoll int) check.CheckResult {
+	dc := target.GetSaveDC(ability.SaveFortitude)
+	var res check.CheckResult
+	if naturalRoll > 0 {
+		mod := attacker.GetSkillModifier(ability.SkillAthletics)
+		res = check.PerformCheckWithRoll(naturalRoll, mod, modifiers, dc)
+	} else {
+		res = PerformSkillCheckWithModifiers(attacker, ability.SkillAthletics, dc, modifiers)
+	}
+	switch res.Degree {
+	case check.CriticalSuccess:
+		target.Conditions.Apply(condition.NewCondition(condition.Restrained, "Grapple"))
+	case check.Success:
+		target.Conditions.Apply(condition.NewCondition(condition.Grabbed, "Grapple"))
+	}
+	return res
+}
+
+func Trip(attacker, target *entity.Entity, modifiers []check.Modifier, naturalRoll int) check.CheckResult {
+	dc := target.GetSaveDC(ability.SaveReflex)
+	var res check.CheckResult
+	if naturalRoll > 0 {
+		mod := attacker.GetSkillModifier(ability.SkillAthletics)
+		res = check.PerformCheckWithRoll(naturalRoll, mod, modifiers, dc)
+	} else {
+		res = PerformSkillCheckWithModifiers(attacker, ability.SkillAthletics, dc, modifiers)
+	}
+	switch res.Degree {
+	case check.CriticalSuccess:
+		target.Conditions.Apply(condition.NewCondition(condition.Prone, "Trip"))
+		target.ApplyDamage(dice.DieRoll{Count: 1, Sides: 6}.Roll())
+	case check.Success:
+		target.Conditions.Apply(condition.NewCondition(condition.Prone, "Trip"))
+	case check.CriticalFailure:
+		attacker.Conditions.Apply(condition.NewCondition(condition.Prone, "Trip (Crit Fail)"))
+	}
+	return res
+}
+
+func Shove(actor, target *entity.Entity, modifiers []check.Modifier, naturalRoll int) check.CheckResult {
+	dc := target.GetSaveDC(ability.SaveFortitude)
+	var res check.CheckResult
+	if naturalRoll > 0 {
+		mod := actor.GetSkillModifier(ability.SkillAthletics)
+		res = check.PerformCheckWithRoll(naturalRoll, mod, modifiers, dc)
+	} else {
+		res = PerformSkillCheckWithModifiers(actor, ability.SkillAthletics, dc, modifiers)
+	}
+	if res.Degree == check.CriticalFailure {
+		actor.Conditions.Apply(condition.NewCondition(condition.Prone, "Shove (Crit Fail)"))
+	}
+	return res
 }

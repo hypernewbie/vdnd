@@ -26,7 +26,7 @@ func (d *DemoralizeAction) Execute(actor, target *entity.Entity, turn *TurnState
 		return ability.ActionResult{Success: false, Description: err.Error()}
 	}
 
-	res := skill.Demoralize(actor, target)
+	res := skill.Demoralize(actor, target, 0)
 
 	desc := "Demoralize failed"
 	if res.Degree >= check.Success {
@@ -64,7 +64,7 @@ func (g *GrappleAction) Execute(actor, target *entity.Entity, turn *TurnState) a
 		{Value: mapPenalty, Type: check.BonusUntyped, Source: "MAP"},
 	}
 
-	res := skill.Grapple(actor, target, modifiers)
+	res := skill.Grapple(actor, target, modifiers, 0)
 	turn.RecordAttack()
 
 	desc := "Grapple failed"
@@ -100,7 +100,7 @@ func (t *TripAction) Execute(actor, target *entity.Entity, turn *TurnState) abil
 		{Value: mapPenalty, Type: check.BonusUntyped, Source: "MAP"},
 	}
 
-	res := skill.Trip(actor, target, modifiers)
+	res := skill.Trip(actor, target, modifiers, 0)
 	turn.RecordAttack()
 
 	desc := "Trip failed"
@@ -138,7 +138,7 @@ func (s *ShoveAction) Execute(actor, target *entity.Entity, turn *TurnState) abi
 		{Value: mapPenalty, Type: check.BonusUntyped, Source: "MAP"},
 	}
 
-	res := skill.Shove(actor, target, modifiers)
+	res := skill.Shove(actor, target, modifiers, 0)
 	turn.RecordAttack()
 
 	desc := "Shove failed"
@@ -168,10 +168,10 @@ func (h *HideAction) Execute(actor, target *entity.Entity, turn *TurnState) abil
 
 	observer := target
 	if observer == nil {
-		observer = actor // Fallback
+		observer = actor 
 	}
 
-	res := skill.Hide(actor, observer)
+	res := skill.Hide(actor, observer, 0)
 
 	desc := "Hide result: " + res.Degree.String()
 	if res.Degree >= check.Success {
@@ -196,20 +196,20 @@ func (s *SeekAction) Execute(actor, target *entity.Entity, turn *TurnState) abil
 		return ability.ActionResult{Success: false, Description: err.Error()}
 	}
 
-	dc := 20 // Default standard DC
+	dc := 20 
 	if target != nil {
 		mod := target.GetSkillModifier(ability.SkillStealth)
 		dc = 10 + mod
 	}
 
-	res := skill.Seek(actor, dc, nil)
+	res := skill.Seek(actor, dc, nil, 0)
 
 	desc := "Seek result: " + res.Degree.String()
 
 	return ability.ActionResult{Success: res.Degree >= check.Success, Degree: res.Degree, Description: desc}
 }
 
-// RecallKnowledge - Check against LevelBasedDC
+// Recall Knowledge - Check against LevelBasedDC
 type RecallKnowledgeAction struct {
 	Skill ability.SkillID
 }
@@ -228,12 +228,12 @@ func (r *RecallKnowledgeAction) Execute(actor, target *entity.Entity, turn *Turn
 		return ability.ActionResult{Success: false, Description: err.Error()}
 	}
 
-	dc := 15 // Default
+	dc := 15 
 	if target != nil {
 		dc = skill.LevelBasedDC(target.Level)
 	}
 
-	info, res := skill.RecallKnowledge(actor, r.Skill, dc)
+	info, res := skill.RecallKnowledge(actor, r.Skill, dc, 0)
 
 	desc := "Recall Knowledge: " + res.Degree.String()
 	if res.Degree >= check.Success {

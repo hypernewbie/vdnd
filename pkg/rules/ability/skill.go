@@ -19,6 +19,7 @@ const (
 	SkillStealth      SkillID = "stealth"
 	SkillSurvival     SkillID = "survival"
 	SkillThievery     SkillID = "thievery"
+	SkillPerception   SkillID = "perception"
 )
 
 func GetKeyAbility(id SkillID) Ability {
@@ -29,7 +30,7 @@ func GetKeyAbility(id SkillID) Ability {
 		return Dexterity
 	case SkillArcana, SkillCrafting, SkillOccultism, SkillSociety:
 		return Intelligence
-	case SkillMedicine, SkillNature, SkillReligion, SkillSurvival:
+	case SkillMedicine, SkillNature, SkillReligion, SkillSurvival, SkillPerception:
 		return Wisdom
 	case SkillDeception, SkillDiplomacy, SkillIntimidation, SkillPerformance:
 		return Charisma

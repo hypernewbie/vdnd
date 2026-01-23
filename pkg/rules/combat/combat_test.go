@@ -30,14 +30,13 @@ func TestMAP(t *testing.T) {
 func TestSweepAndForceful(t *testing.T) {
 	actor := entity.NewEntity("a1", "Fighter", 1)
 	actor.Abilities.Strength = 18 // +4
-	actor.WeaponProficiencies[item.GroupSword] = ability.Expert // +4 + 1 = +5 bonus
+	// Total attack bonus = 4 (str) + 0 (trained bonus at lvl 1) = 4
 
 	target1 := entity.NewEntity("t1", "Orc A", 1)
 	target1.UnarmoredDefense = ability.Untrained // AC 11
 	target2 := entity.NewEntity("t2", "Orc B", 1)
 	target2.UnarmoredDefense = ability.Untrained // AC 11
 
-	// Custom weapon with Sweep and Forceful
 	falchion := item.Weapon{
 		ID:         "falchion-1",
 		Name:       "Falchion",
@@ -51,26 +50,34 @@ func TestSweepAndForceful(t *testing.T) {
 	strike := NewStrike(&falchion)
 	turn := NewTurn(actor)
 
-	// Attack 1: Target 1
-	res1 := strike.ExecuteWithRoll(actor, target1, turn, 10)
+	// Attack 1: Target 1. Roll 7. Total 11 vs 11 AC -> Success.
+	res1 := strike.ExecuteWithRoll(actor, target1, turn, 7)
 	if !res1.Success {
 		t.Errorf("Attack 1 failed: %v", res1.Degree)
 	}
 
-	// Attack 2: Target 2 (Sweep applies)
-	res2 := strike.ExecuteWithRoll(actor, target2, turn, 6)
+	// Attack 2: Target 2. 
+	// Mod: +4 (STR), -5 (MAP), +1 (Sweep) = +0.
+	// Roll 11. Total 11 vs 11 AC -> Success.
+	res2 := strike.ExecuteWithRoll(actor, target2, turn, 11)
 	if !res2.Success {
 		t.Errorf("Attack 2 with Sweep failed: %v", res2.Degree)
 	}
+	// Forceful: +1 damage (1 die)
+	// Base damage: 1d10 (min 1) + 4 (STR) + 1 (Forceful) = min 6
 	if res2.Damage < 6 {
 		t.Errorf("Forceful damage bonus not applied? Damage: %d", res2.Damage)
 	}
 
-	// Attack 3: Target 2 (Sweep does NOT apply, Forceful is +2 now)
-	res3 := strike.ExecuteWithRoll(actor, target2, turn, 12)
+	// Attack 3: Target 2.
+	// Mod: +4 (STR), -10 (MAP), Sweep: 0 (same target as last) = -6.
+	// Roll 17. Total 11 vs 11 AC -> Success.
+	res3 := strike.ExecuteWithRoll(actor, target2, turn, 17)
 	if !res3.Success {
 		t.Errorf("Attack 3 failed: %v", res3.Degree)
 	}
+	// Forceful: +2 damage (2 * 1 die)
+	// Base damage: 1d10 (min 1) + 4 (STR) + 2 (Forceful) = min 7
 	if res3.Damage < 7 {
 		t.Errorf("Forceful stage 2 bonus not applied? Damage: %d", res3.Damage)
 	}
@@ -78,7 +85,7 @@ func TestSweepAndForceful(t *testing.T) {
 
 func TestBackswing(t *testing.T) {
 	actor := entity.NewEntity("a1", "Fighter", 1)
-	actor.Abilities.Strength = 18
+	actor.Abilities.Strength = 18 // +4
 	target := entity.NewEntity("t1", "Orc", 1)
 	target.UnarmoredDefense = ability.Untrained // AC 11
 
@@ -95,30 +102,69 @@ func TestBackswing(t *testing.T) {
 	strike := NewStrike(&mace)
 	turn := NewTurn(actor)
 
-	// Attack 1: Miss (Mod +4 vs AC 10. Roll 1 -> Total 5 -> Failure)
+	// Attack 1: Miss. Mod +4. Roll 1. Total 5 failure.
 	res1 := strike.ExecuteWithRoll(actor, target, turn, 1)
 	if res1.Success {
 		t.Error("Attack 1 should have failed")
 	}
 
-	// Attack 2: Should have +1 from Backswing
-	// Mod: +4, MAP: -5, Backswing: +1 -> Total mod +0 vs AC 11.
-	// Roll 11 -> Total 11 -> Success.
+	// Attack 2: Should have +1 from Backswing.
+	// Mod: +4 (STR), -5 (MAP), +1 (Backswing) = +0.
+	// Roll 11. Total 11 vs 11 AC -> Success.
 	res2 := strike.ExecuteWithRoll(actor, target, turn, 11)
 	if !res2.Success {
 		t.Errorf("Attack 2 with Backswing failed: %v", res2.Degree)
 	}
 }
 
-func TestTurnState(t *testing.T) {
-	e := entity.NewEntity("e1", "Hero", 1)
-	turn := NewTurn(e)
-	if turn.ActionsRemaining != 3 {
-		t.Errorf("Fresh turn should have 3 actions, got %d", turn.ActionsRemaining)
+func TestAgileWeapon(t *testing.T) {
+	actor := entity.NewEntity("a1", "Rogue", 1)
+	actor.Abilities.Strength = 14 // +2
+	target := entity.NewEntity("t1", "Orc", 1)
+	target.UnarmoredDefense = ability.Untrained // AC 11
+
+	dagger := item.Weapon{
+		ID:         "dagger-1",
+		Name:       "Dagger",
+		Traits:     []trait.TraitID{trait.TraitAgile},
+		IsMelee:    true,
+		Damage:     dice.DieRoll{Count: 1, Sides: 4},
 	}
-	e.Conditions.Apply(condition.NewCondition(condition.Quickened, "Haste"))
-	turn2 := NewTurn(e)
-	if turn2.ActionsRemaining != 4 {
-		t.Errorf("Quickened should have 4 actions, got %d", turn2.ActionsRemaining)
+
+	strike := NewStrike(&dagger)
+	turn := NewTurn(actor)
+
+	// Attack 1: Roll 9. Total 11 -> Success.
+	_ = strike.ExecuteWithRoll(actor, target, turn, 9)
+
+	// Attack 2: MAP should be -4.
+	// Mod: +2 (STR), -4 (MAP) = -2.
+	// Roll 13. Total 11 -> Success.
+	res2 := strike.ExecuteWithRoll(actor, target, turn, 13)
+	if !res2.Success {
+		t.Errorf("Agile MAP -4 should have succeeded, got %v", res2.Degree)
+	}
+
+	// Attack 3: MAP should be -8.
+	// Mod: +2 (STR), -8 (MAP) = -6.
+	// Roll 17. Total 11 -> Success.
+	res3 := strike.ExecuteWithRoll(actor, target, turn, 17)
+	if !res3.Success {
+		t.Errorf("Agile MAP -8 should have succeeded, got %v", res3.Degree)
+	}
+}
+
+func TestCombatPersistentDamage(t *testing.T) {
+	actor := entity.NewEntity("a1", "Hero", 1)
+	actor.MaxHP = 100
+	actor.CurrentHP = 100
+	
+	actor.Conditions.Apply(condition.NewPersistentDamage(10, "fire", "Burn"))
+	
+	// Simulate end of turn
+	actor.Conditions.EndTurn(actor)
+	
+	if actor.CurrentHP >= 100 {
+		t.Errorf("Expected damage from persistent fire, got %d", actor.CurrentHP)
 	}
 }

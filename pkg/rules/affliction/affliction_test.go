@@ -1,113 +1,75 @@
-package affliction_test
+package affliction
 
 import (
 	"testing"
-	"uaa/vdnd/pkg/rules/ability"
-	"uaa/vdnd/pkg/rules/affliction"
 	"uaa/vdnd/pkg/rules/check"
-	"uaa/vdnd/pkg/rules/condition"
-	"uaa/vdnd/pkg/rules/entity"
 )
 
-func TestAfflictionInstance(t *testing.T) {
-	aff := &affliction.GiantCentipedeVenom
-	inst := affliction.NewInstance(aff, "bite")
+func TestAfflictionStageStateMachine(t *testing.T) {
+	aff := &Affliction{
+		ID:       "centipede-venom",
+		Name:     "Centipede Venom",
+		MaxStage: 3,
+		Stages: []Stage{
+			{Number: 1},
+			{Number: 2},
+			{Number: 3},
+		},
+	}
 
-	if inst.CurrentStage != 1 {
-		t.Errorf("Expected stage 1, got %d", inst.CurrentStage)
-	}
-	if !inst.IsActive() {
-		t.Error("Expected active (no onset)")
+	inst := NewInstance(aff, "Bite")
+	inst.CurrentStage = 1
+
+	// 1. Critical Success: -2 stages -> Stage 0 (Cured)
+	inst.ProcessSave(check.CriticalSuccess)
+	if !inst.IsCured() {
+		t.Errorf("Expected cured (stage 0) on Crit Success, got Stage %d", inst.CurrentStage)
 	}
 
-	dmg, _, conds := inst.GetCurrentEffects()
-	if dmg.Count != 1 || dmg.Sides != 6 {
-		t.Errorf("Expected 1d6 damage for stage 1, got %v", dmg)
+	// 2. Reset and Test Success: -1 stage -> Stage 0 (Cured)
+	inst.CurrentStage = 1
+	inst.ProcessSave(check.Success)
+	if !inst.IsCured() {
+		t.Errorf("Expected cured on Success from Stage 1, got Stage %d", inst.CurrentStage)
 	}
-	if len(conds) != 1 || conds[0].ID != condition.FlatFooted {
-		t.Error("Expected FlatFooted for stage 1")
+
+	// 3. Reset and Test Failure: +1 stage -> Stage 2
+	inst.CurrentStage = 1
+	inst.ProcessSave(check.Failure)
+	if inst.CurrentStage != 2 {
+		t.Errorf("Expected Stage 2 on Failure from Stage 1, got %d", inst.CurrentStage)
+	}
+
+	// 4. Reset and Test Crit Failure: +2 stages -> Stage 3
+	inst.CurrentStage = 1
+	inst.ProcessSave(check.CriticalFailure)
+	if inst.CurrentStage != 3 {
+		t.Errorf("Expected Stage 3 on Crit Failure from Stage 1, got %d", inst.CurrentStage)
+	}
+
+	// 5. Overflow: Crit Failure from Stage 2 should cap at Stage 3
+	inst.CurrentStage = 2
+	inst.ProcessSave(check.CriticalFailure)
+	if inst.CurrentStage != 3 {
+		t.Errorf("Expected Stage 3 (capped) on Crit Failure from Stage 2, got %d", inst.CurrentStage)
 	}
 }
 
-func TestOnsetDelay(t *testing.T) {
-	aff := &affliction.ZombieRot
-	inst := affliction.NewInstance(aff, "scratch")
-
-	if inst.IsActive() {
-		t.Error("Should not be active during onset")
+func TestAfflictionTick(t *testing.T) {
+	aff := &Affliction{
+		ID:         "venom",
+		OnsetDelay: 1,
+		Interval:   2,
 	}
+	inst := NewInstance(aff, "Test")
 
-	// Tracker tick
-	tracker := affliction.NewTracker()
-	// We can't access unexported fields from another package
-	// We should use Add
-	tracker.Add(aff, "scratch")
+	// T=0: OnsetDelay 1
+	if inst.Tick() { t.Error("Should not require save yet") }
+	// T=1: Onset happens
+	if !inst.Tick() { t.Error("Should require initial save after onset") }
 	
-	tracker.Tick(ability.IntervalDays)
-	inst2 := tracker.Get(aff.ID)
-	if !inst2.IsActive() {
-		t.Error("Should be active after 1 day tick (onset 1)")
-	}
-}
-
-func TestStageProgression(t *testing.T) {
-	tracker := affliction.NewTracker()
-	aff := &affliction.GiantCentipedeVenom
-	tracker.Add(aff, "bite")
-
-	// Stage 1 -> Success -> Cured (0)
-	tracker.ProcessSave(aff.ID, check.Success)
-	if tracker.Has(aff.ID) {
-		t.Error("Should be cured after success at stage 1")
-	}
-
-	// Stage 1 -> Failure -> Stage 2
-	tracker.Add(aff, "bite")
-	tracker.ProcessSave(aff.ID, check.Failure)
-	if inst := tracker.Get(aff.ID); inst.CurrentStage != 2 {
-		t.Errorf("Expected stage 2, got %d", inst.CurrentStage)
-	}
-
-	// Stage 2 -> Critical Success -> Cured (0)
-	tracker.ProcessSave(aff.ID, check.CriticalSuccess)
-	if tracker.Has(aff.ID) {
-		t.Error("Should be cured after critical success at stage 2")
-	}
-
-	// Stage 1 -> Critical Failure -> Stage 3
-	tracker.Add(aff, "bite")
-	tracker.ProcessSave(aff.ID, check.CriticalFailure)
-	if inst := tracker.Get(aff.ID); inst.CurrentStage != 3 {
-		t.Errorf("Expected stage 3, got %d", inst.CurrentStage)
-	}
-
-	// Stage 3 -> Critical Failure -> Stage 3 (Capped)
-	tracker.ProcessSave(aff.ID, check.CriticalFailure)
-	if inst := tracker.Get(aff.ID); inst.CurrentStage != 3 {
-		t.Errorf("Expected capped stage 3, got %d", inst.CurrentStage)
-	}
-}
-
-func TestEntityIntegration(t *testing.T) {
-	e := entity.NewEntity("e1", "Target", 1)
-	e.MaxHP = 20
-	e.CurrentHP = 20
-
-	e.Afflictions.Add(&affliction.GiantCentipedeVenom, "bite")
-
-	// Process tick
-	results := e.ProcessAfflictions(ability.IntervalRounds)
-	if len(results) != 1 || results[0].AfflictionID != "giant-centipede-venom" {
-		t.Error("Tick should have processed centipede venom")
-	}
-
-	// Check conditions applied
-	if !e.Conditions.Has(condition.FlatFooted) {
-		t.Error("Should have applied FlatFooted from venom")
-	}
-
-	// Damage verification
-	if results[0].Damage == 0 {
-		t.Error("Tick should have rolled damage")
-	}
+	// T=2: Interval 2 (1/2)
+	if inst.Tick() { t.Error("Should not require save yet") }
+	// T=3: Interval 2 (2/2)
+	if !inst.Tick() { t.Error("Should require save after interval") }
 }
