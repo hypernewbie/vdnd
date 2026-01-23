@@ -154,15 +154,23 @@ type Weapon struct {
     Traits         trait.TraitSet
     RangeIncrement int            // 0 for melee, feet for ranged/thrown
     
+    // Parameterised Trait Fields (MVP approach)
+    ThrownRange    int            // From "thrown X"
+    VersatileType  DamageType     // From "versatile X"
+    DeadlyDie      dice.DieRoll   // From "deadly dX"
+    FatalDie       dice.DieRoll   // From "fatal dX"
+    TwoHandDie     dice.DieRoll   // From "two-hand dX"
+
     // Derived from traits, cached for convenience
     IsRanged       bool
     IsMelee        bool
 }
 
-// NewWeapon creates a weapon with basic stats
+// NewWeapon creates a weapon with basic stats. 
+// rangeIncrement: 0 for melee, value for ranged/thrown
 func NewWeapon(id, name string, cat WeaponCategory, group WeaponGroup, 
                damage dice.DieRoll, damageType DamageType, hands int, 
-               traits ...trait.TraitID) Weapon
+               rangeIncrement int, traits ...trait.TraitID) Weapon
 
 // HasTrait checks if weapon has a specific trait
 func (w Weapon) HasTrait(id trait.TraitID) bool
@@ -205,7 +213,7 @@ type Armor struct {
 }
 
 // NewArmor creates armour with given stats
-func NewArmor(id, name string, cat ArmorCategory, acBonus, dexCap, checkPen, speedPen int) Armor
+func NewArmor(id, name string, cat ArmorCategory, acBonus, dexCap, checkPen, speedPen, strength int) Armor
 
 // EffectiveCheckPenalty returns 0 if character meets STR requirement
 func (a Armor) EffectiveCheckPenalty(strength int) int
@@ -225,44 +233,43 @@ Pre-built weapons and armour from the core rules.
 // Core Melee Weapons
 var (
     Fist       = NewWeapon("fist", "Fist", Unarmed, Brawling, 
-                           dice.DieRoll{1, 4, 0}, Bludgeoning, 1, 
+                           dice.DieRoll{1, 4, 0}, Bludgeoning, 1, 0,
                            trait.TraitAgile, trait.TraitFinesse, trait.TraitNonlethal)
     
     Dagger    = NewWeapon("dagger", "Dagger", Simple, Knife,
-                           dice.DieRoll{1, 4, 0}, Piercing, 1,
+                           dice.DieRoll{1, 4, 0}, Piercing, 1, 10,
                            trait.TraitAgile, trait.TraitFinesse, trait.TraitThrown, trait.TraitVersatile)
-    
+    // Note: Dagger should set VersatileType=Slashing manually in a builder block or helper
+
     Longsword = NewWeapon("longsword", "Longsword", Martial, Sword,
-                           dice.DieRoll{1, 8, 0}, Slashing, 1,
+                           dice.DieRoll{1, 8, 0}, Slashing, 1, 0,
                            trait.TraitVersatile)
     
     Greatsword = NewWeapon("greatsword", "Greatsword", Martial, Sword,
-                            dice.DieRoll{1, 12, 0}, Slashing, 2)
+                            dice.DieRoll{1, 12, 0}, Slashing, 2, 0)
     
     Rapier    = NewWeapon("rapier", "Rapier", Martial, Sword,
-                           dice.DieRoll{1, 6, 0}, Piercing, 1,
+                           dice.DieRoll{1, 6, 0}, Piercing, 1, 0,
                            trait.TraitDeadly, trait.TraitDisarm, trait.TraitFinesse)
-    // etc.
 )
 
 // Core Ranged Weapons
 var (
     Shortbow  = NewWeapon("shortbow", "Shortbow", Martial, Bow,
-                           dice.DieRoll{1, 6, 0}, Piercing, 2,
+                           dice.DieRoll{1, 6, 0}, Piercing, 2, 60,
                            trait.TraitDeadly)
-    // RangeIncrement set separately
     
     Crossbow  = NewWeapon("crossbow", "Crossbow", Simple, Crossbow,
-                           dice.DieRoll{1, 8, 0}, Piercing, 2)
+                           dice.DieRoll{1, 8, 0}, Piercing, 2, 120)
 )
 
 // Core Armor
 var (
-    NoArmor       = NewArmor("unarmored", "Unarmored", Unarmored, 0, -1, 0, 0)
-    LeatherArmor  = NewArmor("leather", "Leather Armor", LightArmor, 1, 4, -1, 0)
-    ChainShirt    = NewArmor("chain-shirt", "Chain Shirt", LightArmor, 2, 3, -1, 0)
-    ChainMail     = NewArmor("chain-mail", "Chain Mail", MediumArmor, 4, 1, -2, -5)
-    PlateArmor    = NewArmor("plate", "Full Plate", HeavyArmor, 6, 0, -3, -10)
+    NoArmor       = NewArmor("unarmored", "Unarmored", Unarmored, 0, -1, 0, 0, 0)
+    LeatherArmor  = NewArmor("leather", "Leather Armor", LightArmor, 1, 4, -1, 0, 10)
+    ChainShirt    = NewArmor("chain-shirt", "Chain Shirt", LightArmor, 2, 3, -1, 0, 12)
+    ChainMail     = NewArmor("chain-mail", "Chain Mail", MediumArmor, 4, 1, -2, -5, 16)
+    PlateArmor    = NewArmor("plate", "Full Plate", HeavyArmor, 6, 0, -3, -10, 18)
 )
 
 // GetWeapon returns a weapon by ID
