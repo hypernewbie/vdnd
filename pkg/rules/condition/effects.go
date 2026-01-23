@@ -47,7 +47,7 @@ func (t *ConditionTracker) GetModifiers() []check.Modifier {
 func (t *ConditionTracker) GetACModifiers() []check.Modifier {
 	mods := t.GetModifiers()
 
-	if t.Has(FlatFooted) || t.Has(Prone) || t.Has(Grabbed) || t.Has(Restrained) || t.Has(Paralyzed) {
+	if t.IsFlatFooted() {
 		mods = append(mods, check.Modifier{
 			Value:  -2,
 			Type:   check.BonusCircumstance,

@@ -110,3 +110,8 @@ func (t *ConditionTracker) EndTurn() {
 func (t *ConditionTracker) StartTurn() {
 	// Placeholder for start of turn logic (e.g. slowed/stunned action reduction)
 }
+
+// IsFlatFooted checks if any condition makes the entity flat-footed
+func (t *ConditionTracker) IsFlatFooted() bool {
+	return t.Has(FlatFooted) || t.Has(Prone) || t.Has(Grabbed) || t.Has(Restrained) || t.Has(Paralyzed) || t.Has(Unconscious)
+}
