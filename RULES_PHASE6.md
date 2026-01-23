@@ -126,7 +126,17 @@ type Entity struct {
     Fortitude     ability.ProficiencyRank
     Reflex        ability.ProficiencyRank
     Will          ability.ProficiencyRank
-    UnarmoredDefense ability.ProficiencyRank
+    // Proficiencies
+    Perception          ability.ProficiencyRank
+    Fortitude           ability.ProficiencyRank
+    Reflex              ability.ProficiencyRank
+    Will                ability.ProficiencyRank
+    UnarmoredDefense    ability.ProficiencyRank // Fallback if no armor is worn
+    
+    // Detailed Proficiencies
+    ArmorProficiencies  map[item.ArmorCategory]ability.ProficiencyRank
+    WeaponProficiencies map[item.WeaponGroup]ability.ProficiencyRank // Can be Category or Group based
+
     
     // Equipment
     WornArmor      *item.Armor
@@ -210,7 +220,15 @@ func (e *Entity) GetAC() int:
         dexMod = e.WornArmor.AppliedDexBonus(dexMod)
     
     # Proficiency bonus
-    armorProf := e.getArmorProficiency()
+    # Proficiency bonus
+    armorProf := ability.Untrained
+    if e.WornArmor != nil {
+        if p, ok := e.ArmorProficiencies[e.WornArmor.Category]; ok {
+            armorProf = p
+        }
+    } else {
+        armorProf = e.UnarmoredDefense
+    }
     profBonus := armorProf.Bonus(e.Level)
     
     # Armor item bonus
@@ -271,9 +289,17 @@ func (e *Entity) IsUnconscious() bool
 // Applies dying condition or increases dying value
 func (e *Entity) CheckDying(wasCritical bool)
 
-// RecoveryCheck makes a dying recovery check
-// Returns true if stabilized
-func (e *Entity) RecoveryCheck() bool
+// RecoveryResult describes the outcome of a recovery check
+type RecoveryResult struct {
+    Degree      check.DegreeOfSuccess
+    Stabilized  bool
+    NewDying    int
+    NewWounded  int
+}
+
+// RecoveryCheck makes a dying recovery check (DC 10 + Dying Value)
+// Updates state (Dying/Wounded) and returns result details
+func (e *Entity) RecoveryCheck() RecoveryResult
 ```
 
 **TakeDamage Pseudocode:**

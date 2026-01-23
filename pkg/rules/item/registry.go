@@ -8,55 +8,53 @@ import (
 // Core Melee Weapons
 var (
 	Fist = NewWeapon("fist", "Fist", CategoryUnarmed, GroupBrawling,
-		dice.DieRoll{Count: 1, Sides: 4, Modifier: 0}, Bludgeoning, 1,
+		dice.DieRoll{Count: 1, Sides: 4, Modifier: 0}, Bludgeoning, 1, 0,
 		trait.TraitAgile, trait.TraitFinesse)
 
 	Dagger = NewWeapon("dagger", "Dagger", CategorySimple, GroupKnife,
-		dice.DieRoll{Count: 1, Sides: 4, Modifier: 0}, Piercing, 1,
+		dice.DieRoll{Count: 1, Sides: 4, Modifier: 0}, Piercing, 1, 10,
 		trait.TraitAgile, trait.TraitFinesse, trait.TraitThrown, trait.TraitVersatile)
 
 	Longsword = NewWeapon("longsword", "Longsword", CategoryMartial, GroupSword,
-		dice.DieRoll{Count: 1, Sides: 8, Modifier: 0}, Slashing, 1,
+		dice.DieRoll{Count: 1, Sides: 8, Modifier: 0}, Slashing, 1, 0,
 		trait.TraitVersatile)
 
 	Greatsword = NewWeapon("greatsword", "Greatsword", CategoryMartial, GroupSword,
-		dice.DieRoll{Count: 1, Sides: 12, Modifier: 0}, Slashing, 2)
+		dice.DieRoll{Count: 1, Sides: 12, Modifier: 0}, Slashing, 2, 0)
 
 	Rapier = NewWeapon("rapier", "Rapier", CategoryMartial, GroupSword,
-		dice.DieRoll{Count: 1, Sides: 6, Modifier: 0}, Piercing, 1,
+		dice.DieRoll{Count: 1, Sides: 6, Modifier: 0}, Piercing, 1, 0,
 		trait.TraitDeadly, trait.TraitFinesse)
 )
 
 // Core Ranged Weapons
 var (
 	Shortbow = NewWeapon("shortbow", "Shortbow", CategoryMartial, GroupBow,
-		dice.DieRoll{Count: 1, Sides: 6, Modifier: 0}, Piercing, 2,
+		dice.DieRoll{Count: 1, Sides: 6, Modifier: 0}, Piercing, 2, 60,
 		trait.TraitDeadly)
 
 	Crossbow = NewWeapon("crossbow", "Crossbow", CategorySimple, GroupCrossbow,
-		dice.DieRoll{Count: 1, Sides: 8, Modifier: 0}, Piercing, 2)
+		dice.DieRoll{Count: 1, Sides: 8, Modifier: 0}, Piercing, 2, 120)
 )
 
 // Core Armor
 var (
-	NoArmor      = NewArmor("unarmored", "Unarmored", Unarmored, 0, -1, 0, 0)
-	LeatherArmor = NewArmor("leather", "Leather Armor", LightArmor, 1, 4, -1, 0)
-	ChainShirt   = NewArmor("chain-shirt", "Chain Shirt", LightArmor, 2, 3, -1, 0)
-	ChainMail    = NewArmor("chain-mail", "Chain Mail", MediumArmor, 4, 1, -2, -5)
-	PlateArmor   = NewArmor("plate", "Full Plate", HeavyArmor, 6, 0, -3, -10)
+	NoArmor      = NewArmor("unarmored", "Unarmored", Unarmored, 0, -1, 0, 0, 0)
+	LeatherArmor = NewArmor("leather", "Leather Armor", LightArmor, 1, 4, -1, 0, 10)
+	ChainShirt   = NewArmor("chain-shirt", "Chain Shirt", LightArmor, 2, 3, -1, 0, 12)
+	ChainMail    = NewArmor("chain-mail", "Chain Mail", MediumArmor, 4, 1, -2, -5, 16)
+	PlateArmor   = NewArmor("plate", "Full Plate", HeavyArmor, 6, 0, -3, -10, 18)
 )
 
 func init() {
-	// Initialize range increments for ranged weapons
-	Shortbow.RangeIncrement = 60
-	Crossbow.RangeIncrement = 120
-	Dagger.RangeIncrement = 10
+	// Initialize specialized fields
+	Dagger.ThrownRange = 10
+	Dagger.VersatileType = Slashing
 
-	// Initialize STR requirements for armor
-	LeatherArmor.Strength = 10
-	ChainShirt.Strength = 12
-	ChainMail.Strength = 16
-	PlateArmor.Strength = 18
+	Longsword.VersatileType = Piercing
+
+	Rapier.DeadlyDie = dice.DieRoll{Count: 1, Sides: 8, Modifier: 0}
+	Shortbow.DeadlyDie = dice.DieRoll{Count: 1, Sides: 10, Modifier: 0}
 }
 
 var weaponRegistry = map[string]Weapon{

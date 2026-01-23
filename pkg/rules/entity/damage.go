@@ -1,6 +1,7 @@
 package entity
 
 import (
+	"uaa/vdnd/pkg/rules/check"
 	"uaa/vdnd/pkg/rules/condition"
 )
 
@@ -110,30 +111,77 @@ func (e *Entity) CheckDying(wasCritical bool) {
 	}
 }
 
-// RecoveryCheck makes a dying recovery check.
-// Simplified for now: just returns a placeholder or logic if DC provided.
-// Real recovery check involves a flat check (Phase 1 logic).
-func (e *Entity) RecoveryCheck(success bool, critical bool) {
+// RecoveryResult describes the outcome of a recovery check
+type RecoveryResult struct {
+	Degree     check.DegreeOfSuccess
+	Stabilized bool
+	NewDying   int
+	NewWounded int
+}
+
+// RecoveryCheck makes a dying recovery check (DC 10 + Dying Value).
+// roll: The natural die roll (1-20).
+// Updates state (Dying/Wounded) and returns result details.
+func (e *Entity) RecoveryCheck(roll int) RecoveryResult {
 	if !e.IsDying() {
-		return
+		return RecoveryResult{}
 	}
 
-	if success {
-		reduce := 1
-		if critical {
-			reduce = 2
-		}
-		e.Conditions.Reduce(condition.Dying, reduce)
-		if !e.IsDying() {
-			// Stabilized
-			e.Conditions.Apply(condition.NewValuedCondition(condition.Wounded, e.Conditions.Value(condition.Wounded)+1, "stabilized"))
-		}
-	} else {
-		increase := 1
-		if critical {
-			increase = 2
-		}
-		current := e.Conditions.Value(condition.Dying)
-		e.Conditions.Apply(condition.NewValuedCondition(condition.Dying, current+increase, "failed recovery check"))
+	dyingVal := e.Conditions.Value(condition.Dying)
+	dc := 10 + dyingVal
+
+	// Use the provided roll
+	res := check.PerformCheckWithRoll(roll, 0, nil, dc)
+
+	result := RecoveryResult{
+		Degree:     res.Degree,
+		NewDying:   dyingVal,
+		NewWounded: e.Conditions.Value(condition.Wounded),
+		Stabilized: false,
 	}
+
+	switch res.Degree {
+	case check.CriticalSuccess:
+		// Reduce dying by 2
+		e.Conditions.Reduce(condition.Dying, 2)
+		result.NewDying = e.Conditions.Value(condition.Dying) // Update after reduce
+
+		if !e.IsDying() {
+			result.Stabilized = true
+			e.Conditions.Remove(condition.Unconscious) // wait, usually you stay unconscious?
+			// Rules: "You lose the dying condition... You remain unconscious"
+			// But you gain wounded.
+			// Actually you DON'T remove unconscious on stabilize usually, until you wake up (heal).
+
+			// Increase wounded by 1
+			e.Conditions.Apply(condition.NewValuedCondition(condition.Wounded, result.NewWounded+1, "Recovery Crit Success"))
+			result.NewWounded++
+		}
+
+	case check.Success:
+		// Reduce dying by 1
+		e.Conditions.Reduce(condition.Dying, 1)
+		result.NewDying = e.Conditions.Value(condition.Dying)
+
+		if !e.IsDying() {
+			result.Stabilized = true
+			// Increase wounded by 1
+			e.Conditions.Apply(condition.NewValuedCondition(condition.Wounded, result.NewWounded+1, "Recovery Success"))
+			result.NewWounded++
+		}
+
+	case check.Failure:
+		// Increase dying by 1
+		current := e.Conditions.Value(condition.Dying)
+		e.Conditions.Apply(condition.NewValuedCondition(condition.Dying, current+1, "Recovery Failure"))
+		result.NewDying = current + 1
+
+	case check.CriticalFailure:
+		// Increase dying by 2
+		current := e.Conditions.Value(condition.Dying)
+		e.Conditions.Apply(condition.NewValuedCondition(condition.Dying, current+2, "Recovery Crit Failure"))
+		result.NewDying = current + 2
+	}
+
+	return result
 }

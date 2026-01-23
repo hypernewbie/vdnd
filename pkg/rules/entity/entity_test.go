@@ -164,14 +164,14 @@ func TestDying(t *testing.T) {
 		t.Errorf("Expected Dying 2 after more damage, got %d", e.Conditions.Value(condition.Dying))
 	}
 
-	// Recovery Success
-	e.RecoveryCheck(true, false)
+	// Recovery Success (DC was 10+2=12, roll 15 succeeds)
+	e.RecoveryCheck(15)
 	if e.Conditions.Value(condition.Dying) != 1 {
 		t.Error("Expected Dying 1 after recovery success")
 	}
 
-	// Stabilize
-	e.RecoveryCheck(true, false)
+	// Stabilize (DC was 10+1=11, roll 15 succeeds)
+	e.RecoveryCheck(15)
 	if e.IsDying() {
 		t.Error("Expected not dying after stabilizing")
 	}

@@ -35,6 +35,8 @@ type Entity struct {
 	UnarmoredDefense ability.ProficiencyRank
 	// Add other armor/weapon proficiencies as needed
 	ArmorProficiencies map[item.ArmorCategory]ability.ProficiencyRank
+	// WeaponProficiencies maps weapon groups (or categories) to proficiency rank
+	WeaponProficiencies map[item.WeaponGroup]ability.ProficiencyRank
 
 	// Equipment
 	WornArmor      *item.Armor
@@ -58,15 +60,16 @@ type Entity struct {
 
 func NewEntity(id, name string, level int) *Entity {
 	return &Entity{
-		ID:                 id,
-		Name:               name,
-		Level:              level,
-		Size:               Medium,
-		ArmorProficiencies: make(map[item.ArmorCategory]ability.ProficiencyRank),
-		Conditions:         condition.NewTracker(),
-		Resistances:        make(map[string]int),
-		Weaknesses:         make(map[string]int),
-		WieldedWeapons:     make([]*item.Weapon, 0),
+		ID:                  id,
+		Name:                name,
+		Level:               level,
+		Size:                Medium,
+		ArmorProficiencies:  make(map[item.ArmorCategory]ability.ProficiencyRank),
+		WeaponProficiencies: make(map[item.WeaponGroup]ability.ProficiencyRank),
+		Conditions:          condition.NewTracker(),
+		Resistances:         make(map[string]int),
+		Weaknesses:          make(map[string]int),
+		WieldedWeapons:      make([]*item.Weapon, 0),
 	}
 }
 
@@ -86,6 +89,11 @@ func (e *Entity) Clone() *Entity {
 	clone.ArmorProficiencies = make(map[item.ArmorCategory]ability.ProficiencyRank)
 	for k, v := range e.ArmorProficiencies {
 		clone.ArmorProficiencies[k] = v
+	}
+
+	clone.WeaponProficiencies = make(map[item.WeaponGroup]ability.ProficiencyRank)
+	for k, v := range e.WeaponProficiencies {
+		clone.WeaponProficiencies[k] = v
 	}
 
 	clone.WieldedWeapons = make([]*item.Weapon, len(e.WieldedWeapons))

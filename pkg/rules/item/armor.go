@@ -25,7 +25,7 @@ type Armor struct {
 }
 
 // NewArmor creates armour with given stats
-func NewArmor(id, name string, cat ArmorCategory, acBonus, dexCap, checkPen, speedPen int) Armor {
+func NewArmor(id, name string, cat ArmorCategory, acBonus, dexCap, checkPen, speedPen, strength int) Armor {
 	return Armor{
 		ID:           id,
 		Name:         name,
@@ -34,6 +34,7 @@ func NewArmor(id, name string, cat ArmorCategory, acBonus, dexCap, checkPen, spe
 		DexCap:       dexCap,
 		CheckPenalty: checkPen,
 		SpeedPenalty: speedPen,
+		Strength:     strength,
 		Traits:       make(trait.TraitSet, 0),
 	}
 }
