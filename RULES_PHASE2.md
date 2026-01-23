@@ -4,9 +4,9 @@
 
 You are implementing the ability score and proficiency system for a Pathfinder 2E rules engine in Go. This builds on Phase 1 (dice & checks) and provides the foundation for calculating attack rolls, saves, skill checks, and AC.
 
-**Your task:** Implement the `pkg/ability` package with full test coverage.
+**Your task:** Implement the `pkg/rules/ability` package with full test coverage.
 
-**Prerequisite:** Phase 1 must be complete (`pkg/dice`, `pkg/check`).
+**Prerequisite:** Phase 1 must be complete (`pkg/rules/dice`, `pkg/rules/check`).
 
 ---
 
@@ -316,7 +316,7 @@ func CalculateDC(modifier int) int {
 
 3. **AbilityScores as value type:** Keep it a simple struct, easily copied. No pointers needed.
 
-4. **Integration with Phase 1:** This package doesn't directly depend on `pkg/check`, but will be used alongside it. For example:
+4. **Integration with Phase 1:** This package doesn't directly depend on `pkg/rules/check`, but will be used alongside it. For example:
    ```go
    // Future usage
    totalMod := ability.CalculateModifier(char.Abilities.Get(ability.Strength), char.AthleticsProficiency, char.Level)

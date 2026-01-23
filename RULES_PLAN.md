@@ -649,9 +649,9 @@ vdnd/
 │       └── main.go              # CLI entry point
 ├── pkg/
 │   └── rules/                   # Core PF2E rules engine
+│       ├── ability/             # Ability scores and proficiency
 │       ├── dice/                # Dice rolling
 │       ├── check/               # Check resolution
-│       ├── modifier/            # Bonus stacking
 │       ├── trait/               # Trait registry
 │       ├── condition/           # Condition tracker
 │       ├── entity/              # Entity management

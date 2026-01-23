@@ -4,9 +4,9 @@
 
 You are implementing the conditions system for a Pathfinder 2E rules engine in Go. Conditions are persistent status effects that modify a creature's capabilities - from being frightened to dying.
 
-**Your task:** Implement the `pkg/condition` package with full test coverage.
+**Your task:** Implement the `pkg/rules/condition` package with full test coverage.
 
-**Prerequisites:** Phases 1-3 should be complete (especially `pkg/check` for modifiers).
+**Prerequisites:** Phases 1-3 should be complete (especially `pkg/rules/check` for modifiers).
 
 ---
 
@@ -189,6 +189,9 @@ func (t *ConditionTracker) EndTurn()
 
 // StartTurn processes start-of-turn effects
 func (t *ConditionTracker) StartTurn()
+
+// IsFlatFooted checks if any condition makes the entity flat-footed
+func (t *ConditionTracker) IsFlatFooted() bool
 ```
 
 **Apply Pseudocode:**
@@ -234,7 +237,7 @@ func (t *ConditionTracker) EndTurn():
 Extracts game effects from conditions. Integrates with `pkg/check`.
 
 ```go
-import "vdnd/pkg/rules/check"
+import "uaa/vdnd/pkg/rules/check"
 
 // GetModifiers returns all modifiers from active conditions
 // This is used when calculating checks
@@ -281,16 +284,12 @@ func (t *ConditionTracker) GetModifiers() []check.Modifier:
 func (t *ConditionTracker) GetACModifiers() []check.Modifier:
     mods := t.GetModifiers()  # Start with universal modifiers
     
-    if t.Has(FlatFooted):
+    // Check helper for any flat-footed source (Prone, Grabbed, etc)
+    if t.IsFlatFooted():
         mods = append(mods, Modifier{-2, Circumstance, "Flat-footed"})
     
     if t.Has(Clumsy):
         mods = append(mods, Modifier{-t.Value(Clumsy), Status, "Clumsy"})
-    
-    if t.Has(Prone):
-        # Prone already makes you flat-footed, but explicitly adds -2 to attacks
-        # AC effect is via flat-footed
-        pass
     
     if t.Has(Unconscious):
         mods = append(mods, Modifier{-4, Status, "Unconscious"})

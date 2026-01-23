@@ -2,7 +2,7 @@ package condition
 
 import (
 	"testing"
-	"uaa/vdnd/pkg/check"
+	"uaa/vdnd/pkg/rules/check"
 )
 
 func TestConditionTracker_Apply(t *testing.T) {

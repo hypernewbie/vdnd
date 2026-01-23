@@ -4,7 +4,7 @@
 
 You are implementing the traits system for a Pathfinder 2E rules engine in Go. Traits are keywords that tag game elements (weapons, spells, actions, creatures) and modify how rules interact with them.
 
-**Your task:** Implement the `pkg/trait` package with full test coverage.
+**Your task:** Implement the `pkg/rules/trait` package with full test coverage.
 
 **Prerequisites:** Phase 1 and 2 should be complete.
 

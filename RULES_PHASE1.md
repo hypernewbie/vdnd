@@ -4,7 +4,7 @@
 
 You are implementing the core dice rolling and check resolution system for a Pathfinder 2E rules engine in Go. This is the foundation that all other game mechanics will build upon.
 
-**Your task:** Implement the `pkg/dice` and `pkg/check` packages with full test coverage.
+**Your task:** Implement the `pkg/rules/dice` and `pkg/rules/check` packages with full test coverage.
 
 ---
 

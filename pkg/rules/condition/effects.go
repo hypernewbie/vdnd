@@ -1,7 +1,7 @@
 package condition
 
 import (
-	"uaa/vdnd/pkg/check"
+	"uaa/vdnd/pkg/rules/check"
 )
 
 // GetModifiers returns all universal modifiers from active conditions
