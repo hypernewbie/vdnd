@@ -78,7 +78,7 @@ func (i *AfflictionInstance) Tick() bool {
 			return false
 		}
 		i.HasOnsetted = true
-		i.TimeToNextSave = i.Affliction.Interval // Reset interval for after onset
+		i.TimeToNextSave = i.Affliction.Interval 
 		return true
 	}
 
@@ -88,5 +88,15 @@ func (i *AfflictionInstance) Tick() bool {
 		return true
 	}
 
+	return false
+}
+
+// TickWithRoll is a helper for testing that processes time and a save in one go if needed
+func (i *AfflictionInstance) TickWithRoll(naturalRoll int, dc int) bool {
+	if i.Tick() {
+		res := check.PerformCheckWithRoll(naturalRoll, 0, nil, dc)
+		i.ProcessSave(res.Degree)
+		return true
+	}
 	return false
 }

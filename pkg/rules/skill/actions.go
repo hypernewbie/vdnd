@@ -42,26 +42,56 @@ func Balance(actor *entity.Entity, dc int, naturalRoll int) check.CheckResult {
 	return res
 }
 
-func TumbleThrough(actor, target *entity.Entity, naturalRoll int) check.CheckResult {
+type TumbleResult struct {
+	Success bool
+	EndMove bool
+}
+
+func TumbleThrough(actor, target *entity.Entity, naturalRoll int) (TumbleResult, check.CheckResult) {
 	dc := target.GetSaveDC(ability.SaveReflex)
+	var res check.CheckResult
 	if naturalRoll > 0 {
-		return PerformSkillCheckWithRoll(actor, ability.SkillAcrobatics, dc, naturalRoll)
+		res = PerformSkillCheckWithRoll(actor, ability.SkillAcrobatics, dc, naturalRoll)
+	} else {
+		res = PerformSkillCheck(actor, ability.SkillAcrobatics, dc)
 	}
-	return PerformSkillCheck(actor, ability.SkillAcrobatics, dc)
+
+	out := TumbleResult{Success: res.Degree >= check.Success}
+	if res.Degree < check.Success {
+		out.EndMove = true
+	}
+	return out, res
 }
 
-func ManeuverInFlight(actor *entity.Entity, dc int, naturalRoll int) check.CheckResult {
+func ManeuverInFlight(actor *entity.Entity, dc int, naturalRoll int) (int, check.CheckResult) {
+	var res check.CheckResult
 	if naturalRoll > 0 {
-		return PerformSkillCheckWithRoll(actor, ability.SkillAcrobatics, dc, naturalRoll)
+		res = PerformSkillCheckWithRoll(actor, ability.SkillAcrobatics, dc, naturalRoll)
+	} else {
+		res = PerformSkillCheck(actor, ability.SkillAcrobatics, dc)
 	}
-	return PerformSkillCheck(actor, ability.SkillAcrobatics, dc)
+	dist := 0
+	if res.Degree >= check.Success {
+		dist = actor.BaseSpeed
+	}
+	return dist, res
 }
 
-func Squeeze(actor *entity.Entity, dc int, naturalRoll int) check.CheckResult {
+func Squeeze(actor *entity.Entity, dc int, naturalRoll int) (int, check.CheckResult) {
+	var res check.CheckResult
 	if naturalRoll > 0 {
-		return PerformSkillCheckWithRoll(actor, ability.SkillAcrobatics, dc, naturalRoll)
+		res = PerformSkillCheckWithRoll(actor, ability.SkillAcrobatics, dc, naturalRoll)
+	} else {
+		res = PerformSkillCheck(actor, ability.SkillAcrobatics, dc)
 	}
-	return PerformSkillCheck(actor, ability.SkillAcrobatics, dc)
+	dist := 0
+	switch res.Degree {
+	case check.CriticalSuccess:
+		dist = 10
+	case check.Success:
+		dist = 5
+	}
+	return dist, res
 }
 
 // --- Athletics ---
@@ -82,12 +112,12 @@ func Climb(actor *entity.Entity, dc int, naturalRoll int) (MovementResult, check
 	move := MovementResult{}
 	switch res.Degree {
 	case check.CriticalSuccess:
-		move.Speed = 10 // Success + 5? PF2E says move at full speed (usually 10ft)
+		move.Speed = 8
 	case check.Success:
 		move.Speed = 5
 	case check.CriticalFailure:
 		actor.Conditions.Apply(condition.NewCondition(condition.Prone, "Climb (Crit Fail)"))
-		move.Damage = dice.DieRoll{Count: 1, Sides: 6}.Roll() // Fall damage placeholder
+		move.Damage = dice.DieRoll{Count: 1, Sides: 6}.Roll()
 	}
 	return move, res
 }
@@ -119,7 +149,7 @@ func HighJump(actor *entity.Entity, dc int, naturalRoll int) (int, check.CheckRe
 
 	dist := 0
 	if res.Degree == check.CriticalSuccess {
-		dist = 8 
+		dist = 8
 	} else if res.Degree == check.Success {
 		dist = 5
 	}
@@ -136,7 +166,7 @@ func LongJump(actor *entity.Entity, dc int, naturalRoll int) (int, check.CheckRe
 
 	dist := 0
 	if res.Degree >= check.Success {
-		dist = res.Total 
+		dist = res.Total
 	}
 	return dist, res
 }
@@ -152,13 +182,13 @@ func Disarm(actor, target *entity.Entity, naturalRoll int) check.CheckResult {
 
 	switch res.Degree {
 	case check.Success:
-		target.AddTemporaryImmunity("disarm-bonus", actor.ID, 1)
+		// Target has weakness to further disarm attempts
+		target.Conditions.Apply(condition.NewCondition("DisarmWeakness", actor.ID))
 	case check.CriticalFailure:
 		actor.Conditions.Apply(condition.NewCondition(condition.FlatFooted, "Disarm (Crit Fail)"))
 	}
 	return res
 }
-
 func ForceOpen(actor *entity.Entity, dc int, naturalRoll int) check.CheckResult {
 	if naturalRoll > 0 {
 		return PerformSkillCheckWithRoll(actor, ability.SkillAthletics, dc, naturalRoll)
@@ -178,7 +208,7 @@ func CreateADiversion(actor *entity.Entity, observers []*entity.Entity, naturalR
 		} else {
 			res = PerformSkillCheck(actor, ability.SkillDeception, dc)
 		}
-		
+
 		if res.Degree >= check.Success {
 			actor.Conditions.ApplyRelative(condition.Hidden, obs.ID, "Diversion")
 		}
@@ -198,11 +228,15 @@ func Feint(actor, target *entity.Entity, naturalRoll int) check.CheckResult {
 
 	switch res.Degree {
 	case check.CriticalSuccess:
-		// Target flat-footed against actor until end of NEXT turn
 		target.Conditions.Apply(condition.NewRelationalCondition(condition.FlatFooted, []string{actor.ID}, "Feint (Crit)"))
+		if inst := target.Conditions.Get(condition.FlatFooted); inst != nil {
+			inst.Duration = 2
+		}
 	case check.Success:
-		// Target flat-footed against NEXT melee attack
 		target.Conditions.Apply(condition.NewRelationalCondition(condition.FlatFooted, []string{actor.ID}, "Feint"))
+		if inst := target.Conditions.Get(condition.FlatFooted); inst != nil {
+			inst.Duration = 1
+		}
 	case check.CriticalFailure:
 		actor.Conditions.Apply(condition.NewRelationalCondition(condition.FlatFooted, []string{target.ID}, "Feint (Crit Fail)"))
 	}
@@ -234,7 +268,7 @@ func GatherInformation(actor *entity.Entity, dc int, naturalRoll int) check.Chec
 }
 
 func MakeAnImpression(actor, target *entity.Entity, naturalRoll int) check.CheckResult {
-	dc := 10 + target.GetSaveDC(ability.SaveWill) 
+	dc := target.GetSaveDC(ability.SaveWill)
 	if naturalRoll > 0 {
 		return PerformSkillCheckWithRoll(actor, ability.SkillDiplomacy, dc, naturalRoll)
 	}
@@ -242,7 +276,7 @@ func MakeAnImpression(actor, target *entity.Entity, naturalRoll int) check.Check
 }
 
 func Request(actor, target *entity.Entity, naturalRoll int) check.CheckResult {
-	dc := 10 + target.GetSaveDC(ability.SaveWill)
+	dc := target.GetSaveDC(ability.SaveWill)
 	if naturalRoll > 0 {
 		return PerformSkillCheckWithRoll(actor, ability.SkillDiplomacy, dc, naturalRoll)
 	}
@@ -252,7 +286,7 @@ func Request(actor, target *entity.Entity, naturalRoll int) check.CheckResult {
 // --- Intimidation ---
 
 func Coerce(actor, target *entity.Entity, naturalRoll int) check.CheckResult {
-	dc := 10 + target.GetSaveDC(ability.SaveWill)
+	dc := target.GetSaveDC(ability.SaveWill)
 	if naturalRoll > 0 {
 		return PerformSkillCheckWithRoll(actor, ability.SkillIntimidation, dc, naturalRoll)
 	}
@@ -277,7 +311,7 @@ func Demoralize(actor, target *entity.Entity, naturalRoll int) check.CheckResult
 	case check.Success:
 		target.Conditions.Apply(condition.NewValuedCondition(condition.Frightened, 1, "Demoralize"))
 	}
-	target.AddTemporaryImmunity("demoralize", actor.ID, 100) 
+	target.AddTemporaryImmunity("demoralize", actor.ID, 100)
 	return res
 }
 
@@ -303,22 +337,67 @@ func TreatWounds(healer, patient *entity.Entity, dc int, naturalRoll int) (int, 
 	case check.CriticalFailure:
 		patient.ApplyDamage(dice.DieRoll{Count: 1, Sides: 8}.Roll())
 	}
-	if healing > 0 { patient.Heal(healing) }
+	if healing > 0 {
+		patient.Heal(healing)
+	}
 	return healing, res
 }
 
 func AdministerFirstAid(healer, patient *entity.Entity, dc int, stabilize bool, naturalRoll int) check.CheckResult {
+	var res check.CheckResult
 	if naturalRoll > 0 {
-		return PerformSkillCheckWithRoll(healer, ability.SkillMedicine, dc, naturalRoll)
+		res = PerformSkillCheckWithRoll(healer, ability.SkillMedicine, dc, naturalRoll)
+	} else {
+		res = PerformSkillCheck(healer, ability.SkillMedicine, dc)
 	}
-	return PerformSkillCheck(healer, ability.SkillMedicine, dc)
+
+	if res.Degree >= check.Success {
+		if stabilize {
+			patient.Conditions.Remove(condition.Dying)
+			// PF2e: stabilize usually makes them Unconscious but not dying.
+		} else {
+			// Stop bleeding (Remove persistent bleed if we had specific types, for now just generic)
+		}
+	}
+	return res
 }
 
 func TreatPoison(healer, patient *entity.Entity, dc int, naturalRoll int) check.CheckResult {
+	var res check.CheckResult
 	if naturalRoll > 0 {
-		return PerformSkillCheckWithRoll(healer, ability.SkillMedicine, dc, naturalRoll)
+		res = PerformSkillCheckWithRoll(healer, ability.SkillMedicine, dc, naturalRoll)
+	} else {
+		res = PerformSkillCheck(healer, ability.SkillMedicine, dc)
 	}
-	return PerformSkillCheck(healer, ability.SkillMedicine, dc)
+
+	if res.Degree >= check.Success {
+		bonus := 2
+		if res.Degree == check.CriticalSuccess {
+			bonus = 4
+		}
+		// Apply a circumstance bonus for next save.
+		// For now we use a temporary immunity or condition to represent this.
+		patient.Conditions.Apply(condition.NewModifierCondition("Treat Poison", check.BonusCircumstance, bonus, "Next Poison Save"))
+	}
+	return res
+}
+
+func TreatDisease(healer, patient *entity.Entity, dc int, naturalRoll int) check.CheckResult {
+	var res check.CheckResult
+	if naturalRoll > 0 {
+		res = PerformSkillCheckWithRoll(healer, ability.SkillMedicine, dc, naturalRoll)
+	} else {
+		res = PerformSkillCheck(healer, ability.SkillMedicine, dc)
+	}
+
+	if res.Degree >= check.Success {
+		bonus := 2
+		if res.Degree == check.CriticalSuccess {
+			bonus = 4
+		}
+		patient.Conditions.Apply(condition.NewModifierCondition("Treat Disease", check.BonusCircumstance, bonus, "Next Disease Save"))
+	}
+	return res
 }
 
 // --- Stealth ---
@@ -348,9 +427,12 @@ func Sneak(actor *entity.Entity, observer *entity.Entity, naturalRoll int) check
 	}
 
 	if res.Degree >= check.Success {
-		actor.Conditions.ApplyRelative(condition.Hidden, observer.ID, "Sneak")
-	} else {
+		actor.Conditions.ApplyRelative(condition.Undetected, observer.ID, "Sneak")
 		actor.Conditions.RemoveRelative(condition.Hidden, observer.ID)
+	} else {
+		actor.Conditions.ApplyRelative(condition.Observed, observer.ID, "Sneak (Fail)")
+		actor.Conditions.RemoveRelative(condition.Hidden, observer.ID)
+		actor.Conditions.RemoveRelative(condition.Undetected, observer.ID)
 	}
 	return res
 }
@@ -373,7 +455,11 @@ func PickLock(actor *entity.Entity, dc int, successesRequired int, naturalRoll i
 	}
 
 	progress := 0
-	if res.Degree == check.CriticalSuccess { progress = 2 } else if res.Degree == check.Success { progress = 1 }
+	if res.Degree == check.CriticalSuccess {
+		progress = 2
+	} else if res.Degree == check.Success {
+		progress = 1
+	}
 	return progress, res
 }
 
