@@ -1,40 +1,32 @@
 # VD Phase 2: State Management
 
-> **Status:** ✅ Implemented (by Gemini 3 Pro, who jumped the gun)
+> **Status:** Partially implemented by Gemini - requires gap work
 
-This phase establishes game state persistence and the core data structures.
-
----
-
-## What Was Built
-
-### File Structure
-
-```
-internal/state/
-├── state.go    # GameState and all related structs
-└── store.go    # Store interface, FileStore, MemoryStore
-
-internal/parser/
-└── entity.go   # Markdown entity parser (technically Phase 3, but done early)
-```
+This document defines Phase 2 requirements, compares against current implementation, and lists remaining work.
 
 ---
 
-## GameState Structure
+## Original Design (from VD_PLAN.md)
 
-The central state object persisted as `state.json`:
+### Required Files
 
+| File | Purpose |
+|------|---------|
+| `internal/state/state.go` | GameState struct and related types |
+| `internal/state/store.go` | Store interface |
+| `internal/state/file_store.go` | File-based persistence |
+| `internal/state/memory_store.go` | In-memory for tests |
+| `internal/output/formatter.go` | Markdown output builder |
+| `internal/output/templates.go` | Common output patterns |
+
+### Required State Structures
+
+**GameState** (from VD_PLAN lines 872-888):
 ```go
 type GameState struct {
-    // Scene
-    SceneName string
-    Positions map[string]*Zone
-
-    // Entities
-    Entities map[string]*EntityState
-
-    // Combat
+    SceneName        string
+    Positions        map[string]*Zone
+    Entities         map[string]*EntityState
     InCombat         bool
     Round            int
     InitiativeOrder  []string
@@ -42,231 +34,217 @@ type GameState struct {
     TurnIndex        int
     ActionsRemaining int
     ReactionsUsed    map[string]bool
-    AttacksMade      int  // For MAP calculation
-
-    // Pending reactions
-    PendingEvents []PendingEvent
+    AttacksMade      int
+    PendingEvents    []PendingEvent
 }
 ```
 
-### Zone (Positioning)
-
-Abstract zone-based positioning (not grid):
-
+**Store interface** (from VD_PLAN lines 188-204):
 ```go
-type Zone struct {
-    Name     string
-    Size     string   // small, medium, large
-    Adjacent []string // One move action away
-    Near     []string // Two moves away
-    Far      []string // Three+ moves
-    Cover    string   // none, lesser, standard, greater
-    Elevated bool
-    Notes    string
-}
-```
-
-### EntityState
-
-Full entity representation for persistence:
-
-```go
-type EntityState struct {
-    // Identity
-    ID, Name string
-    Level    int
-
-    // Flavour (strings, not full systems)
-    Ancestry, Class, Background string
-
-    // Combat stats
-    HP, MaxHP, TempHP int
-    AC, Speed         int
-
-    // Saves (total bonuses)
-    Fortitude, Reflex, Will int
-
-    // Abilities (uses pkg/rules/ability.AbilityScores)
-    Abilities ability.AbilityScores
-
-    // Position
-    Position    string
-    EngagedWith []string
-
-    // Conditions
-    Conditions []ConditionInstance
-
-    // Equipment (simplified)
-    WieldedWeapons []WeaponState
-    WornArmor      *ArmorState
-    RaisedShield   bool
-
-    // Defences
-    Immunities  []string
-    Weaknesses  map[string]int
-    Resistances map[string]int
-
-    // Available reactions
-    Reactions []string
-}
-```
-
-### Supporting Types
-
-```go
-type ConditionInstance struct {
-    ID       string
-    Value    int    // For valued conditions (Frightened 2)
-    Duration int    // -1 = until removed
-    Source   string
-}
-
-type WeaponState struct {
-    ID, Damage, DamageType string
-}
-
-type ArmorState struct {
-    ID      string
-    ACBonus int
-}
-
-type PendingEvent struct {
-    ID, Type, Actor, Description string
-    Reactors  []string
-    Reactions []AvailableReaction
-}
-
-type AvailableReaction struct {
-    Entity, Reaction, Trigger string
-}
-```
-
----
-
-## Store Interface
-
-```go
-type Store interface {
+type StateStore interface {
     Load() (*GameState, error)
     Save(state *GameState) error
     Exists() bool
 }
 ```
 
-### FileStore (Production)
+### Required Commands
 
-- Persists to `state.json` in CWD
-- Pretty-printed JSON with indentation
-- Used by `DefaultDeps()`
+| Command | Behaviour |
+|---------|-----------|
+| `scene new <name>` | Create new session, error if exists |
+| `scene save` | Explicit checkpoint |
+| `scene load <name>` | Load from template directory |
 
-### MemoryStore (Testing)
+### Required Output Formatting
 
-- Holds state in memory
-- No file I/O
-- Inject into `Deps` for tests
-
----
-
-## Scene Commands
-
-### `vd scene new <name>`
-
-- Creates new GameState with given name
-- Initialises empty Positions and Entities maps
-- Saves to state.json
-- **Error** if session already exists
-
-### `vd scene save`
-
-- Explicit checkpoint (mostly no-op in stateless CLI)
-- **Error** if no active session
-
-### `vd scene load`
-
-- Stub - not fully implemented yet
+The plan specifies an `internal/output/` package with:
+- `Output` struct with fluent builder API
+- Methods: `Header()`, `Field()`, `Section()`, `ListItem()`, `Table()`, `Result()`
 
 ---
 
-## Entity Parser
+## Current Implementation (by Gemini)
 
-Parses markdown format into `EntityState`:
+### Files Present
 
-```markdown
-# Sir Roland
-- Level: 5
-- HP: 60/60
-- AC: 22
-- Speed: 25ft
-- Strength: 18
-- Dexterity: 12
-- Fortitude: +12
-- Reflex: +8
-- Will: +10
-- Ancestry: Human
-- Class: Paladin
+| File | Status | Notes |
+|------|--------|-------|
+| `internal/state/state.go` | ✅ Present | Has GameState, all types |
+| `internal/state/store.go` | ⚠️ Combined | Has Store + FileStore + MemoryStore in one file |
+| `internal/state/file_store.go` | ❌ Missing | Combined into store.go |
+| `internal/state/memory_store.go` | ❌ Missing | Combined into store.go |
+| `internal/output/formatter.go` | ❌ Missing | Not implemented |
+| `internal/output/templates.go` | ❌ Missing | Not implemented |
+| `internal/cli/cmd_scene.go` | ✅ Present | Scene commands |
+| `internal/cli/cmd_scene_test.go` | ✅ Present | Scene tests |
+
+### State Structure Coverage
+
+| Struct/Type | Status | Notes |
+|-------------|--------|-------|
+| `GameState` | ✅ Complete | All fields present |
+| `Zone` | ✅ Complete | Has size, adjacent, near, far, cover, elevated |
+| `EntityState` | ✅ Complete | Has all fields including abilities via pkg/rules |
+| `ConditionInstance` | ✅ Present | ID, Value, Duration, Source |
+| `WeaponState` | ✅ Present | Simplified for state |
+| `ArmorState` | ✅ Present | Simplified for state |
+| `PendingEvent` | ✅ Present | For reaction system |
+| `AvailableReaction` | ✅ Present | Entity, Reaction, Trigger |
+
+### Store Implementation
+
+| Component | Status | Notes |
+|-----------|--------|-------|
+| `Store` interface | ✅ Present | Has Load/Save/Exists |
+| `FileStore` | ✅ Present | Saves to state.json |
+| `MemoryStore` | ✅ Present | For tests |
+
+### Command Coverage
+
+| Command | Status | Notes |
+|---------|--------|-------|
+| `scene new` | ✅ Works | Creates state, errors if exists |
+| `scene save` | ⚠️ Stub | Returns static message, doesn't actually re-save |
+| `scene load` | ⚠️ Stub | Returns "not implemented" |
+
+---
+
+## Gap Analysis
+
+### Missing Components
+
+| Component | Severity | Action |
+|-----------|----------|--------|
+| `internal/output/formatter.go` | **High** | Create output builder for structured markdown |
+| `internal/output/templates.go` | Medium | Create common output patterns |
+| Separate store files | Low | Optional - current combined file is fine |
+
+### Incorrect/Suboptimal
+
+| Issue | Severity | Action |
+|-------|----------|--------|
+| `scene save` is a no-op | Medium | Should load current state and re-save (acts as checkpoint) |
+| `scene load` not implemented | Medium | Should load from template directories |
+| No state validation | Low | Consider adding validation on Load() |
+
+### Missing Tests
+
+| Test | Priority |
+|------|----------|
+| `FileStore` integration test (actual file I/O) | Medium |
+| `GameState` JSON round-trip test | Medium |
+| `scene save` actually writes | Medium |
+
+---
+
+## Remaining Work
+
+### Priority 1 (Required for Phase 2 Complete)
+
+1. **Create `internal/output/formatter.go`**
+   
+   This is critical - all command output should use consistent formatting:
+   ```go
+   package output
+   
+   import "strings"
+   
+   type Output struct {
+       buf strings.Builder
+   }
+   
+   func New() *Output { return &Output{} }
+   
+   func (o *Output) Header(level int, text string) *Output {
+       o.buf.WriteString(strings.Repeat("#", level) + " " + text + "\n")
+       return o
+   }
+   
+   func (o *Output) Field(label, value string) *Output {
+       o.buf.WriteString("**" + label + ":** " + value + "\n")
+       return o
+   }
+   
+   func (o *Output) Section(title string) *Output {
+       o.buf.WriteString("\n## " + title + "\n")
+       return o
+   }
+   
+   func (o *Output) ListItem(text string) *Output {
+       o.buf.WriteString("- " + text + "\n")
+       return o
+   }
+   
+   func (o *Output) Table(headers []string, rows [][]string) *Output {
+       o.buf.WriteString("| " + strings.Join(headers, " | ") + " |\n")
+       o.buf.WriteString("|" + strings.Repeat("---|", len(headers)) + "\n")
+       for _, row := range rows {
+           o.buf.WriteString("| " + strings.Join(row, " | ") + " |\n")
+       }
+       return o
+   }
+   
+   func (o *Output) Result(label, value string) *Output {
+       o.buf.WriteString("- **" + label + ":** " + value + "\n")
+       return o
+   }
+   
+   func (o *Output) String() string { return o.buf.String() }
+   ```
+
+2. **Fix `scene save`** to actually reload and save state:
+   ```go
+   func cmdSceneSave(args []string, deps Deps) (string, error) {
+       state, err := deps.Store.Load()
+       if err != nil {
+           return "", fmt.Errorf("no active session: %w", err)
+       }
+       if err := deps.Store.Save(state); err != nil {
+           return "", fmt.Errorf("failed to save: %w", err)
+       }
+       return "Scene saved.", nil
+   }
+   ```
+
+### Priority 2 (Should Have)
+
+3. **Implement `scene load`** for template directories
+4. **Add state validation** on Load()
+5. **Split store.go** into separate files (optional, for cleanliness)
+
+### Priority 3 (Nice to Have)
+
+6. **Output templates** for common patterns (action results, status, etc.)
+7. **FileStore** integration tests
+
+---
+
+## Verification
+
+Run tests:
+```bash
+go test ./internal/state/... ./internal/cli/... -v
 ```
 
-Supports:
-- `#` for name
-- Full or abbreviated ability names (str/strength)
-- HP as `current/max` or just `current`
-- Modifiers with or without `+` prefix
-- Speed with or without `ft` suffix
-
----
-
-## Tests
-
-### Scene Command Tests
-
-- `TestSceneNew` - Creates scene, verifies state saved
-- `TestSceneNew_Exists` - Errors when session already exists
-
----
-
-## JSON State File Example
-
-```json
-{
-  "sceneName": "The Dungeon",
-  "positions": {},
-  "entities": {
-    "paladin": {
-      "id": "paladin",
-      "name": "Sir Roland",
-      "level": 5,
-      "hp": 60,
-      "maxHp": 60,
-      "ac": 22,
-      "abilities": {
-        "strength": 18,
-        "dexterity": 12
-      },
-      "position": "entrance"
-    }
-  },
-  "inCombat": false,
-  "round": 0
-}
+Manual verification:
+```bash
+cd /tmp/test_session
+vd scene new "Test Campaign"
+cat state.json  # Should have valid JSON
+vd scene save
 ```
 
 ---
 
-## What's NOT Done Yet
+## Design Notes
 
-- `scene load` from template directories
-- Entity add/spawn commands (Phase 3)
-- Position/zone management commands
-- State validation
+### Why Output Formatting Matters
 
----
+The LLM orchestrator parses the CLI output. Consistent markdown structure makes parsing reliable:
+- `# HEADER` indicates action type
+- `**Field:** value` for key-value data
+- `## Section` for grouping
+- Tables for lists of options/targets
 
-## Design Decisions
-
-| Decision | Rationale |
-|----------|-----------|
-| JSON persistence | Human-readable, easy to debug, LLM-friendly |
-| Single `state.json` | Simple, atomic saves, no partial state |
-| `EntityState` separate from `pkg/rules/entity` | State is persistence format, rules engine uses richer types |
-| String-based conditions/reactions | Flexible, no enum coupling, LLM can reason about them |
-| `AbilityScores` from rules package | Reuse existing type, consistent modifier calculations |
+Without the output package, each command will have inconsistent formatting, making the system harder to use.

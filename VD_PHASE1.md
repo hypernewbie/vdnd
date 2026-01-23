@@ -1,162 +1,173 @@
 # VD Phase 1: Core CLI Skeleton
 
-> **Status:** ✅ Implemented (by Gemini 3 Pro, who jumped the gun)
+> **Status:** Partially implemented by Gemini - requires gap work
 
-This phase establishes the testable CLI architecture with dependency injection.
-
----
-
-## What Was Built
-
-### File Structure
-
-```
-cmd/vd/
-└── main.go              # Thin entry point
-
-internal/cli/
-├── cli.go               # Run() function, command router
-├── cli_test.go          # Basic Run() tests
-├── deps.go              # Dependencies struct, interfaces
-├── flags.go             # Simple --flag parser
-├── cmd_scene.go         # Scene commands (scene new/save/load)
-└── cmd_scene_test.go    # Scene command tests
-```
+This document defines Phase 1 requirements, compares against current implementation, and lists remaining work.
 
 ---
 
-## Core Components
+## Original Design (from VD_PLAN.md)
 
-### The `Run()` Function
+### Required Files
 
-The central entry point that all tests can call directly:
+| File | Purpose |
+|------|---------|
+| `cmd/vd/main.go` | Thin wrapper calling `cli.Run()` |
+| `internal/cli/cli.go` | `Run()` function, command router |
+| `internal/cli/cli_test.go` | Unit tests for `Run()` |
+| `internal/cli/deps.go` | Dependencies struct + interfaces |
+| `internal/cli/deps_test.go` | Test doubles (MockRoller, etc.) |
+| `internal/cli/flags.go` | Flag parsing utilities |
 
-```go
-func Run(args []string, deps Deps) (stdout string, exitCode int)
-```
+### Required Interfaces
 
-- Takes CLI arguments as a slice (no `os.Args` coupling)
-- Takes dependencies struct (no globals)
-- Returns output string and exit code (no `os.Exit` coupling)
-- Testable with any combination of args and mock deps
-
-### Command Routing
-
-Two-level command parsing supports both single-word (`help`) and two-word (`scene new`) commands:
-
-```go
-var commands = map[string]CommandHandler{
-    "help":       cmdHelp,
-    "scene new":  cmdSceneNew,
-    "scene save": cmdSceneSave,
-    "scene load": cmdSceneLoad,
-}
-```
-
-The router checks for 2-word commands first, then falls back to 1-word.
-
-### Dependency Injection
-
-All external dependencies injected via `Deps` struct:
-
+**Deps struct:**
 ```go
 type Deps struct {
-    Roller Roller       // Dice rolling (injectable for deterministic tests)
-    Store  state.Store  // State persistence (file or memory)
-    Clock  Clock        // Time (injectable for time-based effects)
-    Stderr io.Writer    // Error output
-    Cwd    string       // Working directory
+    Roller     Roller
+    Store      StateStore
+    Clock      Clock
+    Stderr     io.Writer
+    Cwd        string
 }
 ```
 
-Production defaults via `DefaultDeps()`, tests inject mocks.
-
----
-
-## Interfaces
-
-### Roller (Dice)
-
+**Roller interface:**
 ```go
 type Roller interface {
     Roll(count, sides int) []int
 }
 ```
 
-Implementations:
-- `CryptoRoller` - Production, uses crypto/rand
-- `FixedRoller` - Tests, returns predetermined values
+With implementations: `CryptoRoller`, `FixedRoller`, `SeededRoller`
 
-### Clock
-
+**Clock interface:**
 ```go
 type Clock interface {
     Now() time.Time
 }
 ```
 
-Implementations:
-- `RealClock` - Production
-- `FixedClock` - Tests, returns fixed time
+With implementations: `RealClock`, `FixedClock`
+
+### Required Functionality
+
+- `Run(args []string, deps Deps) (stdout string, exitCode int)`
+- Command routing for 1-word and 2-word commands
+- `help` command
+- `DefaultDeps()` factory function
+- Basic tests covering: no args, help, unknown command
 
 ---
 
-## Flag Parsing
+## Current Implementation (by Gemini)
 
-Simple `--key value` parser, no external dependencies:
+### Files Present
 
-```go
-func ParseFlags(args []string) (positional []string, flags map[string]string)
-```
+| File | Status | Notes |
+|------|--------|-------|
+| `cmd/vd/main.go` | ✅ Present | Correct pattern |
+| `internal/cli/cli.go` | ✅ Present | Has `Run()`, router |
+| `internal/cli/cli_test.go` | ✅ Present | Basic tests |
+| `internal/cli/deps.go` | ✅ Present | Has interfaces |
+| `internal/cli/deps_test.go` | ❌ Missing | No dedicated test doubles file |
+| `internal/cli/flags.go` | ✅ Present | Simple parser |
 
-Handles:
-- `--key value` pairs
-- `--boolFlag` (value becomes "true")
-- Preserves positional arguments
+### Interface Coverage
+
+| Interface | Status | Notes |
+|-----------|--------|-------|
+| `Deps` struct | ✅ Complete | All fields present |
+| `Roller` interface | ✅ Complete | Has `Roll(count, sides int) []int` |
+| `CryptoRoller` | ✅ Present | Uses crypto/rand |
+| `FixedRoller` | ✅ Present | For deterministic tests |
+| `SeededRoller` | ❌ Missing | Plan specified this, not implemented |
+| `Clock` interface | ✅ Complete | Has `Now() time.Time` |
+| `RealClock` | ✅ Present | |
+| `FixedClock` | ✅ Present | |
+
+### Test Coverage
+
+| Test | Status | Notes |
+|------|--------|-------|
+| `TestRun_Basic` | ✅ Present | Covers no args, help, unknown |
+| `TestParseFlags` | ✅ Present | Flag extraction |
 
 ---
 
-## Tests
+## Gap Analysis
 
-### `TestRun_Basic`
+### Missing Components
 
-Table-driven test covering:
-- No args → shows help
-- `help` command → shows help
-- Unknown command → returns error
+| Component | Severity | Action |
+|-----------|----------|--------|
+| `deps_test.go` | Low | Create file with test helper functions |
+| `SeededRoller` | Low | Add to deps.go (useful for reproducible scenarios) |
 
-### `TestParseFlags`
+### Incorrect/Suboptimal
 
-Verifies flag extraction works correctly.
+| Issue | Severity | Action |
+|-------|----------|--------|
+| Help text is minimal | Low | Expand to list all commands |
+| No command-specific help | Medium | Add `vd help <command>` support |
+
+### Missing Tests
+
+| Test | Priority |
+|------|----------|
+| Test for `DefaultDeps()` returns valid deps | Low |
+| Test `FixedRoller` panics when exhausted | Low |
 
 ---
 
-## Usage
+## Remaining Work
 
+### Priority 1 (Required for Phase 1 Complete)
+
+1. **Add `SeededRoller`** - Needed for reproducible scenario tests
+   ```go
+   type SeededRoller struct {
+       rng *rand.Rand
+   }
+   
+   func NewSeededRoller(seed int64) *SeededRoller {
+       return &SeededRoller{rng: rand.New(rand.NewSource(seed))}
+   }
+   
+   func (r *SeededRoller) Roll(count, sides int) []int {
+       results := make([]int, count)
+       for i := range results {
+           results[i] = r.rng.Intn(sides) + 1
+       }
+       return results
+   }
+   ```
+
+2. **Create `deps_test.go`** with helper functions:
+   ```go
+   func TestDeps(t *testing.T) Deps {
+       return Deps{
+           Roller: &FixedRoller{},
+           Store:  &state.MemoryStore{},
+           Clock:  &FixedClock{Time: time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)},
+           Stderr: io.Discard,
+           Cwd:    t.TempDir(),
+       }
+   }
+   ```
+
+### Priority 2 (Nice to Have)
+
+3. **Expand help text** to list all available commands
+4. **Add `vd help <command>`** for command-specific help
+
+---
+
+## Verification
+
+Run tests:
 ```bash
-# Build
-go build -o vd.exe ./cmd/vd
-
-# Run
-./vd help
-./vd scene new "My Campaign"
+go test ./internal/cli/... -v
 ```
 
----
-
-## What's NOT Done Yet
-
-- Most command handlers (entity, combat, action, etc.) - just stubs in the registry
-- Output formatting helpers (`internal/output/`)
-- Scenario test infrastructure
-
----
-
-## Design Decisions
-
-| Decision | Rationale |
-|----------|-----------|
-| No Cobra | LLM consumer doesn't need shell features, simpler testing |
-| Hand-rolled router | Full control, trivial to test |
-| `Deps` struct | Single point of injection, easy to mock |
-| `crypto/rand` roller | Proper randomness for production |
+Expected: All pass, including any new tests added.

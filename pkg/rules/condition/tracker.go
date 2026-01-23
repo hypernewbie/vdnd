@@ -21,9 +21,25 @@ func NewTracker() *ConditionTracker {
 	}
 }
 
+// IsGlobal returns true if the condition applies to everyone
+func (c *ConditionInstance) IsGlobal() bool {
+	return len(c.SpecificTo) == 0
+}
+
+// AppliesTo returns true if the condition applies to the given observer
+func (c *ConditionInstance) AppliesTo(observerID string) bool {
+	if c.IsGlobal() {
+		return true
+	}
+	for _, id := range c.SpecificTo {
+		if id == observerID {
+			return true
+		}
+	}
+	return false
+}
+
 // Apply adds or updates a condition.
-// For valued conditions: takes the HIGHER value if already present.
-// For relational conditions: allows multiple instances if TargetID is different.
 func (t *ConditionTracker) Apply(c ConditionInstance) {
 	if c.ID == PersistentDamage {
 		for _, existing := range t.persistentDamage {
@@ -39,19 +55,34 @@ func (t *ConditionTracker) Apply(c ConditionInstance) {
 		return
 	}
 
-	// Find existing match
 	for _, existing := range t.conditions {
-		if existing.ID == c.ID && existing.TargetID == c.TargetID {
+		if existing.ID == c.ID && sameStrings(existing.SpecificTo, c.SpecificTo) {
 			if c.Value > existing.Value {
 				existing.Value = c.Value
 			}
-			// Usually we don't stack non-valued conditions or those with same target
 			return
 		}
 	}
 
 	inst := c
 	t.conditions = append(t.conditions, &inst)
+}
+
+// ApplyRelative is a helper to apply a condition to a specific observer
+func (t *ConditionTracker) ApplyRelative(id ConditionID, observerID string, source string) {
+	t.Apply(NewRelationalCondition(id, []string{observerID}, source))
+}
+
+func sameStrings(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }
 
 // Remove completely removes a condition (all instances of this ID)
@@ -67,41 +98,33 @@ func (t *ConditionTracker) Remove(id ConditionID) {
 
 // RemoveRelative removes a condition relative to a specific target
 func (t *ConditionTracker) RemoveRelative(id ConditionID, targetID string) {
-	newConds := make([]*ConditionInstance, 0)
 	for _, c := range t.conditions {
-		if !(c.ID == id && c.TargetID == targetID) {
-			newConds = append(newConds, c)
+		if c.ID == id {
+			newSpecific := make([]string, 0)
+			for _, sid := range c.SpecificTo {
+				if sid != targetID {
+					newSpecific = append(newSpecific, sid)
+				}
+			}
+			c.SpecificTo = newSpecific
 		}
 	}
-	t.conditions = newConds
 }
 
-// RemovePersistentDamage removes a specific type of persistent damage
-func (t *ConditionTracker) RemovePersistentDamage(damageType string) {
-	remaining := make([]*ConditionInstance, 0)
-	for _, c := range t.persistentDamage {
-		if c.DamageType != damageType {
-			remaining = append(remaining, c)
-		}
-	}
-	t.persistentDamage = remaining
-}
-
-// Reduce decreases a valued condition's value; removes if reduced to 0
+// Reduce decreases a valued condition's value
 func (t *ConditionTracker) Reduce(id ConditionID, amount int) {
 	for i, c := range t.conditions {
 		if c.ID == id {
 			c.Value -= amount
 			if c.Value <= 0 {
-				// Remove this one
 				t.conditions = append(t.conditions[:i], t.conditions[i+1:]...)
 			}
-			return // Only reduce one (typically there's only one valued global condition)
+			return
 		}
 	}
 }
 
-// Has checks if the entity has a specific condition (ignores TargetID)
+// Has checks if the entity has a specific condition (global or any relative)
 func (t *ConditionTracker) Has(id ConditionID) bool {
 	for _, c := range t.conditions {
 		if c.ID == id {
@@ -111,10 +134,10 @@ func (t *ConditionTracker) Has(id ConditionID) bool {
 	return false
 }
 
-// HasRelative checks if the entity has a condition relative to a specific target
-func (t *ConditionTracker) HasRelative(id ConditionID, targetID string) bool {
+// HasRelative checks if the entity has a condition relative to a specific target (or Global)
+func (t *ConditionTracker) HasRelative(id ConditionID, observerID string) bool {
 	for _, c := range t.conditions {
-		if c.ID == id && (c.TargetID == "" || c.TargetID == targetID) {
+		if c.ID == id && c.AppliesTo(observerID) {
 			return true
 		}
 	}
@@ -153,24 +176,22 @@ func (t *ConditionTracker) All() []ConditionInstance {
 
 // EndTurn processes end-of-turn effects
 func (t *ConditionTracker) EndTurn(actor PersistentDamageActor) {
+	// 1. Reduce Frightened
 	t.Reduce(Frightened, 1)
 
-	// 1. Persistent Damage: Apply damage, then flat check DC 15 to remove
+	// 2. Persistent Damage
 	remainingPersistent := make([]*ConditionInstance, 0)
 	for _, pd := range t.persistentDamage {
-		// Apply damage (entity logic handles resistances/weaknesses if we use ApplyDamage)
 		if actor != nil {
 			actor.ApplyDamage(pd.Value)
 		}
-
-		// Flat check DC 15
 		if !check.FlatCheck(15) {
 			remainingPersistent = append(remainingPersistent, pd)
 		}
 	}
 	t.persistentDamage = remainingPersistent
 
-	// 2. Duration-based conditions tick down
+	// 3. Duration Decay
 	remaining := make([]*ConditionInstance, 0)
 	for _, cond := range t.conditions {
 		if cond.Duration > 0 {

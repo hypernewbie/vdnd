@@ -95,9 +95,10 @@ type Entity struct {
 	WieldedWeapons []*item.Weapon // Up to 2 (or more for multi-limbed)
 
 	// Runtime State
-	Conditions  *condition.ConditionTracker
-	Afflictions *affliction.AfflictionTracker
-	Feats       *feat.FeatTracker
+	Conditions          *condition.ConditionTracker
+	Afflictions         *affliction.AfflictionTracker
+	Feats               *feat.FeatTracker
+	TemporaryImmunities map[string]int // "ActionID:SourceID" -> rounds remaining
 
 	// Position (zone-based)
 	Position    string   // Zone ID
@@ -126,6 +127,7 @@ func NewEntity(id, name string, level int) *Entity {
 		Conditions:          condition.NewTracker(),
 		Afflictions:         affliction.NewTracker(),
 		Feats:               feat.NewFeatTracker(),
+		TemporaryImmunities: make(map[string]int),
 		Resistances:         make(map[string]ResistanceEntry),
 		Weaknesses:          make(map[string]int),
 		WieldedWeapons:      make([]*item.Weapon, 0),
@@ -170,6 +172,31 @@ func (e *Entity) HasSkillRank(skillID ability.SkillID, rank ability.ProficiencyR
 
 func (e *Entity) HasTrait(traitID trait.TraitID) bool {
 	return e.Traits.HasTrait(traitID)
+}
+
+// AddTemporaryImmunity sets immunity for a number of rounds (e.g. 10 mins = 100 rounds)
+func (e *Entity) AddTemporaryImmunity(actionID, sourceID string, rounds int) {
+	key := actionID + ":" + sourceID
+	e.TemporaryImmunities[key] = rounds
+}
+
+// IsTemporarilyImmune checks if entity is currently immune to an action from a source
+func (e *Entity) IsTemporarilyImmune(actionID, sourceID string) bool {
+	key := actionID + ":" + sourceID
+	rounds, ok := e.TemporaryImmunities[key]
+	return ok && rounds > 0
+}
+
+// TickAdvances advances time for the entity
+func (e *Entity) TickAdvances() {
+	for key, rounds := range e.TemporaryImmunities {
+		if rounds > 0 {
+			e.TemporaryImmunities[key] = rounds - 1
+			if e.TemporaryImmunities[key] == 0 {
+				delete(e.TemporaryImmunities, key)
+			}
+		}
+	}
 }
 
 // Clone creates a deep copy of the entity
@@ -223,8 +250,6 @@ func (e *Entity) Clone() *Entity {
 	// Afflictions tracker needs a deep clone
 	clone.Afflictions = affliction.NewTracker()
 	for _, a := range e.Afflictions.All() {
-		// This is a shallow copy of instances, but they are mostly read-only/managed by tracker
-		// In a real system we'd want NewInstanceFromExisting.
 		clone.Afflictions.Add(a.Affliction, a.Source)
 		inst := clone.Afflictions.Get(a.Affliction.ID)
 		if inst != nil {
@@ -238,6 +263,11 @@ func (e *Entity) Clone() *Entity {
 	clone.Feats = feat.NewFeatTracker()
 	for _, f := range e.Feats.All() {
 		clone.Feats.Add(f)
+	}
+
+	clone.TemporaryImmunities = make(map[string]int)
+	for k, v := range e.TemporaryImmunities {
+		clone.TemporaryImmunities[k] = v
 	}
 
 	return &clone

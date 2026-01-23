@@ -34,7 +34,12 @@ func (s *StrikeAction) Validate(actor, target *entity.Entity, turn *TurnState) e
 	return nil
 }
 
+// Execute performs the strike. naturalRoll of 0 means use random roll.
 func (s *StrikeAction) Execute(actor, target *entity.Entity, turn *TurnState) ability.ActionResult {
+	return s.ExecuteWithRoll(actor, target, turn, 0)
+}
+
+func (s *StrikeAction) ExecuteWithRoll(actor, target *entity.Entity, turn *TurnState, naturalRoll int) ability.ActionResult {
 	// Calculate attack modifier
 	abilityMod := s.calculateAttackAbilityModifier(actor)
 	profBonus := actor.GetWeaponProficiency(s.Weapon).Bonus(actor.Level)
@@ -63,11 +68,26 @@ func (s *StrikeAction) Execute(actor, target *entity.Entity, turn *TurnState) ab
 		}
 	}
 
+	// Backswing Trait logic
+	if s.Weapon.HasTrait(trait.TraitBackswing) {
+		if len(turn.StrikesMade) > 0 {
+			last := turn.StrikesMade[len(turn.StrikesMade)-1]
+			if last.WeaponID == s.Weapon.ID && !last.Hit {
+				modifiers = append(modifiers, check.Modifier{Value: 1, Type: check.BonusCircumstance, Source: "Backswing"})
+			}
+		}
+	}
+
 	// Target's AC
 	targetAC := target.GetAC()
 
 	// Perform the check
-	res := check.PerformCheck(attackMod, modifiers, targetAC)
+	var res check.CheckResult
+	if naturalRoll > 0 {
+		res = check.PerformCheckWithRoll(naturalRoll, attackMod, modifiers, targetAC)
+	} else {
+		res = check.PerformCheck(attackMod, modifiers, targetAC)
+	}
 
 	// Record attack for MAP
 	turn.RecordAttack()

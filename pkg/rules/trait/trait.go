@@ -17,6 +17,7 @@ const (
 	TraitBackstabber TraitID = "backstabber"
 	TraitForceful    TraitID = "forceful"
 	TraitSweep       TraitID = "sweep"
+	TraitBackswing   TraitID = "backswing"
 
 	// Action traits
 	TraitAttack      TraitID = "attack"
