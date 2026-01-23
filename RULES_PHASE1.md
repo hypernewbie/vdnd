@@ -35,7 +35,7 @@ pkg/
 └── rules/
     ├── dice/
     │   ├── dice.go        # DieRoll struct, Roll function
-    │   └── dice_test.go
+    │   └── dice_test.gu
     └── check/
         ├── modifier.go    # Modifier, BonusType, stacking logic
         ├── check.go       # CheckResult, DegreeOfSuccess, PerformCheck

@@ -127,12 +127,12 @@ func TestHideSeek(t *testing.T) {
 	hider.Abilities.Dexterity = 14
 	hider.SkillProficiencies[ability.SkillStealth] = ability.Trained // +5 at lvl 1
 
-	// Hide vs standard DC 15
-	Hide(hider, 15, nil)
-
 	seeker := entity.NewEntity("s1", "Seeker", 1)
 	seeker.Abilities.Wisdom = 14
 	seeker.Perception = ability.Trained // +5
+
+	// Hide vs seeker Perception DC
+	Hide(hider, seeker)
 
 	// Seek vs standard DC 15
 	Seek(seeker, 15, nil)

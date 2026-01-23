@@ -74,6 +74,13 @@ func DetermineDegree(naturalRoll, total, dc int) DegreeOfSuccess {
 	return degree
 }
 
+// FlatCheck performs a roll against a DC with no modifiers.
+func FlatCheck(dc int) bool {
+	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
+	roll := rng.Intn(20) + 1
+	return roll >= dc
+}
+
 func (d DegreeOfSuccess) String() string {
 	switch d {
 	case CriticalFailure:

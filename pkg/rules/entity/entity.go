@@ -14,12 +14,51 @@ type ResistanceEntry struct {
 	Except []string
 }
 
+type Language string
+
+const (
+	LangCommon   Language = "common"
+	LangDraconic Language = "draconic"
+	LangElven    Language = "elven"
+	LangDwarven  Language = "dwarven"
+	LangGoblin   Language = "goblin"
+	LangOrcish   Language = "orcish"
+	LangAbyssal  Language = "abyssal"
+	LangCelestial Language = "celestial"
+	LangInfernal Language = "infernal"
+	LangSylvan   Language = "sylvan"
+)
+
+type Alignment string
+
+const (
+	AlignLG Alignment = "LG"
+	AlignNG Alignment = "NG"
+	AlignCG Alignment = "CG"
+	AlignLN Alignment = "LN"
+	AlignN  Alignment = "N"
+	AlignCN Alignment = "CN"
+	AlignLE Alignment = "LE"
+	AlignNE Alignment = "NE"
+	AlignCE Alignment = "CE"
+)
+
+type LightLevel int
+
+const (
+	LightBright LightLevel = iota
+	LightDim
+	LightDarkness
+)
+
 type Entity struct {
 	// Identity
-	ID    string
-	Name  string
-	Level int
-	Size  Size
+	ID        string
+	Name      string
+	Level     int
+	Size      Size
+	Alignment Alignment
+	Languages []Language
 
 	// Movement
 	BaseSpeed int

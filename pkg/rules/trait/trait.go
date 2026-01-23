@@ -77,6 +77,33 @@ const (
 	CategoryCreature
 	CategoryCondition
 	CategoryGeneral
+	CategoryRarity
+	CategoryTradition
+	CategorySchool
+)
+
+const (
+	// Rarity traits
+	TraitCommon   TraitID = "common"
+	TraitUncommon TraitID = "uncommon"
+	TraitRare     TraitID = "rare"
+	TraitUnique   TraitID = "unique"
+
+	// Magic Traditions
+	TraitArcane   TraitID = "arcane"
+	TraitDivine   TraitID = "divine"
+	TraitOccult   TraitID = "occult"
+	TraitPrimal   TraitID = "primal"
+
+	// Magic Schools
+	TraitAbjuration   TraitID = "abjuration"
+	TraitConjuration  TraitID = "conjuration"
+	TraitDivination   TraitID = "divination"
+	TraitEnchantment  TraitID = "enchantment"
+	TraitEvocation    TraitID = "evocation"
+	TraitIllusion     TraitID = "illusion"
+	TraitNecromancy   TraitID = "necromancy"
+	TraitTransmutation TraitID = "transmutation"
 )
 
 type Trait struct {

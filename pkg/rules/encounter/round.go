@@ -35,7 +35,7 @@ func (e *Encounter) EndTurn() error {
 	}
 
 	// Process end-of-turn effects
-	p.Entity.Conditions.EndTurn()
+	p.Entity.Conditions.EndTurn(p.Entity)
 
 	// Persistent damage etc would go here
 	// e.ProcessPersistentDamage(p.Entity)

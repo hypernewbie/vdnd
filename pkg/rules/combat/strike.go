@@ -18,7 +18,7 @@ func NewStrike(weapon *item.Weapon) *StrikeAction {
 	return &StrikeAction{Weapon: weapon}
 }
 
-func (s *StrikeAction) Name() string            { return "Strike" }
+func (s *StrikeAction) Name() string             { return "Strike" }
 func (s *StrikeAction) Cost() ability.ActionCost { return ability.CostOne }
 func (s *StrikeAction) HasTrait(id trait.TraitID) bool {
 	if id == trait.TraitAttack {
@@ -49,6 +49,20 @@ func (s *StrikeAction) Execute(actor, target *entity.Entity, turn *TurnState) ab
 	}
 	modifiers = append(modifiers, actor.Conditions.GetAttackModifiers(s.Weapon.IsMelee)...)
 
+	// Sweep Trait logic
+	if s.Weapon.HasTrait(trait.TraitSweep) {
+		differentTarget := false
+		for _, prev := range turn.StrikesMade {
+			if prev.WeaponID == s.Weapon.ID && prev.TargetID != target.ID {
+				differentTarget = true
+				break
+			}
+		}
+		if differentTarget {
+			modifiers = append(modifiers, check.Modifier{Value: 1, Type: check.BonusCircumstance, Source: "Sweep"})
+		}
+	}
+
 	// Target's AC
 	targetAC := target.GetAC()
 
@@ -60,12 +74,12 @@ func (s *StrikeAction) Execute(actor, target *entity.Entity, turn *TurnState) ab
 
 	// Process result
 	if res.Degree == check.CriticalSuccess {
-		dmg := s.rollDamageInstance(actor, true)
+		dmg := s.rollDamageInstance(actor, turn, true)
 		pipelineRes := damage.ProcessDamage(target, dmg, true)
 		turn.RecordStrike(StrikeRecord{TargetID: target.ID, Hit: true, WeaponID: s.Weapon.ID})
 		return ability.ActionResult{Success: true, Degree: res.Degree, Damage: pipelineRes.FinalDamage}
 	} else if res.Degree == check.Success {
-		dmg := s.rollDamageInstance(actor, false)
+		dmg := s.rollDamageInstance(actor, turn, false)
 		pipelineRes := damage.ProcessDamage(target, dmg, false)
 		turn.RecordStrike(StrikeRecord{TargetID: target.ID, Hit: true, WeaponID: s.Weapon.ID})
 		return ability.ActionResult{Success: true, Degree: res.Degree, Damage: pipelineRes.FinalDamage}
@@ -90,7 +104,7 @@ func (s *StrikeAction) calculateAttackAbilityModifier(actor *entity.Entity) int 
 	return actor.Abilities.Modifier(ability.Dexterity)
 }
 
-func (s *StrikeAction) rollDamageInstance(actor *entity.Entity, isCrit bool) damage.DamageInstance {
+func (s *StrikeAction) rollDamageInstance(actor *entity.Entity, turn *TurnState, isCrit bool) damage.DamageInstance {
 	dr := damage.DamageRoll{
 		BaseDice:   s.Weapon.Damage,
 		Modifier:   0,
@@ -102,6 +116,24 @@ func (s *StrikeAction) rollDamageInstance(actor *entity.Entity, isCrit bool) dam
 	// Add STR to melee damage
 	if s.Weapon.IsMelee {
 		dr.Modifier = actor.Abilities.Modifier(ability.Strength)
+	}
+
+	// Forceful Trait logic
+	if s.Weapon.HasTrait(trait.TraitForceful) {
+		strikesWithWeapon := 0
+		for _, prev := range turn.StrikesMade {
+			if prev.WeaponID == s.Weapon.ID {
+				strikesWithWeapon++
+			}
+		}
+
+		if strikesWithWeapon == 1 {
+			// Second attack: bonus = number of damage dice
+			dr.Modifier += s.Weapon.Damage.Count
+		} else if strikesWithWeapon >= 2 {
+			// Third or more: bonus = 2 * number of damage dice
+			dr.Modifier += 2 * s.Weapon.Damage.Count
+		}
 	}
 
 	if isCrit {

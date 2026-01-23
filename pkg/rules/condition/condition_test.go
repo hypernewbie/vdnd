@@ -81,7 +81,7 @@ func TestConditionTracker_EndTurn(t *testing.T) {
 	tr.Apply(NewValuedCondition(Sickened, 2, "Gas"))
 
 	// End turn: Frightened reduces, Sickened does not
-	tr.EndTurn()
+	tr.EndTurn(nil)
 	if tr.Value(Frightened) != 1 {
 		t.Errorf("Expected Frightened 1 after end turn, got %d", tr.Value(Frightened))
 	}
@@ -90,7 +90,7 @@ func TestConditionTracker_EndTurn(t *testing.T) {
 	}
 
 	// End turn again: Frightened removed
-	tr.EndTurn()
+	tr.EndTurn(nil)
 	if tr.Has(Frightened) {
 		t.Error("Expected Frightened removed after 2 turns")
 	}
@@ -99,7 +99,7 @@ func TestConditionTracker_EndTurn(t *testing.T) {
 	c := NewCondition(Invisible, "Potion")
 	c.Duration = 1
 	tr.Apply(c)
-	tr.EndTurn()
+	tr.EndTurn(nil)
 	if tr.Has(Invisible) {
 		t.Error("Expected duration-based Invisible to be removed after end turn")
 	}

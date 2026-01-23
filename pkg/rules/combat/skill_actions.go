@@ -166,12 +166,12 @@ func (h *HideAction) Execute(actor, target *entity.Entity, turn *TurnState) abil
 		return ability.ActionResult{Success: false, Description: err.Error()}
 	}
 
-	dc := 20 // Default standard DC
-	if target != nil {
-		dc = 10 + target.GetPerception()
+	observer := target
+	if observer == nil {
+		observer = actor // Fallback
 	}
 
-	res := skill.Hide(actor, dc, nil)
+	res := skill.Hide(actor, observer)
 
 	desc := "Hide result: " + res.Degree.String()
 	if res.Degree >= check.Success {

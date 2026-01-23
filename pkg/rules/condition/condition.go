@@ -32,6 +32,25 @@ const (
 	Fleeing          ConditionID = "fleeing"
 	Confused         ConditionID = "confused"
 	PersistentDamage ConditionID = "persistent-damage"
+
+	// Missing Conditions from Phase 14/Completeness
+	Broken     ConditionID = "broken"
+	Encumbered ConditionID = "encumbered"
+	Petrified  ConditionID = "petrified"
+
+	// Visibility (Relational)
+	Concealed  ConditionID = "concealed"
+	Dazzled    ConditionID = "dazzled"
+	Observed   ConditionID = "observed"
+	Undetected ConditionID = "undetected"
+	Unnoticed  ConditionID = "unnoticed"
+
+	// Attitudes (Relational)
+	Friendly   ConditionID = "friendly"
+	Helpful    ConditionID = "helpful"
+	Hostile    ConditionID = "hostile"
+	Indifferent ConditionID = "indifferent"
+	Unfriendly ConditionID = "unfriendly"
 )
 
 type Condition struct {
