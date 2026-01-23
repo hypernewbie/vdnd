@@ -7,30 +7,16 @@ import (
 
 // TakeDamage applies damage after immunities/resistances/weaknesses.
 // Returns actual damage taken.
-func (e *Entity) TakeDamage(amount int, damageType string) int {
-	// 1. Check immunity
-	if e.IsImmuneTo(damageType) {
-		return 0
+// ApplyDamage applies final damage to HP/TempHP.
+// Does NOT check immunities/weaknesses/resistances (pipeline does that).
+// Returns actual damage applied to HP (excluding temp HP absorption?).
+// Usually we just want to apply it.
+func (e *Entity) ApplyDamage(amount int) {
+	if amount <= 0 {
+		return
 	}
 
-	// 2. Apply weakness
-	weakness := e.GetWeakness(damageType)
-	amount += weakness
-
-	// 3. Apply resistance
-	resistance := e.GetResistance(damageType)
-	amount -= resistance
-	if amount < 0 {
-		amount = 0
-	}
-
-	if amount == 0 {
-		return 0
-	}
-
-	initialDamage := amount
-
-	// 4. Temp HP absorbs first
+	// 1. Temp HP absorbs first
 	if e.TempHP > 0 {
 		absorbed := e.TempHP
 		if amount < absorbed {
@@ -40,13 +26,11 @@ func (e *Entity) TakeDamage(amount int, damageType string) int {
 		amount -= absorbed
 	}
 
-	// 5. Apply to current HP
+	// 2. Apply to current HP
 	e.CurrentHP -= amount
 	if e.CurrentHP < 0 {
 		e.CurrentHP = 0
 	}
-
-	return initialDamage
 }
 
 // Heal restores HP (cannot exceed MaxHP)

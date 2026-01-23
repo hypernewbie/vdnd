@@ -7,12 +7,20 @@ import (
 	"uaa/vdnd/pkg/rules/trait"
 )
 
+type ResistanceEntry struct {
+	Amount int
+	Except []string
+}
+
 type Entity struct {
 	// Identity
 	ID    string
 	Name  string
 	Level int
 	Size  Size
+
+	// Movement
+	BaseSpeed int
 
 	// Flavour (for PCs primarily)
 	Ancestry   string
@@ -37,9 +45,11 @@ type Entity struct {
 	ArmorProficiencies map[item.ArmorCategory]ability.ProficiencyRank
 	// WeaponProficiencies maps weapon groups (or categories) to proficiency rank
 	WeaponProficiencies map[item.WeaponGroup]ability.ProficiencyRank
+	SkillProficiencies  map[ability.Skill]ability.ProficiencyRank
 
 	// Equipment
-	WornArmor      *item.Armor
+	WornArmor *item.Armor
+
 	WieldedWeapons []*item.Weapon // Up to 2 (or more for multi-limbed)
 
 	// Runtime State
@@ -50,9 +60,10 @@ type Entity struct {
 	EngagedWith []string // Entity IDs currently in melee with
 
 	// Defenses
-	Immunities  []string       // Trait/damage type IDs
-	Resistances map[string]int // type -> amount
-	Weaknesses  map[string]int // type -> amount
+	// Defenses
+	Immunities  []string                   // Trait/damage type IDs
+	Resistances map[string]ResistanceEntry // type -> amount + exceptions
+	Weaknesses  map[string]int             // type -> amount
 
 	// Creature traits (for monsters)
 	Traits trait.TraitSet
@@ -64,10 +75,12 @@ func NewEntity(id, name string, level int) *Entity {
 		Name:                name,
 		Level:               level,
 		Size:                Medium,
+		BaseSpeed:           25,
 		ArmorProficiencies:  make(map[item.ArmorCategory]ability.ProficiencyRank),
 		WeaponProficiencies: make(map[item.WeaponGroup]ability.ProficiencyRank),
+		SkillProficiencies:  make(map[ability.Skill]ability.ProficiencyRank),
 		Conditions:          condition.NewTracker(),
-		Resistances:         make(map[string]int),
+		Resistances:         make(map[string]ResistanceEntry),
 		Weaknesses:          make(map[string]int),
 		WieldedWeapons:      make([]*item.Weapon, 0),
 	}
@@ -96,15 +109,26 @@ func (e *Entity) Clone() *Entity {
 		clone.WeaponProficiencies[k] = v
 	}
 
+	clone.SkillProficiencies = make(map[ability.Skill]ability.ProficiencyRank)
+	for k, v := range e.SkillProficiencies {
+		clone.SkillProficiencies[k] = v
+	}
+
 	clone.WieldedWeapons = make([]*item.Weapon, len(e.WieldedWeapons))
 	copy(clone.WieldedWeapons, e.WieldedWeapons)
 
 	clone.Immunities = make([]string, len(e.Immunities))
 	copy(clone.Immunities, e.Immunities)
 
-	clone.Resistances = make(map[string]int)
+	clone.Resistances = make(map[string]ResistanceEntry)
 	for k, v := range e.Resistances {
-		clone.Resistances[k] = v
+		// Deep copy entry slice
+		entry := ResistanceEntry{Amount: v.Amount}
+		if v.Except != nil {
+			entry.Except = make([]string, len(v.Except))
+			copy(entry.Except, v.Except)
+		}
+		clone.Resistances[k] = entry
 	}
 
 	clone.Weaknesses = make(map[string]int)

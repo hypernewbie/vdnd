@@ -207,7 +207,7 @@ func ProcessDamage(target *entity.Entity, damage DamageInstance, isCritical bool
     result.FinalDamage = amount
     
     # Step 6: Apply to HP
-    target.TakeDamage(amount, string(damage.Type))  # Handles temp HP internally
+    target.ApplyDamage(amount)  # Handles temp HP internally
     result.CurrentHP = target.CurrentHP
     
     # Step 7: Check dying/death

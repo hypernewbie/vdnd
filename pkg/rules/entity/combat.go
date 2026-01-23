@@ -3,6 +3,7 @@ package entity
 import (
 	"uaa/vdnd/pkg/rules/ability"
 	"uaa/vdnd/pkg/rules/check"
+	"uaa/vdnd/pkg/rules/item"
 )
 
 type SaveType int
@@ -50,6 +51,15 @@ func (e *Entity) getArmorProficiency() ability.ProficiencyRank {
 	return ability.Untrained
 }
 
+func (e *Entity) GetWeaponProficiency(w *item.Weapon) ability.ProficiencyRank {
+	if prof, ok := e.WeaponProficiencies[w.Group]; ok {
+		return prof
+	}
+	// Also check category (simple, martial, etc.) if we want to be more thorough
+	// but group-based is common for monsters/specific training.
+	return ability.Untrained
+}
+
 // GetFortitude calculates Fortitude save modifier
 func (e *Entity) GetFortitude() int {
 	conMod := e.Abilities.Modifier(ability.Constitution)
@@ -89,6 +99,52 @@ func (e *Entity) GetPerception() int {
 	return wisMod + profBonus + check.CalculateTotal(conditionMods)
 }
 
+func (e *Entity) GetSkillModifier(skill ability.Skill) int {
+	var ab ability.Ability
+	switch skill {
+	case ability.SkillAthletics:
+		ab = ability.Strength
+	case ability.SkillAcrobatics, ability.SkillStealth, ability.SkillThievery:
+		ab = ability.Dexterity
+	case ability.SkillArcana, ability.SkillCrafting, ability.SkillOccultism, ability.SkillSociety:
+		ab = ability.Intelligence
+	case ability.SkillMedicine, ability.SkillNature, ability.SkillReligion, ability.SkillSurvival:
+		ab = ability.Wisdom
+	case ability.SkillDeception, ability.SkillDiplomacy, ability.SkillIntimidation, ability.SkillPerformance:
+		ab = ability.Charisma
+	default:
+		ab = ability.Strength // Default
+	}
+
+	abilityMod := e.Abilities.Modifier(ab)
+	prof := ability.Untrained
+	if p, ok := e.SkillProficiencies[skill]; ok {
+		prof = p
+	}
+
+	profBonus := prof.Bonus(e.Level)
+	conditionMods := e.Conditions.GetModifiers()
+
+	return abilityMod + profBonus + check.CalculateTotal(conditionMods)
+}
+
+func (e *Entity) GetSaveDC(save SaveType) int {
+	var mod int
+	switch save {
+	case SaveFortitude:
+		mod = e.GetFortitude()
+	case SaveReflex:
+		mod = e.GetReflex()
+	case SaveWill:
+		mod = e.GetWill()
+	}
+	return 10 + mod
+}
+
+func (e *Entity) GetSkillDC(skill ability.Skill) int {
+	return 10 + e.GetSkillModifier(skill)
+}
+
 func (e *Entity) IsImmuneTo(id string) bool {
 	for _, imm := range e.Immunities {
 		if imm == id {
@@ -99,9 +155,24 @@ func (e *Entity) IsImmuneTo(id string) bool {
 }
 
 func (e *Entity) GetResistance(damageType string) int {
+	return e.Resistances[damageType].Amount
+}
+
+func (e *Entity) GetResistanceEntry(damageType string) ResistanceEntry {
 	return e.Resistances[damageType]
 }
 
 func (e *Entity) GetWeakness(damageType string) int {
 	return e.Weaknesses[damageType]
+}
+
+func (e *Entity) GetSpeed() int {
+	speed := e.BaseSpeed
+	if e.WornArmor != nil {
+		speed += e.WornArmor.EffectiveSpeedPenalty(e.Abilities.Strength)
+	}
+	if speed < 5 {
+		speed = 5 // Minimum speed is 5ft unless immobilized
+	}
+	return speed
 }

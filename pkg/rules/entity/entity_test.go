@@ -107,39 +107,24 @@ func TestDamageAndHP(t *testing.T) {
 	e := NewEntity("e1", "Target", 1)
 	e.MaxHP = 20
 	e.CurrentHP = 20
+	// Initialize struct fields that were added
+	e.Resistances = make(map[string]ResistanceEntry)
+	e.Weaknesses = make(map[string]int)
 
 	// Basic damage
-	e.TakeDamage(5, "slashing")
+	e.ApplyDamage(5)
 	if e.CurrentHP != 15 {
 		t.Errorf("Expected 15 HP, got %d", e.CurrentHP)
 	}
 
-	// Immunity
-	e.Immunities = append(e.Immunities, "fire")
-	e.TakeDamage(10, "fire")
-	if e.CurrentHP != 15 {
-		t.Error("Took damage from immune type")
-	}
-
-	// Resistance
-	e.Resistances["cold"] = 5
-	e.TakeDamage(8, "cold") // Takes 8 - 5 = 3
-	if e.CurrentHP != 12 {
-		t.Errorf("Expected 12 HP after resistance, got %d", e.CurrentHP)
-	}
-
-	// Weakness
-	e.Weaknesses["acid"] = 5
-	e.TakeDamage(5, "acid") // Takes 5 + 5 = 10
-	if e.CurrentHP != 2 {
-		t.Errorf("Expected 2 HP after weakness, got %d", e.CurrentHP)
-	}
+	// NOTE: Immunity, Resistance, Weakness tests removed from Entity unit tests
+	// as logic has moved to pkg/rules/damage pipeline. Entity.ApplyDamage is now dumb.
 
 	// Temp HP
 	e.AddTempHP(10)
-	e.TakeDamage(8, "slashing") // Temp HP absorbs all
-	if e.CurrentHP != 2 || e.TempHP != 2 {
-		t.Errorf("Expected 2 HP and 2 TempHP, got %d and %d", e.CurrentHP, e.TempHP)
+	e.ApplyDamage(8) // Temp HP absorbs all
+	if e.CurrentHP != 15 || e.TempHP != 2 {
+		t.Errorf("Expected 15 HP and 2 TempHP, got %d and %d", e.CurrentHP, e.TempHP)
 	}
 }
 
@@ -149,7 +134,7 @@ func TestDying(t *testing.T) {
 	e.CurrentHP = 5
 
 	// Drop to 0
-	e.TakeDamage(10, "slashing")
+	e.ApplyDamage(10)
 	e.CheckDying(false)
 	if !e.IsDying() || e.Conditions.Value(condition.Dying) != 1 {
 		t.Error("Expected Dying 1")
@@ -181,7 +166,7 @@ func TestDying(t *testing.T) {
 
 	// Drop to 0 again with Wounded
 	e.CurrentHP = 5
-	e.TakeDamage(10, "slashing")
+	e.ApplyDamage(10)
 	e.CheckDying(false)
 	// Should be 1 (base) + 1 (wounded) = 2
 	if e.Conditions.Value(condition.Dying) != 2 {
