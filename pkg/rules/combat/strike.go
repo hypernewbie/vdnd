@@ -3,6 +3,7 @@ package combat
 import (
 	"uaa/vdnd/pkg/rules/ability"
 	"uaa/vdnd/pkg/rules/check"
+	"uaa/vdnd/pkg/rules/damage"
 	"uaa/vdnd/pkg/rules/entity"
 	"uaa/vdnd/pkg/rules/item"
 	"uaa/vdnd/pkg/rules/trait"
@@ -58,15 +59,15 @@ func (s *StrikeAction) Execute(actor, target *entity.Entity, turn *TurnState) Ac
 
 	// Process result
 	if res.Degree == check.CriticalSuccess {
-		damage := s.rollDamage(actor, true)
-		target.TakeDamage(damage, string(s.Weapon.DamageType))
+		dmg := s.rollDamageInstance(actor, true)
+		pipelineRes := damage.ProcessDamage(target, dmg, true)
 		turn.RecordStrike(StrikeRecord{TargetID: target.ID, Hit: true, WeaponID: s.Weapon.ID})
-		return ActionResult{Success: true, Degree: res.Degree, Damage: damage}
+		return ActionResult{Success: true, Degree: res.Degree, Damage: pipelineRes.FinalDamage}
 	} else if res.Degree == check.Success {
-		damage := s.rollDamage(actor, false)
-		target.TakeDamage(damage, string(s.Weapon.DamageType))
+		dmg := s.rollDamageInstance(actor, false)
+		pipelineRes := damage.ProcessDamage(target, dmg, false)
 		turn.RecordStrike(StrikeRecord{TargetID: target.ID, Hit: true, WeaponID: s.Weapon.ID})
-		return ActionResult{Success: true, Degree: res.Degree, Damage: damage}
+		return ActionResult{Success: true, Degree: res.Degree, Damage: pipelineRes.FinalDamage}
 	}
 
 	turn.RecordStrike(StrikeRecord{TargetID: target.ID, Hit: false, WeaponID: s.Weapon.ID})
@@ -88,24 +89,22 @@ func (s *StrikeAction) calculateAttackAbilityModifier(actor *entity.Entity) int 
 	return actor.Abilities.Modifier(ability.Dexterity)
 }
 
-func (s *StrikeAction) rollDamage(actor *entity.Entity, isCrit bool) int {
-	damage := s.Weapon.Damage.Roll()
+func (s *StrikeAction) rollDamageInstance(actor *entity.Entity, isCrit bool) damage.DamageInstance {
+	dr := damage.DamageRoll{
+		BaseDice:   s.Weapon.Damage,
+		Modifier:   0,
+		DamageType: s.Weapon.DamageType,
+		Source:     s.Weapon.Name,
+		Traits:     s.Weapon.Traits,
+	}
 
 	// Add STR to melee damage
 	if s.Weapon.IsMelee {
-		damage += actor.Abilities.Modifier(ability.Strength)
+		dr.Modifier = actor.Abilities.Modifier(ability.Strength)
 	}
 
 	if isCrit {
-		damage *= 2
-
-		// Handle Deadly trait (simplified: add one extra die roll of param type)
-		// We'd need to parse the Deadly parameter (e.g. "d8")
-		// For now, let's just look for the trait and maybe hardcode or skip if complex.
+		return dr.RollCritical(s.Weapon.DeadlyDie, s.Weapon.FatalDie)
 	}
-
-	if damage < 0 {
-		damage = 0
-	}
-	return damage
+	return dr.Roll()
 }
