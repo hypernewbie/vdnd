@@ -2,7 +2,9 @@ package entity
 
 import (
 	"uaa/vdnd/pkg/rules/ability"
+	"uaa/vdnd/pkg/rules/affliction"
 	"uaa/vdnd/pkg/rules/check"
+	"uaa/vdnd/pkg/rules/condition"
 	"uaa/vdnd/pkg/rules/item"
 )
 
@@ -155,4 +157,26 @@ func (e *Entity) GetSpeed() int {
 		speed = 5 // Minimum speed is 5ft unless immobilized
 	}
 	return speed
+}
+
+// ProcessAfflictions advances the affliction tracker by one time unit.
+// It automatically applies any CONDITIONS triggered by the new stage.
+//
+// WARNING: DAMAGE IS NOT APPLIED AUTOMATICALLY!
+// This method returns TickResult objects containing the damage that occurred.
+// The caller is responsible for reporting this damage to the user and
+// calling e.ApplyDamage() explicitly.
+func (e *Entity) ProcessAfflictions(unit ability.IntervalUnit) []affliction.TickResult {
+	results := e.Afflictions.Tick(unit)
+	for _, res := range results {
+		// Apply conditions
+		for _, cond := range res.Conditions {
+			e.Conditions.Apply(condition.NewValuedCondition(cond.ID, cond.Value, res.AfflictionID))
+		}
+
+		if res.IsFatal {
+			e.Kill(res.AfflictionID)
+		}
+	}
+	return results
 }

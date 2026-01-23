@@ -5,6 +5,7 @@ import (
 	"uaa/vdnd/pkg/rules/condition"
 	"uaa/vdnd/pkg/rules/item"
 	"uaa/vdnd/pkg/rules/trait"
+	"uaa/vdnd/pkg/rules/affliction"
 )
 
 type ResistanceEntry struct {
@@ -54,7 +55,8 @@ type Entity struct {
 	WieldedWeapons []*item.Weapon // Up to 2 (or more for multi-limbed)
 
 	// Runtime State
-	Conditions *condition.ConditionTracker
+	Conditions  *condition.ConditionTracker
+	Afflictions *affliction.AfflictionTracker
 
 	// Position (zone-based)
 	Position    string   // Zone ID
@@ -81,6 +83,7 @@ func NewEntity(id, name string, level int) *Entity {
 		SkillProficiencies:  make(map[ability.SkillID]ability.ProficiencyRank),
 		SpellcastingAbility: ability.Intelligence, // Default
 		Conditions:          condition.NewTracker(),
+		Afflictions:         affliction.NewTracker(),
 		Resistances:         make(map[string]ResistanceEntry),
 		Weaknesses:          make(map[string]int),
 		WieldedWeapons:      make([]*item.Weapon, 0),
@@ -141,6 +144,20 @@ func (e *Entity) Clone() *Entity {
 	clone.Conditions = condition.NewTracker()
 	for _, c := range e.Conditions.All() {
 		clone.Conditions.Apply(c)
+	}
+
+	// Afflictions tracker needs a deep clone
+	clone.Afflictions = affliction.NewTracker()
+	for _, a := range e.Afflictions.All() {
+		// This is a shallow copy of instances, but they are mostly read-only/managed by tracker
+		// In a real system we'd want NewInstanceFromExisting.
+		clone.Afflictions.Add(a.Affliction, a.Source)
+		inst := clone.Afflictions.Get(a.Affliction.ID)
+		if inst != nil {
+			inst.CurrentStage = a.CurrentStage
+			inst.TimeToOnset = a.TimeToOnset
+			inst.TimeToNextSave = a.TimeToNextSave
+		}
 	}
 
 	return &clone

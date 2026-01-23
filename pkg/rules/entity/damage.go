@@ -169,3 +169,10 @@ func (e *Entity) RecoveryCheck(roll int) RecoveryResult {
 
 	return result
 }
+
+func (e *Entity) Kill(reason string) {
+	e.CurrentHP = 0
+	maxDying := 4 - e.Conditions.Value(condition.Doomed)
+	e.Conditions.Apply(condition.NewValuedCondition(condition.Dying, maxDying, reason))
+	e.Conditions.Apply(condition.NewCondition(condition.Unconscious, reason))
+}
