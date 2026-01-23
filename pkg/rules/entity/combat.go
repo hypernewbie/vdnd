@@ -6,14 +6,6 @@ import (
 	"uaa/vdnd/pkg/rules/item"
 )
 
-type SaveType int
-
-const (
-	SaveFortitude SaveType = iota
-	SaveReflex
-	SaveWill
-)
-
 // GetAC calculates current Armor Class
 func (e *Entity) GetAC() int {
 	base := 10
@@ -99,22 +91,8 @@ func (e *Entity) GetPerception() int {
 	return wisMod + profBonus + check.CalculateTotal(conditionMods)
 }
 
-func (e *Entity) GetSkillModifier(skill ability.Skill) int {
-	var ab ability.Ability
-	switch skill {
-	case ability.SkillAthletics:
-		ab = ability.Strength
-	case ability.SkillAcrobatics, ability.SkillStealth, ability.SkillThievery:
-		ab = ability.Dexterity
-	case ability.SkillArcana, ability.SkillCrafting, ability.SkillOccultism, ability.SkillSociety:
-		ab = ability.Intelligence
-	case ability.SkillMedicine, ability.SkillNature, ability.SkillReligion, ability.SkillSurvival:
-		ab = ability.Wisdom
-	case ability.SkillDeception, ability.SkillDiplomacy, ability.SkillIntimidation, ability.SkillPerformance:
-		ab = ability.Charisma
-	default:
-		ab = ability.Strength // Default
-	}
+func (e *Entity) GetSkillModifier(skill ability.SkillID) int {
+	ab := ability.GetKeyAbility(skill)
 
 	abilityMod := e.Abilities.Modifier(ab)
 	prof := ability.Untrained
@@ -128,20 +106,22 @@ func (e *Entity) GetSkillModifier(skill ability.Skill) int {
 	return abilityMod + profBonus + check.CalculateTotal(conditionMods)
 }
 
-func (e *Entity) GetSaveDC(save SaveType) int {
+func (e *Entity) GetSaveDC(save ability.SaveType) int {
 	var mod int
 	switch save {
-	case SaveFortitude:
+	case ability.SaveFortitude:
 		mod = e.GetFortitude()
-	case SaveReflex:
+	case ability.SaveReflex:
 		mod = e.GetReflex()
-	case SaveWill:
+	case ability.SaveWill:
 		mod = e.GetWill()
+	default:
+		mod = 0
 	}
 	return 10 + mod
 }
 
-func (e *Entity) GetSkillDC(skill ability.Skill) int {
+func (e *Entity) GetSkillDC(skill ability.SkillID) int {
 	return 10 + e.GetSkillModifier(skill)
 }
 

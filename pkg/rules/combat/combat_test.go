@@ -118,3 +118,27 @@ func TestDemoralize(t *testing.T) {
 		}
 	}
 }
+
+func TestTripAction(t *testing.T) {
+	actor := entity.NewEntity("a1", "Attacker", 1)
+	actor.Abilities.Strength = 18
+	actor.SkillProficiencies[ability.SkillAthletics] = ability.Trained
+
+	target := entity.NewEntity("t1", "Target", 1)
+	target.Abilities.Dexterity = 10
+	target.Reflex = ability.Trained // DC 13
+
+	action := &TripAction{}
+	turn := NewTurn(actor)
+
+	// Trip vs Reflex DC 13
+	res := action.Execute(actor, target, turn)
+
+	if turn.ActionsRemaining != 2 {
+		t.Errorf("Trip should cost 1 action")
+	}
+	if turn.AttacksMade != 1 {
+		t.Errorf("Trip should increment MAP count")
+	}
+	_ = res
+}

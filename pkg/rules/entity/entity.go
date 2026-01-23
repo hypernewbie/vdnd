@@ -41,11 +41,12 @@ type Entity struct {
 	Reflex           ability.ProficiencyRank
 	Will             ability.ProficiencyRank
 	UnarmoredDefense ability.ProficiencyRank
-	// Add other armor/weapon proficiencies as needed
-	ArmorProficiencies map[item.ArmorCategory]ability.ProficiencyRank
-	// WeaponProficiencies maps weapon groups (or categories) to proficiency rank
+
+	ArmorProficiencies  map[item.ArmorCategory]ability.ProficiencyRank
 	WeaponProficiencies map[item.WeaponGroup]ability.ProficiencyRank
-	SkillProficiencies  map[ability.Skill]ability.ProficiencyRank
+	SkillProficiencies  map[ability.SkillID]ability.ProficiencyRank
+	SpellProficiency    ability.ProficiencyRank
+	SpellcastingAbility ability.Ability
 
 	// Equipment
 	WornArmor *item.Armor
@@ -59,7 +60,6 @@ type Entity struct {
 	Position    string   // Zone ID
 	EngagedWith []string // Entity IDs currently in melee with
 
-	// Defenses
 	// Defenses
 	Immunities  []string                   // Trait/damage type IDs
 	Resistances map[string]ResistanceEntry // type -> amount + exceptions
@@ -78,7 +78,8 @@ func NewEntity(id, name string, level int) *Entity {
 		BaseSpeed:           25,
 		ArmorProficiencies:  make(map[item.ArmorCategory]ability.ProficiencyRank),
 		WeaponProficiencies: make(map[item.WeaponGroup]ability.ProficiencyRank),
-		SkillProficiencies:  make(map[ability.Skill]ability.ProficiencyRank),
+		SkillProficiencies:  make(map[ability.SkillID]ability.ProficiencyRank),
+		SpellcastingAbility: ability.Intelligence, // Default
 		Conditions:          condition.NewTracker(),
 		Resistances:         make(map[string]ResistanceEntry),
 		Weaknesses:          make(map[string]int),
@@ -109,7 +110,7 @@ func (e *Entity) Clone() *Entity {
 		clone.WeaponProficiencies[k] = v
 	}
 
-	clone.SkillProficiencies = make(map[ability.Skill]ability.ProficiencyRank)
+	clone.SkillProficiencies = make(map[ability.SkillID]ability.ProficiencyRank)
 	for k, v := range e.SkillProficiencies {
 		clone.SkillProficiencies[k] = v
 	}
@@ -136,9 +137,7 @@ func (e *Entity) Clone() *Entity {
 		clone.Weaknesses[k] = v
 	}
 
-	// Conditions tracker needs a deep clone if implemented, but here we'll just start fresh or
-	// we'd need a Clone() on ConditionTracker. Let's assume for now fresh or handle if needed.
-	// For simplicity in this phase, we won't deep clone the tracker state perfectly yet.
+	// Conditions tracker needs a deep clone
 	clone.Conditions = condition.NewTracker()
 	for _, c := range e.Conditions.All() {
 		clone.Conditions.Apply(c)

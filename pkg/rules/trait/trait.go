@@ -29,6 +29,7 @@ const (
 	TraitMental      TraitID = "mental"
 	TraitEmotion     TraitID = "emotion"
 	TraitFear        TraitID = "fear"
+	TraitSecret      TraitID = "secret"
 
 	// Damage types (some are also traits)
 	TraitBludgeoning TraitID = "bludgeoning"

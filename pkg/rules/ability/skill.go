@@ -1,22 +1,39 @@
 package ability
 
-type Skill string
+type SkillID string
 
 const (
-	SkillAcrobatics   Skill = "acrobatics"
-	SkillArcana       Skill = "arcana"
-	SkillAthletics    Skill = "athletics"
-	SkillCrafting     Skill = "crafting"
-	SkillDeception    Skill = "deception"
-	SkillDiplomacy    Skill = "diplomacy"
-	SkillIntimidation Skill = "intimidation"
-	SkillMedicine     Skill = "medicine"
-	SkillNature       Skill = "nature"
-	SkillOccultism    Skill = "occultism"
-	SkillPerformance  Skill = "performance"
-	SkillReligion     Skill = "religion"
-	SkillSociety      Skill = "society"
-	SkillStealth      Skill = "stealth"
-	SkillSurvival     Skill = "survival"
-	SkillThievery     Skill = "thievery"
+	SkillAcrobatics   SkillID = "acrobatics"
+	SkillArcana       SkillID = "arcana"
+	SkillAthletics    SkillID = "athletics"
+	SkillCrafting     SkillID = "crafting"
+	SkillDeception    SkillID = "deception"
+	SkillDiplomacy    SkillID = "diplomacy"
+	SkillIntimidation SkillID = "intimidation"
+	SkillMedicine     SkillID = "medicine"
+	SkillNature       SkillID = "nature"
+	SkillOccultism    SkillID = "occultism"
+	SkillPerformance  SkillID = "performance"
+	SkillReligion     SkillID = "religion"
+	SkillSociety      SkillID = "society"
+	SkillStealth      SkillID = "stealth"
+	SkillSurvival     SkillID = "survival"
+	SkillThievery     SkillID = "thievery"
 )
+
+func GetKeyAbility(id SkillID) Ability {
+	switch id {
+	case SkillAthletics:
+		return Strength
+	case SkillAcrobatics, SkillStealth, SkillThievery:
+		return Dexterity
+	case SkillArcana, SkillCrafting, SkillOccultism, SkillSociety:
+		return Intelligence
+	case SkillMedicine, SkillNature, SkillReligion, SkillSurvival:
+		return Wisdom
+	case SkillDeception, SkillDiplomacy, SkillIntimidation, SkillPerformance:
+		return Charisma
+	default:
+		return Strength // Default
+	}
+}

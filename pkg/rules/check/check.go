@@ -73,3 +73,18 @@ func DetermineDegree(naturalRoll, total, dc int) DegreeOfSuccess {
 
 	return degree
 }
+
+func (d DegreeOfSuccess) String() string {
+	switch d {
+	case CriticalFailure:
+		return "Critical Failure"
+	case Failure:
+		return "Failure"
+	case Success:
+		return "Success"
+	case CriticalSuccess:
+		return "Critical Success"
+	default:
+		return "Unknown"
+	}
+}
