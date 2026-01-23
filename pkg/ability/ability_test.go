@@ -68,6 +68,7 @@ func TestProficiencyRank_Bonus(t *testing.T) {
 		{Untrained, 1, 0},
 		{Untrained, 10, 0},
 		{Untrained, 20, 0},
+		{Trained, -1, 1},
 		{Trained, 1, 3},
 		{Trained, 5, 7},
 		{Trained, 10, 12},

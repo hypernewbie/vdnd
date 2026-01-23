@@ -65,18 +65,19 @@ Traits are ubiquitous in PF2E. Every weapon, spell, action, condition, and creat
 
 ```
 pkg/
-└── trait/
-    ├── trait.go        # TraitID, Trait struct, TraitCategory
-    ├── registry.go     # Global trait registry with all known traits
-    ├── hastraits.go    # HasTraits interface
-    └── trait_test.go
+└── rules/
+    └── trait/
+        ├── trait.go        # TraitID, Trait struct, TraitCategory
+        ├── registry.go     # Global trait registry with all known traits
+        ├── hastraits.go    # HasTraits interface
+        └── trait_test.go
 ```
 
 ---
 
 ## Implementation Plan
 
-### 1. `pkg/trait/trait.go`
+### 1. `pkg/rules/trait/trait.go`
 
 ```go
 // TraitID is a unique identifier for a trait (lowercase, hyphenated)
@@ -122,7 +123,7 @@ func NewTrait(id TraitID, name string, category TraitCategory) Trait
 func NewParameterizedTrait(id TraitID, name string, category TraitCategory, param string) Trait
 ```
 
-### 2. `pkg/trait/registry.go`
+### 2. `pkg/rules/trait/registry.go`
 
 A global registry of all known traits. This allows lookup and validation.
 
@@ -176,7 +177,7 @@ func DefaultRegistry() *Registry:
     return r
 ```
 
-### 3. `pkg/trait/hastraits.go`
+### 3. `pkg/rules/trait/hastraits.go`
 
 Interface for anything that has traits (weapons, spells, creatures, etc.)
 

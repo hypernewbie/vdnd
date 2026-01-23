@@ -68,17 +68,18 @@ Used for things like "your Perception DC" or "your Fortitude DC".
 
 ```
 pkg/
-└── ability/
-    ├── ability.go       # AbilityScores, Ability enum, modifier calculation
-    ├── proficiency.go   # ProficiencyRank, bonus calculation
-    └── ability_test.go  # All tests
+└── rules/
+    └── ability/
+        ├── ability.go       # AbilityScores, Ability enum, modifier calculation
+        ├── proficiency.go   # ProficiencyRank, bonus calculation
+        └── ability_test.go  # All tests
 ```
 
 ---
 
 ## Implementation Plan
 
-### 1. `pkg/ability/ability.go`
+### 1. `pkg/rules/ability/ability.go`
 
 ```go
 // Ability represents one of the six ability scores
@@ -146,7 +147,7 @@ func ModifierFromScore(score int) int {
 }
 ```
 
-### 2. `pkg/ability/proficiency.go`
+### 2. `pkg/rules/ability/proficiency.go`
 
 ```go
 type ProficiencyRank int
@@ -204,7 +205,7 @@ func CalculateDC(modifier int) int {
 
 ## Test Plan
 
-### `pkg/ability/ability_test.go`
+### `pkg/rules/ability/ability_test.go`
 
 #### Modifier Calculation Tests
 
@@ -260,6 +261,7 @@ func CalculateDC(modifier int) int {
 | Untrained | 1 | 0 |
 | Untrained | 10 | 0 |
 | Untrained | 20 | 0 |
+| Trained | -1 | 1 |
 | Trained | 1 | 3 |
 | Trained | 5 | 7 |
 | Trained | 10 | 12 |

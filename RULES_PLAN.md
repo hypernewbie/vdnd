@@ -648,21 +648,22 @@ vdnd/
 │   └── vd/
 │       └── main.go              # CLI entry point
 ├── pkg/
-│   ├── dice/                    # Dice rolling
-│   ├── check/                   # Check resolution
-│   ├── modifier/                # Bonus stacking
-│   ├── trait/                   # Trait registry
-│   ├── condition/               # Condition tracker
-│   ├── entity/                  # Entity management
-│   ├── item/                    # Weapons, armour
-│   ├── combat/                  # Actions, encounters
-│   ├── position/                # Zone-based positioning
-│   ├── spell/                   # Spell effects
-│   ├── skill/                   # Skill system
-│   └── session/                 # State persistence
+│   └── rules/                   # Core PF2E rules engine
+│       ├── dice/                # Dice rolling
+│       ├── check/               # Check resolution
+│       ├── modifier/            # Bonus stacking
+│       ├── trait/               # Trait registry
+│       ├── condition/           # Condition tracker
+│       ├── entity/              # Entity management
+│       ├── item/                # Weapons, armour
+│       ├── combat/              # Actions, encounters
+│       ├── position/            # Zone-based positioning
+│       ├── spell/               # Spell effects
+│       └── skill/               # Skill system
+│   ├── session/                 # State persistence (not rules logic)
+│   └── output/                  # Markdown output formatting
 ├── internal/
 │   ├── cli/                     # CLI command handlers
-│   ├── output/                  # Markdown output formatting
 │   └── parser/                  # Markdown parsing
 ├── testdata/                    # Test scenario files
 ├── rules/                       # Source compendium (existing)

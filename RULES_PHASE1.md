@@ -32,21 +32,22 @@ Key rules (src: `rules/rules/core-rulebook/chapter-9-playing-the-game.md`):
 
 ```
 pkg/
-├── dice/
-│   ├── dice.go        # DieRoll struct, Roll function
-│   └── dice_test.go
-└── check/
-    ├── modifier.go    # Modifier, BonusType, stacking logic
-    ├── check.go       # CheckResult, DegreeOfSuccess, PerformCheck
-    ├── modifier_test.go
-    └── check_test.go
+└── rules/
+    ├── dice/
+    │   ├── dice.go        # DieRoll struct, Roll function
+    │   └── dice_test.go
+    └── check/
+        ├── modifier.go    # Modifier, BonusType, stacking logic
+        ├── check.go       # CheckResult, DegreeOfSuccess, PerformCheck
+        ├── modifier_test.go
+        └── check_test.go
 ```
 
 ---
 
 ## Implementation Plan
 
-### 1. `pkg/dice/dice.go`
+### 1. `pkg/rules/dice/dice.go`
 
 ```go
 type DieRoll struct {
@@ -75,7 +76,7 @@ for i in range(count):
 return total + modifier
 ```
 
-### 2. `pkg/check/modifier.go`
+### 2. `pkg/rules/check/modifier.go`
 
 ```go
 type BonusType int
@@ -119,7 +120,7 @@ for mod in modifiers:
 return sum(bonuses.values()) + sum(penalties.values()) + untyped_penalty_total
 ```
 
-### 3. `pkg/check/check.go`
+### 3. `pkg/rules/check/check.go`
 
 ```go
 type DegreeOfSuccess int
@@ -174,7 +175,7 @@ return degree
 
 ## Test Plan
 
-### `pkg/dice/dice_test.go`
+### `pkg/rules/dice/dice_test.go`
 
 | Test Case | Input | Expected |
 |-----------|-------|----------|
@@ -186,7 +187,7 @@ return degree
 
 **Statistical test (optional):** Roll 1d6 10,000 times, verify distribution is roughly uniform across 1-6.
 
-### `pkg/check/modifier_test.go`
+### `pkg/rules/check/modifier_test.go`
 
 | Test Case | Modifiers | Expected Total |
 |-----------|-----------|----------------|
@@ -201,7 +202,7 @@ return degree
 | Untyped penalties stack | `[{-5, Untyped, "MAP"}, {-2, Untyped, "Range"}]` | -7 |
 | Complex mix | `[{+2, Status}, {+1, Circumstance}, {-5, Untyped}, {-2, Untyped}, {-1, Status}]` | +2 + 1 - 1 - 5 - 2 = -5 |
 
-### `pkg/check/check_test.go`
+### `pkg/rules/check/check_test.go`
 
 | Test Case | Natural Roll | Base Mod | Extra Mods | DC | Expected Degree |
 |-----------|--------------|----------|------------|-----|-----------------|

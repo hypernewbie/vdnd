@@ -65,20 +65,21 @@ Conditions are ongoing effects that change how a creature acts or what bonuses/p
 
 ```
 pkg/
-└── condition/
-    ├── condition.go      # ConditionID, Condition definition
-    ├── instance.go       # ConditionInstance (applied to entity)
-    ├── tracker.go        # ConditionTracker (manages conditions on entity)
-    ├── effects.go        # Extract modifiers from conditions
-    ├── registry.go       # Known condition definitions
-    └── condition_test.go
+└── rules/
+    └── condition/
+        ├── condition.go      # ConditionID, Condition definition
+        ├── instance.go       # ConditionInstance (applied to entity)
+        ├── tracker.go        # ConditionTracker (manages conditions on entity)
+        ├── effects.go        # Extract modifiers from conditions
+        ├── registry.go       # Known condition definitions
+        └── condition_test.go
 ```
 
 ---
 
 ## Implementation Plan
 
-### 1. `pkg/condition/condition.go`
+### 1. `pkg/rules/condition/condition.go`
 
 ```go
 type ConditionID string
@@ -123,7 +124,7 @@ type Condition struct {
 }
 ```
 
-### 2. `pkg/condition/instance.go`
+### 2. `pkg/rules/condition/instance.go`
 
 An instance of a condition applied to a specific entity.
 
@@ -148,7 +149,7 @@ func NewValuedCondition(id ConditionID, value int, source string) ConditionInsta
 func NewPersistentDamage(amount int, damageType, source string) ConditionInstance
 ```
 
-### 3. `pkg/condition/tracker.go`
+### 3. `pkg/rules/condition/tracker.go`
 
 Manages conditions on a single entity.
 
@@ -228,12 +229,12 @@ func (t *ConditionTracker) EndTurn():
                 t.Remove(id)
 ```
 
-### 4. `pkg/condition/effects.go`
+### 4. `pkg/rules/condition/effects.go`
 
 Extracts game effects from conditions. Integrates with `pkg/check`.
 
 ```go
-import "vdnd/pkg/check"
+import "vdnd/pkg/rules/check"
 
 // GetModifiers returns all modifiers from active conditions
 // This is used when calculating checks
