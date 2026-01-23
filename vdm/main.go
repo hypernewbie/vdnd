@@ -1,10 +1,13 @@
 package main
 
 import (
+	"bufio"
+	"flag"
 	"fmt"
 	"log/slog"
 	"os"
 	"os/signal"
+	"strings"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/caarlos0/env/v11"
@@ -12,7 +15,7 @@ import (
 
 // Config holds the application configuration
 type Config struct {
-	Token          string `env:"DISCORD_TOKEN,required"`
+	Token          string `env:"DISCORD_TOKEN"`
 	RemoveCommands bool   `env:"DISCORD_REMOVE_COMMANDS" envDefault:"true"`
 }
 
@@ -27,7 +30,11 @@ func loadConfig() (*Config, error) {
 
 func main() {
 	// Initialize structured logger
-	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
+
+	// Parse flags
+	useDiscord := flag.Bool("discord", false, "Run in Discord bot mode")
+	flag.Parse()
 
 	cfg, err := loadConfig()
 	if err != nil {
@@ -35,6 +42,55 @@ func main() {
 		os.Exit(1)
 	}
 
+	if *useDiscord {
+		if cfg.Token == "" {
+			logger.Error("DISCORD_TOKEN is required for discord mode")
+			os.Exit(1)
+		}
+		runDiscord(logger, cfg)
+	} else {
+		runCLI(logger)
+	}
+}
+
+func runCLI(logger *slog.Logger) {
+	logger.Info("Starting CLI mode...")
+	fmt.Println("CLI mode enabled. Type 'exit' to quit.")
+
+	scanner := bufio.NewScanner(os.Stdin)
+	for {
+		fmt.Print("> ")
+		if !scanner.Scan() {
+			break
+		}
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" {
+			continue
+		}
+
+		cmd, arg, _ := strings.Cut(line, " ")
+		switch cmd {
+		case "echo":
+			if arg == "" {
+				fmt.Println("Usage: echo <content>")
+				continue
+			}
+			logger.Info("received echo command", "content", arg)
+			fmt.Printf("Echo: %s\n", arg)
+		case "exit", "quit":
+			logger.Info("CLI mode shutting down")
+			return
+		default:
+			fmt.Printf("Unknown command: %s\n", cmd)
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		logger.Error("error reading input", "error", err)
+	}
+}
+
+func runDiscord(logger *slog.Logger, cfg *Config) {
 	// Initialize Discord session
 	s, err := discordgo.New("Bot " + cfg.Token)
 	if err != nil {
