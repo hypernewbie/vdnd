@@ -95,7 +95,8 @@ func GetSpellDC(caster *entity.Entity) int {
 
 func RollSpellAttack(caster, target *entity.Entity, modifiers []check.Modifier) check.CheckResult {
 	attackMod := GetSpellAttackModifier(caster)
-	targetAC := target.GetAC()
+	// Spell attack vs AC
+	targetAC := target.GetAC(caster)
 	return check.PerformCheck(attackMod, modifiers, targetAC)
 }
 

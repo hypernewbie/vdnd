@@ -95,3 +95,36 @@ func (d DegreeOfSuccess) String() string {
 		return "Unknown"
 	}
 }
+
+// Adjust returns a degree of success shifted by the given amount (e.g. +1 or -1).
+// It clamps the result to CriticalFailure and CriticalSuccess.
+func (d DegreeOfSuccess) Adjust(steps int) DegreeOfSuccess {
+	newVal := int(d) + steps
+	if newVal < int(CriticalFailure) {
+		return CriticalFailure
+	}
+	if newVal > int(CriticalSuccess) {
+		return CriticalSuccess
+	}
+	return DegreeOfSuccess(newVal)
+}
+
+// Counteract determines if an effect is counteracted based on counteract levels and degree of success.
+// CRB p.458
+func Counteract(sourceLevel, targetLevel int, degree DegreeOfSuccess) bool {
+	switch degree {
+	case CriticalSuccess:
+		// Counteract if target level <= source level + 3
+		return targetLevel <= sourceLevel+3
+	case Success:
+		// Counteract if target level <= source level + 1
+		return targetLevel <= sourceLevel+1
+	case Failure:
+		// Counteract if target level < source level
+		// "Counteract the target if its counteract level is lower than your effect's counteract level."
+		return targetLevel < sourceLevel
+	case CriticalFailure:
+		return false
+	}
+	return false
+}

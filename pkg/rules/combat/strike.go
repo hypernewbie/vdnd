@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"uaa/vdnd/pkg/rules/ability"
 	"uaa/vdnd/pkg/rules/check"
+	"uaa/vdnd/pkg/rules/condition"
 	"uaa/vdnd/pkg/rules/damage"
 	"uaa/vdnd/pkg/rules/entity"
 	"uaa/vdnd/pkg/rules/item"
@@ -11,7 +12,8 @@ import (
 )
 
 type StrikeAction struct {
-	Weapon *item.Weapon
+	Weapon        *item.Weapon
+	FlatCheckRoll int // For testing: if set > 0, use this for the flat check
 }
 
 func NewStrike(weapon *item.Weapon) *StrikeAction {
@@ -35,11 +37,29 @@ func (s *StrikeAction) Validate(actor, target *entity.Entity, turn *TurnState) e
 }
 
 // Execute performs the strike. naturalRoll of 0 means use random roll.
-func (s *StrikeAction) Execute(actor, target *entity.Entity, turn *TurnState) ability.ActionResult {
+func (s *StrikeAction) Execute(actor, target *entity.Entity, turn *TurnState) (ability.ActionResult, check.CheckResult) {
 	return s.ExecuteWithRoll(actor, target, turn, 0)
 }
 
-func (s *StrikeAction) ExecuteWithRoll(actor, target *entity.Entity, turn *TurnState, naturalRoll int) ability.ActionResult {
+func (s *StrikeAction) ExecuteWithRoll(actor, target *entity.Entity, turn *TurnState, naturalRoll int) (ability.ActionResult, check.CheckResult) {
+	// Hidden/Undetected logic
+	if target.Conditions.HasRelative(condition.Hidden, actor.ID) || target.Conditions.HasRelative(condition.Undetected, actor.ID) {
+		dc := 11
+		var passed bool
+		if s.FlatCheckRoll > 0 {
+			passed = s.FlatCheckRoll >= dc
+		} else {
+			passed = check.FlatCheck(dc)
+		}
+
+		if !passed {
+			// Fail immediately
+			turn.RecordAttack()
+			turn.RecordStrike(StrikeRecord{TargetID: target.ID, Hit: false, WeaponID: s.Weapon.ID})
+			return ability.ActionResult{Success: false, Degree: check.Failure}, check.CheckResult{Degree: check.Failure}
+		}
+	}
+
 	// Calculate attack modifier
 	abilityMod := s.calculateAttackAbilityModifier(actor)
 	profBonus := actor.GetWeaponProficiency(s.Weapon).Bonus(actor.Level)
@@ -79,7 +99,7 @@ func (s *StrikeAction) ExecuteWithRoll(actor, target *entity.Entity, turn *TurnS
 	}
 
 	// Target's AC
-	targetAC := target.GetAC()
+	targetAC := target.GetAC(actor)
 
 	// Perform the check
 	var res check.CheckResult
@@ -92,21 +112,25 @@ func (s *StrikeAction) ExecuteWithRoll(actor, target *entity.Entity, turn *TurnS
 	// Record attack for MAP
 	turn.RecordAttack()
 
+	// Reveal actor (loses hidden/undetected after an attack)
+	actor.Conditions.RemoveRelative(condition.Hidden, target.ID)
+	actor.Conditions.RemoveRelative(condition.Undetected, target.ID)
+
 	// Process result
 	if res.Degree == check.CriticalSuccess {
 		dmg := s.rollDamageInstance(actor, turn, true)
 		pipelineRes := damage.ProcessDamage(target, dmg, true)
 		turn.RecordStrike(StrikeRecord{TargetID: target.ID, Hit: true, WeaponID: s.Weapon.ID})
-		return ability.ActionResult{Success: true, Degree: res.Degree, Damage: pipelineRes.FinalDamage}
+		return ability.ActionResult{Success: true, Degree: res.Degree, Damage: pipelineRes.FinalDamage}, res
 	} else if res.Degree == check.Success {
 		dmg := s.rollDamageInstance(actor, turn, false)
 		pipelineRes := damage.ProcessDamage(target, dmg, false)
 		turn.RecordStrike(StrikeRecord{TargetID: target.ID, Hit: true, WeaponID: s.Weapon.ID})
-		return ability.ActionResult{Success: true, Degree: res.Degree, Damage: pipelineRes.FinalDamage}
+		return ability.ActionResult{Success: true, Degree: res.Degree, Damage: pipelineRes.FinalDamage}, res
 	}
 
 	turn.RecordStrike(StrikeRecord{TargetID: target.ID, Hit: false, WeaponID: s.Weapon.ID})
-	return ability.ActionResult{Success: false, Degree: res.Degree}
+	return ability.ActionResult{Success: false, Degree: res.Degree}, res
 }
 
 func (s *StrikeAction) calculateAttackAbilityModifier(actor *entity.Entity) int {

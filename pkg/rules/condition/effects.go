@@ -43,11 +43,20 @@ func (t *ConditionTracker) GetModifiers() []check.Modifier {
 	return mods
 }
 
-// GetACModifiers returns modifiers that apply to AC
-func (t *ConditionTracker) GetACModifiers() []check.Modifier {
+// GetACModifiers returns modifiers that apply to AC relative to an attacker
+func (t *ConditionTracker) GetACModifiers(attacker *ConditionTracker, attackerID string) []check.Modifier {
 	mods := t.GetModifiers()
 
-	if t.IsFlatFooted() {
+	isFlatFooted := t.IsFlatFooted() || t.HasRelative(FlatFooted, attackerID)
+	
+	// Attacker being hidden/undetected makes target flat-footed
+	if !isFlatFooted && attacker != nil {
+		if attacker.HasRelative(Hidden, t.GetID()) || attacker.HasRelative(Undetected, t.GetID()) {
+			isFlatFooted = true
+		}
+	}
+
+	if isFlatFooted {
 		mods = append(mods, check.Modifier{
 			Value:  -2,
 			Type:   check.BonusCircumstance,
@@ -68,6 +77,14 @@ func (t *ConditionTracker) GetACModifiers() []check.Modifier {
 			Value:  -4,
 			Type:   check.BonusStatus,
 			Source: "Unconscious",
+		})
+	}
+
+	if t.Has(StandardCover) {
+		mods = append(mods, check.Modifier{
+			Value:  2,
+			Type:   check.BonusCircumstance,
+			Source: "Standard Cover",
 		})
 	}
 
@@ -106,12 +123,40 @@ func (t *ConditionTracker) GetAttackModifiers(isMelee bool) []check.Modifier {
 }
 
 // GetSaveModifiers returns modifiers that apply to saving throws
-func (t *ConditionTracker) GetSaveModifiers() []check.Modifier {
+func (t *ConditionTracker) GetSaveModifiers(saveType string) []check.Modifier {
 	mods := t.GetModifiers()
 
-	// Note: Specific conditions like Clumsy (Reflex) or Drained (Fortitude)
-	// would normally be handled by more specific check lookups.
-	// For now, we return the general ones.
+	if t.Has(StandardCover) && saveType == "Reflex" {
+		mods = append(mods, check.Modifier{
+			Value:  2,
+			Type:   check.BonusCircumstance,
+			Source: "Standard Cover",
+		})
+	}
+
+	if t.Has(Clumsy) && saveType == "Reflex" {
+		mods = append(mods, check.Modifier{
+			Value:  -t.Value(Clumsy),
+			Type:   check.BonusStatus,
+			Source: "Clumsy",
+		})
+	}
+
+	if t.Has(Drained) && saveType == "Fortitude" {
+		mods = append(mods, check.Modifier{
+			Value:  -t.Value(Drained),
+			Type:   check.BonusStatus,
+			Source: "Drained",
+		})
+	}
+
+	if t.Has(Stupefied) && saveType == "Will" {
+		mods = append(mods, check.Modifier{
+			Value:  -t.Value(Stupefied),
+			Type:   check.BonusStatus,
+			Source: "Stupefied",
+		})
+	}
 
 	return mods
 }

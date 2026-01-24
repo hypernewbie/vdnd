@@ -51,6 +51,9 @@ const (
 	Hostile    ConditionID = "hostile"
 	Indifferent ConditionID = "indifferent"
 	Unfriendly ConditionID = "unfriendly"
+
+	// Cover
+	StandardCover ConditionID = "standard-cover"
 )
 
 type Condition struct {

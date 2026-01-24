@@ -24,6 +24,14 @@ func (t *AfflictionTracker) Add(aff *Affliction, source string) {
 	t.afflictions = append(t.afflictions, NewInstance(aff, source))
 }
 
+// AddInstance adds a pre-constructed instance
+func (t *AfflictionTracker) AddInstance(inst *AfflictionInstance) {
+	if t.Has(inst.Affliction.ID) {
+		return
+	}
+	t.afflictions = append(t.afflictions, inst)
+}
+
 // Has checks if entity has a specific affliction
 func (t *AfflictionTracker) Has(afflictionID string) bool {
 	return t.Get(afflictionID) != nil

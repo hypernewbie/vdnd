@@ -6,10 +6,14 @@ import (
 
 type PersistentDamageActor interface {
 	ApplyDamage(amount int)
+	CheckDying(wasCritical bool)
 	GetID() string
+	IsDying() bool
+	IsUnconscious() bool
 }
 
 type ConditionTracker struct {
+	ownerID          string
 	conditions       []*ConditionInstance
 	persistentDamage []*ConditionInstance
 }
@@ -19,6 +23,16 @@ func NewTracker() *ConditionTracker {
 		conditions:       make([]*ConditionInstance, 0),
 		persistentDamage: make([]*ConditionInstance, 0),
 	}
+}
+
+// SetOwner establishes who this tracker belongs to
+func (t *ConditionTracker) SetOwner(id string) {
+	t.ownerID = id
+}
+
+// GetID returns the ID of the entity this tracker belongs to
+func (t *ConditionTracker) GetID() string {
+	return t.ownerID
 }
 
 // IsGlobal returns true if the condition applies to everyone
@@ -199,6 +213,9 @@ func (t *ConditionTracker) EndTurn(actor PersistentDamageActor) {
 	for _, pd := range t.persistentDamage {
 		if actor != nil {
 			actor.ApplyDamage(pd.Value)
+			if actor.IsUnconscious() {
+				actor.CheckDying(false)
+			}
 		}
 		if !check.FlatCheck(15) {
 			remainingPersistent = append(remainingPersistent, pd)
@@ -228,4 +245,11 @@ func (t *ConditionTracker) StartTurn() {
 // IsFlatFooted checks if any condition makes the entity flat-footed
 func (t *ConditionTracker) IsFlatFooted() bool {
 	return t.Has(FlatFooted) || t.Has(Prone) || t.Has(Grabbed) || t.Has(Restrained) || t.Has(Paralyzed) || t.Has(Unconscious)
+}
+
+// IsFlatFootedTo checks if the entity is flat-footed specifically to an observer
+func (t *ConditionTracker) IsFlatFootedTo(observerID string) bool {
+	if t.IsFlatFooted() { return true }
+	// Check specifically for relational flat-footed
+	return t.HasRelative(FlatFooted, observerID)
 }

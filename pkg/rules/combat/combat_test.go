@@ -51,7 +51,7 @@ func TestSweepAndForceful(t *testing.T) {
 	turn := NewTurn(actor)
 
 	// Attack 1: Target 1. Roll 7. Total 11 vs 11 AC -> Success.
-	res1 := strike.ExecuteWithRoll(actor, target1, turn, 7)
+	res1, _ := strike.ExecuteWithRoll(actor, target1, turn, 7)
 	if !res1.Success {
 		t.Errorf("Attack 1 failed: %v", res1.Degree)
 	}
@@ -59,7 +59,7 @@ func TestSweepAndForceful(t *testing.T) {
 	// Attack 2: Target 2. 
 	// Mod: +4 (STR), -5 (MAP), +1 (Sweep) = +0.
 	// Roll 11. Total 11 vs 11 AC -> Success.
-	res2 := strike.ExecuteWithRoll(actor, target2, turn, 11)
+	res2, _ := strike.ExecuteWithRoll(actor, target2, turn, 11)
 	if !res2.Success {
 		t.Errorf("Attack 2 with Sweep failed: %v", res2.Degree)
 	}
@@ -72,7 +72,7 @@ func TestSweepAndForceful(t *testing.T) {
 	// Attack 3: Target 2.
 	// Mod: +4 (STR), -10 (MAP), Sweep: 0 (same target as last) = -6.
 	// Roll 17. Total 11 vs 11 AC -> Success.
-	res3 := strike.ExecuteWithRoll(actor, target2, turn, 17)
+	res3, _ := strike.ExecuteWithRoll(actor, target2, turn, 17)
 	if !res3.Success {
 		t.Errorf("Attack 3 failed: %v", res3.Degree)
 	}
@@ -103,7 +103,7 @@ func TestBackswing(t *testing.T) {
 	turn := NewTurn(actor)
 
 	// Attack 1: Miss. Mod +4. Roll 1. Total 5 failure.
-	res1 := strike.ExecuteWithRoll(actor, target, turn, 1)
+	res1, _ := strike.ExecuteWithRoll(actor, target, turn, 1)
 	if res1.Success {
 		t.Error("Attack 1 should have failed")
 	}
@@ -111,7 +111,7 @@ func TestBackswing(t *testing.T) {
 	// Attack 2: Should have +1 from Backswing.
 	// Mod: +4 (STR), -5 (MAP), +1 (Backswing) = +0.
 	// Roll 11. Total 11 vs 11 AC -> Success.
-	res2 := strike.ExecuteWithRoll(actor, target, turn, 11)
+	res2, _ := strike.ExecuteWithRoll(actor, target, turn, 11)
 	if !res2.Success {
 		t.Errorf("Attack 2 with Backswing failed: %v", res2.Degree)
 	}
@@ -135,12 +135,12 @@ func TestAgileWeapon(t *testing.T) {
 	turn := NewTurn(actor)
 
 	// Attack 1: Roll 9. Total 11 -> Success.
-	_ = strike.ExecuteWithRoll(actor, target, turn, 9)
+	_, _ = strike.ExecuteWithRoll(actor, target, turn, 9)
 
 	// Attack 2: MAP should be -4.
 	// Mod: +2 (STR), -4 (MAP) = -2.
 	// Roll 13. Total 11 -> Success.
-	res2 := strike.ExecuteWithRoll(actor, target, turn, 13)
+	res2, _ := strike.ExecuteWithRoll(actor, target, turn, 13)
 	if !res2.Success {
 		t.Errorf("Agile MAP -4 should have succeeded, got %v", res2.Degree)
 	}
@@ -148,7 +148,7 @@ func TestAgileWeapon(t *testing.T) {
 	// Attack 3: MAP should be -8.
 	// Mod: +2 (STR), -8 (MAP) = -6.
 	// Roll 17. Total 11 -> Success.
-	res3 := strike.ExecuteWithRoll(actor, target, turn, 17)
+	res3, _ := strike.ExecuteWithRoll(actor, target, turn, 17)
 	if !res3.Success {
 		t.Errorf("Agile MAP -8 should have succeeded, got %v", res3.Degree)
 	}

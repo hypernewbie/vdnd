@@ -31,7 +31,18 @@ func NewTurn(e *entity.Entity) *TurnState {
 		actions += 1
 	}
 
-	// Slowed reduces actions
+	// 1. Stunned: First lose actions from being stunned
+	stunnedVal := e.Conditions.Value(condition.Stunned)
+	if stunnedVal > 0 {
+		lost := stunnedVal
+		if lost > actions {
+			lost = actions
+		}
+		actions -= lost
+		e.Conditions.Reduce(condition.Stunned, lost)
+	}
+
+	// 2. Slowed: Then lose actions from being slowed
 	actions -= e.Conditions.Value(condition.Slowed)
 
 	if actions < 0 {

@@ -59,7 +59,7 @@ func TestRogueCombatSimulation(t *testing.T) {
 	// --- Action 3: Strike with Agile Dagger ---
 	strike := NewStrike(&dagger)
 	
-	resStrike := strike.ExecuteWithRoll(rogue, guard, turn, 10)
+	resStrike, _ := strike.ExecuteWithRoll(rogue, guard, turn, 10)
 	
 	if resStrike.Degree < check.Success {
 		t.Errorf("Expected strike success, got %v", resStrike.Degree)

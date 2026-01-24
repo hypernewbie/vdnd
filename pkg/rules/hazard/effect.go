@@ -148,7 +148,7 @@ type AttackEffect struct {
 func (a *AttackEffect) Apply(hazard *Hazard, targets []*entity.Entity) []HazardResult {
 	results := make([]HazardResult, 0)
 	for _, target := range targets {
-		targetAC := target.GetAC()
+		targetAC := target.GetAC(nil)
 		checkRes := check.PerformCheck(a.AttackBonus, nil, targetAC)
 
 		res := HazardResult{Target: target, DamageType: a.DamageType}

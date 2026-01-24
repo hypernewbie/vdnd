@@ -100,8 +100,9 @@ type Entity struct {
 	Feats               *feat.FeatTracker
 	TemporaryImmunities map[string]int // "ActionID:SourceID" -> rounds remaining
 
-	// Position (zone-based)
+	// Position (zone-based or grid-based)
 	Position    string   // Zone ID
+	X, Y        int      // Grid coordinates
 	EngagedWith []string // Entity IDs currently in melee with
 
 	// Defenses
@@ -114,6 +115,8 @@ type Entity struct {
 }
 
 func NewEntity(id, name string, level int) *Entity {
+	tr := condition.NewTracker()
+	tr.SetOwner(id)
 	return &Entity{
 		ID:                  id,
 		Name:                name,
@@ -124,7 +127,7 @@ func NewEntity(id, name string, level int) *Entity {
 		WeaponProficiencies: make(map[item.WeaponGroup]ability.ProficiencyRank),
 		SkillProficiencies:  make(map[ability.SkillID]ability.ProficiencyRank),
 		SpellcastingAbility: ability.Intelligence, // Default
-		Conditions:          condition.NewTracker(),
+		Conditions:          tr,
 		Afflictions:         affliction.NewTracker(),
 		Feats:               feat.NewFeatTracker(),
 		TemporaryImmunities: make(map[string]int),

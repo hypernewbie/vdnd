@@ -48,7 +48,7 @@ func TestACCalculation(t *testing.T) {
 	e.UnarmoredDefense = ability.Trained // +3 bonus at lvl 1
 
 	// Unarmored: 10 + 3 (dex) + 3 (prof) = 16
-	if ac := e.GetAC(); ac != 16 {
+	if ac := e.GetAC(nil); ac != 16 {
 		t.Errorf("Expected AC 16, got %d", ac)
 	}
 
@@ -56,21 +56,21 @@ func TestACCalculation(t *testing.T) {
 	e.WornArmor = &item.LeatherArmor
 	e.ArmorProficiencies[item.LightArmor] = ability.Trained
 	// 10 + 3 (dex) + 3 (prof) + 1 (item) = 17
-	if ac := e.GetAC(); ac != 17 {
+	if ac := e.GetAC(nil); ac != 17 {
 		t.Errorf("Expected AC 17 with leather, got %d", ac)
 	}
 
 	// Dex exceeds cap
 	e.Abilities.Dexterity = 22 // +6 mod
 	// Cap is 4, so 10 + 4 (dex cap) + 3 (prof) + 1 (item) = 18
-	if ac := e.GetAC(); ac != 18 {
+	if ac := e.GetAC(nil); ac != 18 {
 		t.Errorf("Expected AC 18 with dex cap, got %d", ac)
 	}
 
 	// Conditions
 	e.Conditions.Apply(condition.NewCondition(condition.FlatFooted, "Flank"))
 	// 18 - 2 = 16
-	if ac := e.GetAC(); ac != 16 {
+	if ac := e.GetAC(nil); ac != 16 {
 		t.Errorf("Expected AC 16 while flat-footed, got %d", ac)
 	}
 }

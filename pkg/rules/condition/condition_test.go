@@ -11,6 +11,9 @@ type MockActor struct {
 
 func (m *MockActor) ApplyDamage(amount int) { m.TotalDamage += amount }
 func (m *MockActor) GetID() string          { return m.ID }
+func (m *MockActor) CheckDying(bool)        {}
+func (m *MockActor) IsDying() bool          { return false }
+func (m *MockActor) IsUnconscious() bool    { return false }
 
 func TestConditionTracker_Apply(t *testing.T) {
 	tr := NewTracker()

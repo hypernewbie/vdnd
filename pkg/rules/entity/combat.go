@@ -8,8 +8,8 @@ import (
 	"uaa/vdnd/pkg/rules/item"
 )
 
-// GetAC calculates current Armor Class
-func (e *Entity) GetAC() int {
+// GetAC calculates current Armor Class relative to an attacker
+func (e *Entity) GetAC(attacker *Entity) int {
 	base := 10
 
 	// DEX modifier, capped by armor
@@ -29,7 +29,13 @@ func (e *Entity) GetAC() int {
 	}
 
 	// Condition modifiers (flat-footed, clumsy, etc.)
-	conditionMods := e.Conditions.GetACModifiers()
+	var attackerID string
+	var attackerConds *condition.ConditionTracker
+	if attacker != nil {
+		attackerID = attacker.ID
+		attackerConds = attacker.Conditions
+	}
+	conditionMods := e.Conditions.GetACModifiers(attackerConds, attackerID)
 	conditionTotal := check.CalculateTotal(conditionMods)
 
 	return base + dexMod + profBonus + armorBonus + conditionTotal
@@ -58,30 +64,24 @@ func (e *Entity) GetWeaponProficiency(w *item.Weapon) ability.ProficiencyRank {
 func (e *Entity) GetFortitude() int {
 	conMod := e.Abilities.Modifier(ability.Constitution)
 	profBonus := e.Fortitude.Bonus(e.Level)
-	conditionMods := e.Conditions.GetModifiers()
-	saveMods := e.Conditions.GetSaveModifiers()
-	allMods := append(conditionMods, saveMods...)
-	return conMod + profBonus + check.CalculateTotal(allMods)
+	saveMods := e.Conditions.GetSaveModifiers("Fortitude")
+	return conMod + profBonus + check.CalculateTotal(saveMods)
 }
 
 // GetReflex calculates Reflex save modifier
 func (e *Entity) GetReflex() int {
 	dexMod := e.Abilities.Modifier(ability.Dexterity)
 	profBonus := e.Reflex.Bonus(e.Level)
-	conditionMods := e.Conditions.GetModifiers()
-	saveMods := e.Conditions.GetSaveModifiers()
-	allMods := append(conditionMods, saveMods...)
-	return dexMod + profBonus + check.CalculateTotal(allMods)
+	saveMods := e.Conditions.GetSaveModifiers("Reflex")
+	return dexMod + profBonus + check.CalculateTotal(saveMods)
 }
 
 // GetWill calculates Will save modifier
 func (e *Entity) GetWill() int {
 	wisMod := e.Abilities.Modifier(ability.Wisdom)
 	profBonus := e.Will.Bonus(e.Level)
-	conditionMods := e.Conditions.GetModifiers()
-	saveMods := e.Conditions.GetSaveModifiers()
-	allMods := append(conditionMods, saveMods...)
-	return wisMod + profBonus + check.CalculateTotal(allMods)
+	saveMods := e.Conditions.GetSaveModifiers("Will")
+	return wisMod + profBonus + check.CalculateTotal(saveMods)
 }
 
 // GetPerception calculates Perception modifier
@@ -157,6 +157,15 @@ func (e *Entity) GetSpeed() int {
 		speed = 5 // Minimum speed is 5ft unless immobilized
 	}
 	return speed
+}
+
+// IsFlanking checks if two attackers are flanking a target.
+// Simplified logic for 1x1 creatures: attackers must be on opposite sides/corners.
+// Center line must pass through target.
+func IsFlanking(target, a, b *Entity) bool {
+	// If they are on opposite sides, vector A to Target == -(vector B to Target)
+	// For 1x1: a.X + b.X == 2*target.X and a.Y + b.Y == 2*target.Y
+	return (a.X + b.X == 2*target.X) && (a.Y + b.Y == 2*target.Y)
 }
 
 // ProcessAfflictions advances the affliction tracker by one time unit.

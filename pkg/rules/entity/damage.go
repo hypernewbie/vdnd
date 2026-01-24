@@ -5,16 +5,19 @@ import (
 	"uaa/vdnd/pkg/rules/condition"
 )
 
-// TakeDamage applies damage after immunities/resistances/weaknesses.
-// Returns actual damage taken.
 // ApplyDamage applies final damage to HP/TempHP.
-// Does NOT check immunities/weaknesses/resistances (pipeline does that).
-// Returns actual damage applied to HP (excluding temp HP absorption?).
-// Usually we just want to apply it.
 func (e *Entity) ApplyDamage(amount int) {
 	if amount <= 0 {
 		return
 	}
+
+	// PF2e Massive Damage rule: damage >= maxHP * 2 is instant death
+	if amount >= e.MaxHP*2 {
+		e.Kill("massive damage")
+		return
+	}
+
+	wasAtZero := e.CurrentHP <= 0
 
 	// 1. Temp HP absorbs first
 	if e.TempHP > 0 {
@@ -27,9 +30,17 @@ func (e *Entity) ApplyDamage(amount int) {
 	}
 
 	// 2. Apply to current HP
-	e.CurrentHP -= amount
-	if e.CurrentHP < 0 {
-		e.CurrentHP = 0
+	if amount > 0 {
+		e.CurrentHP -= amount
+		if e.CurrentHP <= 0 {
+			e.CurrentHP = 0
+		}
+	} else if wasAtZero {
+		// Taking 0 damage at 0 HP (from temp HP absorption) usually doesn't increase dying,
+		// but taking damage that IS absorbed might.
+		// Rule: "If you take damage while you already have the dying condition, 
+		// increase your dying value by 1 (or 2 if the damage was from a critical hit or critical failure on a save)."
+		// If amount was > 0, we already called CheckDying above.
 	}
 }
 
@@ -38,15 +49,22 @@ func (e *Entity) Heal(amount int) {
 	if e.IsDead() {
 		return
 	}
+	
+	wasAtZero := e.CurrentHP <= 0
+	hadDying := e.Conditions.Has(condition.Dying)
+
 	e.CurrentHP += amount
 	if e.CurrentHP > e.MaxHP {
 		e.CurrentHP = e.MaxHP
 	}
 
-	// If healed from 0, remove unconscious (from damage) and dying
-	if e.CurrentHP > 0 {
+	// If healed from 0 or while dying, remove unconscious (from damage) and dying, and increase wounded
+	if e.CurrentHP > 0 && (wasAtZero || hadDying) {
 		e.Conditions.Remove(condition.Dying)
 		e.Conditions.Remove(condition.Unconscious)
+		
+		woundedVal := e.Conditions.Value(condition.Wounded)
+		e.Conditions.Apply(condition.NewValuedCondition(condition.Wounded, woundedVal+1, "Healed from 0 HP"))
 	}
 }
 
@@ -87,7 +105,7 @@ func (e *Entity) CheckDying(wasCritical bool) {
 
 	if e.Conditions.Has(condition.Dying) {
 		current := e.Conditions.Value(condition.Dying)
-		e.Conditions.Apply(condition.NewValuedCondition(condition.Dying, current+increase, "damage at 0 HP"))
+		e.Conditions.Apply(condition.NewValuedCondition(condition.Dying, current+increase, "damage while dying"))
 	} else {
 		dyingValue := increase + e.Conditions.Value(condition.Wounded)
 		e.Conditions.Apply(condition.NewValuedCondition(condition.Dying, dyingValue, "reduced to 0 HP"))
