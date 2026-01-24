@@ -114,6 +114,12 @@ type Entity struct {
 
 	// Creature traits (for monsters)
 	Traits trait.TraitSet
+
+	// Minion Data (nil if not a minion)
+	Minion *MinionSettings
+
+	// Master Data (ids of owned minions)
+	MinionIDs []string
 }
 
 func NewEntity(id, name string, level int) *Entity {

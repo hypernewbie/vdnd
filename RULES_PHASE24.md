@@ -184,10 +184,11 @@ func (c *CommandMinionAction) Execute(actor, _ *entity.Entity, turn *TurnState) 
         return ability.ActionResult{Success: false, Description: err.Error()}
     }
 
-    // In a real game engine, we need to find the minion entity object.
+    // The caller (Encounter) needs to handle the logic of *finding* the minion and granting actions.
     // The Execute signature only gives us actor/target (which is nil here usually).
     // The caller (Encounter) needs to handle the logic of *finding* the minion and granting actions.
     // However, we can return a specific Result metadata that the Encounter interprets.
+    // ARCHITECTURAL NOTE: Using Meta map to communicate side-effects decouples Action logic from Encounter state.
     
     return ability.ActionResult{
         Success: true, 

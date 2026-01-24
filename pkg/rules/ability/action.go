@@ -22,4 +22,5 @@ type ActionResult struct {
 	Description string                        // Human-readable outcome
 	Damage      int                           // If damage was dealt
 	Conditions  []condition.ConditionInstance // Conditions applied
+	Meta        map[string]interface{}        // Custom metadata for complex actions
 }

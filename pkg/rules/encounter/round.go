@@ -3,6 +3,7 @@ package encounter
 import (
 	"errors"
 	"fmt"
+	"uaa/vdnd/pkg/rules/ability"
 	"uaa/vdnd/pkg/rules/combat"
 )
 
@@ -22,6 +23,12 @@ func (e *Encounter) StartTurn() (*combat.TurnState, error) {
 
 	// Create turn state
 	turn := combat.NewTurn(p.Entity)
+
+	// Minions start with 0 actions by default (unless independent)
+	if p.Type == ParticipantEntity && p.Entity.Minion != nil {
+		turn.ActionsRemaining = 0
+	}
+
 	p.TurnState = turn
 
 	// Process start-of-turn effects
@@ -61,9 +68,30 @@ func (e *Encounter) EndTurn() error {
 func (e *Encounter) EndRound() {
 	for _, p := range e.Participants {
 		p.HasActed = false
+		if p.Type == ParticipantEntity && p.Entity.Minion != nil {
+			p.Entity.Minion.IsCommanded = false
+		}
 	}
 	e.CurrentRound++
 	e.CurrentTurn = 0
+}
+
+// HandleActionResult processes special results like minion commanding
+func (e *Encounter) HandleActionResult(result ability.ActionResult) {
+	if grants, ok := result.Meta["GrantActions"]; ok {
+		actions := grants.(int)
+		targetID := result.Meta["TargetID"].(string)
+
+		// Find minion participant
+		minionP := e.GetParticipantByID(targetID)
+		if minionP != nil && minionP.TurnState != nil {
+			minionP.TurnState.ActionsRemaining += actions
+			// Mark as commanded for the round
+			if minionP.Type == ParticipantEntity && minionP.Entity.Minion != nil {
+				minionP.Entity.Minion.IsCommanded = true
+			}
+		}
+	}
 }
 
 // Delay causes current participant to delay their turn

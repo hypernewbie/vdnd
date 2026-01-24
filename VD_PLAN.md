@@ -402,6 +402,12 @@ var commands = map[string]CommandHandler{
 | `vd query distance <entity1> <entity2>` | | Distance category between entities |
 | `vd query cover <attacker> <target>` | | Cover status |
 
+### Minions
+| Command | Args | Description |
+|---------|------|-------------|
+| `vd minion sync <id>` | | Sync minion stats to master (e.g. after level up) |
+| `vd action command <actor>` | `--minion <id>` | Spend 1 action to grant minion 2 actions |
+
 ### Generic
 
 | Command | Args | Description |
