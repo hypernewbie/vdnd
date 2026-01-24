@@ -365,6 +365,10 @@ var commands = map[string]CommandHandler{
 | `vd action demoralize <actor> <target>` | | Intimidation vs Will |
 | `vd action hide <actor>` | | Stealth vs Perception |
 | `vd action seek <actor>` | `--target <id>` `--zone <name>` | Perception to find hidden |
+| `vd action interact <actor>` | `--object <desc>` | Spend 1 action to interact with object (LLM describes outcome) |
+| `vd action drop_prone <actor>` | | Free action, apply Prone condition |
+| `vd action stand <actor>` | | 1 action, remove Prone condition (has Move trait) |
+| `vd action take_cover <actor>` | | 1 action, +4 circumstance AC/Reflex (removed on movement) |
 
 ### Reactions
 
@@ -414,8 +418,32 @@ var commands = map[string]CommandHandler{
 |---------|------|-------------|
 | `vd roll <entity> <skill/save>` | `--dc N` `--vs <entity>.<skill>` | Generic skill/save check |
 | `vd check <entity> <skill>` | `--dc N` | Skill check (alias for roll) |
+| `vd check counteract <entity>` | `--level N` `--vs <effect_level>` `--dc N` | Counteract check (Dispel Magic, cure affliction, etc.) |
 | `vd status` | `<entity>` | Scene overview or detailed entity status |
 | `vd help` | `<command>` | Show help |
+
+### Movement Modes
+
+| Command | Args | Description |
+|---------|------|-------------|
+| `vd entity set <id> movemode <mode>` | | Set movement mode: ground, fly, swim, climb, burrow |
+| `vd query speed <entity>` | | Show effective speed for current movement mode |
+
+### Hero Points
+
+| Command | Args | Description |
+|---------|------|-------------|
+| `vd hero_point add <entity>` | | Grant a hero point (capped at 3) |
+| `vd hero_point spend <entity> reroll` | | Spend hero point to reroll last check (must use new result) |
+| `vd hero_point spend <entity> stabilise` | | Spend all hero points to stabilise at 0 HP when dying |
+| `vd hero_point status <entity>` | | Show current hero point count |
+
+### Knowledge & Medicine
+
+| Command | Args | Description |
+|---------|------|-------------|
+| `vd action recall_knowledge <actor>` | `--skill <skill>` `--target <id>` `--dc N` | Identify creature/object (LLM picks skill, interprets result) |
+| `vd action treat_wounds <healer> <patient>` | `--dc N` | 10-min activity, Medicine check to heal HP (applies 1hr immunity) |
 
 ---
 
