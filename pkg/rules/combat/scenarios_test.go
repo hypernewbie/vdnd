@@ -43,6 +43,7 @@ func equipWeapon(e *entity.Entity, name string, damage dice.DieRoll, traits ...t
 		DamageType: item.Slashing,
 		Traits:     traits,
 		IsMelee:    true,
+		Bulk:       1,
 	}
 	e.WieldedWeapons = append(e.WieldedWeapons, w)
 	return w

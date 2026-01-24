@@ -42,6 +42,7 @@ type Weapon struct {
 	Hands          int // 1 or 2
 	Traits         trait.TraitSet
 	RangeIncrement int // 0 for melee, feet for ranged/thrown
+	Bulk           int // Add this field (in whole Bulk units, 0 = Light)
 
 	// Parameterised Trait Fields (MVP approach)
 	ThrownRange   int          // From "thrown X"
@@ -58,7 +59,7 @@ type Weapon struct {
 // NewWeapon creates a weapon with basic stats
 func NewWeapon(id, name string, cat WeaponCategory, group WeaponGroup,
 	damage dice.DieRoll, damageType DamageType, hands int,
-	rangeIncrement int, traits ...trait.TraitID) Weapon {
+	rangeIncrement int, bulk int, traits ...trait.TraitID) Weapon {
 
 	w := Weapon{
 		ID:             id,
@@ -70,6 +71,7 @@ func NewWeapon(id, name string, cat WeaponCategory, group WeaponGroup,
 		Hands:          hands,
 		Traits:         traits,
 		RangeIncrement: rangeIncrement,
+		Bulk:           bulk,
 	}
 
 	// Simple heuristic for IsMelee/IsRanged

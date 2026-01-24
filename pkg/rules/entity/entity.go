@@ -94,6 +94,7 @@ type Entity struct {
 	WornShield *item.Shield
 
 	WieldedWeapons []*item.Weapon // Up to 2 (or more for multi-limbed)
+	Inventory      *Inventory
 
 	// Runtime State
 	Conditions          *condition.ConditionTracker
@@ -135,6 +136,7 @@ func NewEntity(id, name string, level int) *Entity {
 		Resistances:         make(map[string]ResistanceEntry),
 		Weaknesses:          make(map[string]int),
 		WieldedWeapons:      make([]*item.Weapon, 0),
+		Inventory:           NewInventory(),
 	}
 }
 
@@ -277,6 +279,17 @@ func (e *Entity) Clone() *Entity {
 	if e.WornShield != nil {
 		shieldCopy := *e.WornShield
 		clone.WornShield = &shieldCopy
+	}
+
+	if e.Inventory != nil {
+		clone.Inventory = &Inventory{
+			Items:   make([]InventoryItem, len(e.Inventory.Items)),
+			CoinsCP: e.Inventory.CoinsCP,
+			CoinsSP: e.Inventory.CoinsSP,
+			CoinsGP: e.Inventory.CoinsGP,
+			CoinsPP: e.Inventory.CoinsPP,
+		}
+		copy(clone.Inventory.Items, e.Inventory.Items)
 	}
 
 	return &clone

@@ -48,7 +48,7 @@ func (t *ConditionTracker) GetACModifiers(attacker *ConditionTracker, attackerID
 	mods := t.GetModifiers()
 
 	isFlatFooted := t.IsFlatFooted() || t.HasRelative(FlatFooted, attackerID)
-	
+
 	// Attacker being hidden/undetected makes target flat-footed
 	if !isFlatFooted && attacker != nil {
 		if attacker.HasRelative(Hidden, t.GetID()) || attacker.HasRelative(Undetected, t.GetID()) {
@@ -64,9 +64,14 @@ func (t *ConditionTracker) GetACModifiers(attacker *ConditionTracker, attackerID
 		})
 	}
 
-	if t.Has(Clumsy) {
+	clumsyVal := t.Value(Clumsy)
+	if encClumsy := t.GetEncumbranceClumsy(); encClumsy > clumsyVal {
+		clumsyVal = encClumsy
+	}
+
+	if clumsyVal > 0 {
 		mods = append(mods, check.Modifier{
-			Value:  -t.Value(Clumsy),
+			Value:  -clumsyVal,
 			Type:   check.BonusStatus,
 			Source: "Clumsy",
 		})
@@ -103,9 +108,14 @@ func (t *ConditionTracker) GetAttackModifiers(isMelee bool) []check.Modifier {
 		})
 	}
 
-	if t.Has(Clumsy) && !isMelee {
+	clumsyVal := t.Value(Clumsy)
+	if encClumsy := t.GetEncumbranceClumsy(); encClumsy > clumsyVal {
+		clumsyVal = encClumsy
+	}
+
+	if clumsyVal > 0 && !isMelee {
 		mods = append(mods, check.Modifier{
-			Value:  -t.Value(Clumsy),
+			Value:  -clumsyVal,
 			Type:   check.BonusStatus,
 			Source: "Clumsy",
 		})
@@ -134,9 +144,14 @@ func (t *ConditionTracker) GetSaveModifiers(saveType string) []check.Modifier {
 		})
 	}
 
-	if t.Has(Clumsy) && saveType == "Reflex" {
+	clumsyVal := t.Value(Clumsy)
+	if encClumsy := t.GetEncumbranceClumsy(); encClumsy > clumsyVal {
+		clumsyVal = encClumsy
+	}
+
+	if clumsyVal > 0 && saveType == "Reflex" {
 		mods = append(mods, check.Modifier{
-			Value:  -t.Value(Clumsy),
+			Value:  -clumsyVal,
 			Type:   check.BonusStatus,
 			Source: "Clumsy",
 		})
@@ -159,6 +174,30 @@ func (t *ConditionTracker) GetSaveModifiers(saveType string) []check.Modifier {
 	}
 
 	return mods
+}
+
+// GetSpeedPenalty returns speed penalty from conditions
+func (t *ConditionTracker) GetSpeedPenalty() int {
+	penalty := 0
+
+	if t.Has(Encumbered) {
+		penalty -= 10
+	}
+
+	// Immobilized = speed 0
+	if t.Has(Immobilized) {
+		return -9999 // Effectively 0 speed
+	}
+
+	return penalty
+}
+
+// GetEncumbranceClumsy returns clumsy value from encumbrance
+func (t *ConditionTracker) GetEncumbranceClumsy() int {
+	if t.Has(Encumbered) {
+		return 1
+	}
+	return 0
 }
 
 // GetActionsLost returns how many actions are lost (from slowed/stunned)

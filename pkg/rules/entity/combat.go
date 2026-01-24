@@ -156,11 +156,22 @@ func (e *Entity) GetWeakness(damageType string) int {
 
 func (e *Entity) GetSpeed() int {
 	speed := e.BaseSpeed
+
+	// Armour speed penalty (if STR too low)
 	if e.WornArmor != nil {
-		speed += e.WornArmor.EffectiveSpeedPenalty(e.Abilities.Strength)
+		speed += e.WornArmor.EffectiveSpeedPenalty(e.Abilities.Get(ability.Strength))
 	}
-	if speed < 5 {
-		speed = 5 // Minimum speed is 5ft unless immobilized
+
+	// Shield speed penalty (tower shield)
+	if e.WornShield != nil {
+		speed += e.WornShield.SpeedPenalty
+	}
+
+	// Condition penalties
+	speed += e.Conditions.GetSpeedPenalty()
+
+	if speed < 0 {
+		speed = 0
 	}
 	return speed
 }

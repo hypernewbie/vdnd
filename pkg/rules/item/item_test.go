@@ -41,7 +41,7 @@ func TestWeaponTraits(t *testing.T) {
 	}
 
 	// Test reach trait
-	glaive := NewWeapon("glaive", "Glaive", CategoryMartial, GroupPolearm, Longsword.Damage, Slashing, 2, 0, trait.TraitReach)
+	glaive := NewWeapon("glaive", "Glaive", CategoryMartial, GroupPolearm, Longsword.Damage, Slashing, 2, 0, 2, trait.TraitReach)
 	if glaive.GetReach() != 10 {
 		t.Errorf("Glaive reach should be 10, got %d", glaive.GetReach())
 	}
