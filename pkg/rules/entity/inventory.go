@@ -87,7 +87,20 @@ func (inv *Inventory) TotalBulk() BulkValue {
 		if item.ParentID == "" {
 			roots = append(roots, item)
 		} else {
-			children[item.ParentID] = append(children[item.ParentID], item)
+			// Check if parent actually exists
+			parentExists := false
+			for _, p := range inv.Items {
+				if p.ItemID == item.ParentID {
+					parentExists = true
+					break
+				}
+			}
+			if parentExists {
+				children[item.ParentID] = append(children[item.ParentID], item)
+			} else {
+				// Orphaned item - treat as root
+				roots = append(roots, item)
+			}
 		}
 	}
 

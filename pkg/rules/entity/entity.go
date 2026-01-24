@@ -232,7 +232,12 @@ func (e *Entity) Clone() *Entity {
 	}
 
 	clone.WieldedWeapons = make([]*item.Weapon, len(e.WieldedWeapons))
-	copy(clone.WieldedWeapons, e.WieldedWeapons)
+	for i, w := range e.WieldedWeapons {
+		if w != nil {
+			wCopy := *w
+			clone.WieldedWeapons[i] = &wCopy
+		}
+	}
 
 	clone.Immunities = make([]string, len(e.Immunities))
 	copy(clone.Immunities, e.Immunities)

@@ -15,11 +15,12 @@ const (
 )
 
 type CheckResult struct {
-	NaturalRoll int
-	Modifiers   int // Total from CalculateTotal
-	Total       int // NaturalRoll + Modifiers
-	DC          int
-	Degree      DegreeOfSuccess
+	NaturalRoll    int
+	Modifiers      int // Total from CalculateTotal
+	Total          int // NaturalRoll + Modifiers
+	DC             int
+	Degree         DegreeOfSuccess
+	DebugModifiers []Modifier // Raw modifiers for testing/debugging
 }
 
 // PerformCheck rolls a d20, applies modifiers, and determines success.
@@ -36,11 +37,12 @@ func PerformCheckWithRoll(naturalRoll int, baseModifier int, modifiers []Modifie
 	degree := DetermineDegree(naturalRoll, total, dc)
 
 	return CheckResult{
-		NaturalRoll: naturalRoll,
-		Modifiers:   totalModifiers,
-		Total:       total,
-		DC:          dc,
-		Degree:      degree,
+		NaturalRoll:    naturalRoll,
+		Modifiers:      totalModifiers,
+		Total:          total,
+		DC:             dc,
+		Degree:         degree,
+		DebugModifiers: modifiers,
 	}
 }
 
