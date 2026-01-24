@@ -65,6 +65,12 @@ const (
 	TraitTrap          TraitID = "trap"
 	TraitHaunt         TraitID = "haunt"
 	TraitEnvironmental TraitID = "environmental"
+
+	// Alignment traits
+	TraitEvil    TraitID = "evil"
+	TraitGood    TraitID = "good"
+	TraitChaotic TraitID = "chaotic"
+	TraitLawful  TraitID = "lawful"
 )
 
 type TraitCategory int
