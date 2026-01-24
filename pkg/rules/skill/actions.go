@@ -6,6 +6,7 @@ import (
 	"uaa/vdnd/pkg/rules/condition"
 	"uaa/vdnd/pkg/rules/dice"
 	"uaa/vdnd/pkg/rules/entity"
+	"uaa/vdnd/pkg/rules/item"
 )
 
 // PerformSkillCheck makes a skill check
@@ -563,3 +564,136 @@ func Shove(actor, target *entity.Entity, modifiers []check.Modifier, naturalRoll
 	}
 	return res
 }
+
+// --- Crafting ---
+
+// EarnIncomeResult contains the outcome of an Earn Income check
+type EarnIncomeResult struct {
+	EarnedCP   int // Copper pieces earned
+	TaskLevel  int // Level of task attempted
+	DaysWorked int // Always 1 per check
+}
+
+// EarnIncome performs a skill check to earn money during downtime
+// src: rules/compendium/skills.md "Earn Income"
+// Can use: Crafting, Lore, Performance
+func EarnIncome(actor *entity.Entity, skillID ability.SkillID, taskLevel int, naturalRoll int) (EarnIncomeResult, check.CheckResult) {
+	result := EarnIncomeResult{TaskLevel: taskLevel, DaysWorked: 1}
+
+	// Must be trained in the skill
+	prof := ability.Untrained
+	if p, ok := actor.SkillProficiencies[skillID]; ok {
+		prof = p
+	}
+	if prof < ability.Trained {
+		return result, check.CheckResult{Degree: check.Failure}
+	}
+
+	// Task level cannot exceed your level
+	if taskLevel > actor.Level {
+		taskLevel = actor.Level
+	}
+
+	dc := LevelBasedDC(taskLevel)
+	var res check.CheckResult
+	if naturalRoll > 0 {
+		res = PerformSkillCheckWithRoll(actor, skillID, dc, naturalRoll)
+	} else {
+		res = PerformSkillCheck(actor, skillID, dc)
+	}
+
+	switch res.Degree {
+	case check.CriticalSuccess:
+		// Earn as if task level was 1 higher
+		result.EarnedCP = GetEarnIncomeAmount(taskLevel+1, prof)
+	case check.Success:
+		result.EarnedCP = GetEarnIncomeAmount(taskLevel, prof)
+	case check.Failure:
+		// Earn for a task 1 level lower (minimum 0)
+		fallbackLevel := taskLevel - 1
+		if fallbackLevel < 0 {
+			fallbackLevel = 0
+		}
+		result.EarnedCP = GetEarnIncomeAmount(fallbackLevel, prof)
+	case check.CriticalFailure:
+		// No earnings, may have wasted resources
+		result.EarnedCP = 0
+	}
+
+	return result, res
+}
+
+// RepairResult contains the outcome of a Repair check
+type RepairResult struct {
+	Repaired     bool
+	HPRestored   int // For items with HP (shields, etc.)
+	MaterialCost int // Copper spent on materials (if any)
+}
+
+// Repair fixes a damaged item (10 minute activity)
+// src: rules/compendium/skills.md "Repair"
+func Repair(actor *entity.Entity, itemLevel int, naturalRoll int) (RepairResult, check.CheckResult) {
+	result := RepairResult{}
+
+	// Must be trained in Crafting
+	prof := ability.Untrained
+	if p, ok := actor.SkillProficiencies[ability.SkillCrafting]; ok {
+		prof = p
+	}
+	if prof < ability.Trained {
+		return result, check.CheckResult{Degree: check.Failure}
+	}
+
+	dc := LevelBasedDC(itemLevel)
+	var res check.CheckResult
+	if naturalRoll > 0 {
+		res = PerformSkillCheckWithRoll(actor, ability.SkillCrafting, dc, naturalRoll)
+	} else {
+		res = PerformSkillCheck(actor, ability.SkillCrafting, dc)
+	}
+
+	switch res.Degree {
+	case check.CriticalSuccess:
+		result.Repaired = true
+		// 10 HP + 10 per rank above Trained
+		rankBonus := int(prof - ability.Trained)
+		result.HPRestored = 10 + (rankBonus * 10)
+	case check.Success:
+		result.Repaired = true
+		// 5 HP + 5 per rank above Trained
+		rankBonus := int(prof - ability.Trained)
+		result.HPRestored = 5 + (rankBonus * 5)
+	case check.Failure:
+		result.Repaired = false
+	case check.CriticalFailure:
+		result.Repaired = false
+	}
+
+	return result, res
+}
+
+// RepairShield specifically repairs a shield
+func RepairShield(actor *entity.Entity, s *item.Shield, naturalRoll int) (RepairResult, check.CheckResult) {
+	if s == nil {
+		return RepairResult{}, check.CheckResult{Degree: check.Failure}
+	}
+
+	// Use item level 0 for basic shields (could be parameterised)
+	itemLevel := 0 // Or derive from shield type
+
+	result, res := Repair(actor, itemLevel, naturalRoll)
+
+	if result.Repaired {
+		s.CurrentHP += result.HPRestored
+		if s.CurrentHP > s.MaxHP {
+			s.CurrentHP = s.MaxHP
+		}
+	} else if res.Degree == check.CriticalFailure {
+		// Deal 2d6 damage to shield
+		damage := dice.DieRoll{Count: 2, Sides: 6}.Roll()
+		s.TakeDamage(damage)
+	}
+
+	return result, res
+}
+
