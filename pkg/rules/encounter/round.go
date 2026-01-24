@@ -17,6 +17,9 @@ func (e *Encounter) StartTurn() (*combat.TurnState, error) {
 		return nil, fmt.Errorf("participant %s is delaying", p.Entity.ID)
 	}
 
+	// Reset shield state from previous turn
+	combat.ResetShieldState(p.Entity)
+
 	// Create turn state
 	turn := combat.NewTurn(p.Entity)
 	p.TurnState = turn

@@ -1072,3 +1072,7 @@ go test ./... -v -cover
 - **JSON output:** Add `--format json` if programmatic parsing needed
 - **Verbose mode:** Add `-v` for debug output (dice breakdown, modifier sources)
 - **Undo:** Command log enables potential undo/replay functionality
+
+## Implementation Notes
+
+- **Reaction Flow**: Ensure a CLI command exists to skip reactions (e.g. `vd react skip`) to prevent the game loop from getting stuck on `PENDING_REACTION`. The CLI must allow users to explicitly decline a reaction opportunity so the damage pipeline can proceed.

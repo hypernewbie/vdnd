@@ -46,6 +46,13 @@ var (
 	PlateArmor   = NewArmor("plate", "Full Plate", HeavyArmor, 6, 0, -3, -10, 18)
 )
 
+var StandardShields = map[string]*Shield{
+	"buckler":       NewShield("buckler", "Buckler", 1, 3, 6, 1),
+	"wooden_shield": NewShield("wooden_shield", "Wooden Shield", 2, 3, 12, 1),
+	"steel_shield":  NewShield("steel_shield", "Steel Shield", 2, 5, 20, 1),
+	"tower_shield":  NewShield("tower_shield", "Tower Shield", 2, 5, 20, 4),
+}
+
 func init() {
 	// Initialize specialized fields
 	Dagger.ThrownRange = 10
@@ -55,6 +62,9 @@ func init() {
 
 	Rapier.DeadlyDie = dice.DieRoll{Count: 1, Sides: 8, Modifier: 0}
 	Shortbow.DeadlyDie = dice.DieRoll{Count: 1, Sides: 10, Modifier: 0}
+
+	// Tower shield has special trait
+	StandardShields["tower_shield"].SpeedPenalty = -5
 }
 
 var weaponRegistry = map[string]Weapon{
@@ -85,4 +95,15 @@ func GetWeapon(id string) (Weapon, bool) {
 func GetArmor(id string) (Armor, bool) {
 	a, ok := armorRegistry[id]
 	return a, ok
+}
+
+// GetShield returns shield by ID
+func GetShield(id string) (*Shield, bool) {
+	s, ok := StandardShields[id]
+	if !ok {
+		return nil, false
+	}
+	// Return a copy so state doesn't leak between entities
+	copy := *s
+	return &copy, true
 }

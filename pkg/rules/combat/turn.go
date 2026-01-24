@@ -110,3 +110,10 @@ func (t *TurnState) CanAct() bool {
 	}
 	return true
 }
+
+// ResetShieldState resets the shield raised status at the start of turn
+func ResetShieldState(actor *entity.Entity) {
+	if actor.WornShield != nil {
+		actor.WornShield.IsRaised = false
+	}
+}

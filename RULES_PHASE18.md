@@ -227,6 +227,7 @@ Add to `TurnState.EndTurn()` or create hook:
 // ResetShield should be called at the start of the entity's next turn
 func ResetShieldState(actor *entity.Entity) {
     if actor.WornShield != nil {
+        // Critical: Must run at start of turn, not end, to maintain AC bonus between turns.
         actor.WornShield.IsRaised = false
     }
 }

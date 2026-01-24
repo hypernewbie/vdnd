@@ -90,7 +90,8 @@ type Entity struct {
 	SpellcastingAbility ability.Ability
 
 	// Equipment
-	WornArmor *item.Armor
+	WornArmor  *item.Armor
+	WornShield *item.Shield
 
 	WieldedWeapons []*item.Weapon // Up to 2 (or more for multi-limbed)
 
@@ -271,6 +272,11 @@ func (e *Entity) Clone() *Entity {
 	clone.TemporaryImmunities = make(map[string]int)
 	for k, v := range e.TemporaryImmunities {
 		clone.TemporaryImmunities[k] = v
+	}
+
+	if e.WornShield != nil {
+		shieldCopy := *e.WornShield
+		clone.WornShield = &shieldCopy
 	}
 
 	return &clone

@@ -26,34 +26,23 @@ func ProcessDamage(target *entity.Entity, damage DamageInstance, isCritical bool
 	}
 
 	// 1. Determine base damage (already in damage.Amount)
-	amount := damage.Amount
-
 	// 2. Critical doubling (already handled in DamageRoll.RollCritical usually)
-	// If it wasn't doubled yet, we might want to double it here,
-	// but the standard is to pass in the rolled instance.
 
-	// 3. Check immunity
-	if CheckImmunity(target, string(damage.Type), damage.IsPrecision, damage.Traits) {
-		result.WasImmune = true
+	// Calculate raw damage (immunity, weakness, resistance)
+	rawResult := CalculateRawDamage(target, damage)
+	
+	result.WasImmune = rawResult.WasImmune
+	result.WeaknessApplied = rawResult.WeaknessApplied
+	result.ResistanceApplied = rawResult.ResistanceApplied
+	result.FinalDamage = rawResult.FinalDamage
+
+	if result.WasImmune {
 		result.FinalDamage = 0
 		result.CurrentHP = target.CurrentHP
 		return result
 	}
 
-	// 4. Apply weakness
-	weakness := CalculateWeakness(target, string(damage.Type), damage.Traits)
-	amount += weakness
-	result.WeaknessApplied = weakness
-
-	// 5. Apply resistance
-	resistance := CalculateResistance(target, string(damage.Type), damage.Traits)
-	amount -= resistance
-	if amount < 0 {
-		amount = 0
-	}
-	result.ResistanceApplied = resistance
-
-	result.FinalDamage = amount
+	amount := result.FinalDamage
 
 	// 6. Apply to HP
 	target.ApplyDamage(amount)
@@ -73,6 +62,43 @@ func ProcessDamage(target *entity.Entity, damage DamageInstance, isCritical bool
 	if target.IsDead() {
 		result.Died = true
 	}
+
+	return result
+}
+
+// RawDamageResult contains the damage calculation before application
+type RawDamageResult struct {
+	FinalDamage       int
+	WasImmune         bool
+	WeaknessApplied   int
+	ResistanceApplied int
+}
+
+// CalculateRawDamage calculates damage after immunity, weakness, and resistance
+func CalculateRawDamage(target *entity.Entity, damage DamageInstance) RawDamageResult {
+	result := RawDamageResult{}
+	amount := damage.Amount
+
+	// 3. Check immunity
+	if CheckImmunity(target, string(damage.Type), damage.IsPrecision, damage.Traits) {
+		result.WasImmune = true
+		result.FinalDamage = 0
+		return result
+	}
+
+	// 4. Apply weakness
+	weakness := CalculateWeakness(target, string(damage.Type), damage.Traits)
+	amount += weakness
+	result.WeaknessApplied = weakness
+
+	// 5. Apply resistance
+	resistance := CalculateResistance(target, string(damage.Type), damage.Traits)
+	amount -= resistance
+	if amount < 0 {
+		amount = 0
+	}
+	result.ResistanceApplied = resistance
+	result.FinalDamage = amount
 
 	return result
 }

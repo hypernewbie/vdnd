@@ -28,6 +28,12 @@ func (e *Entity) GetAC(attacker *Entity) int {
 		armorBonus = e.WornArmor.ACBonus
 	}
 
+	// Circumstance bonus from raised shield
+	shieldBonus := 0
+	if e.WornShield != nil && e.WornShield.IsRaised && !e.WornShield.IsBroken() {
+		shieldBonus = e.WornShield.ACBonus
+	}
+
 	// Condition modifiers (flat-footed, clumsy, etc.)
 	var attackerID string
 	var attackerConds *condition.ConditionTracker
@@ -38,7 +44,7 @@ func (e *Entity) GetAC(attacker *Entity) int {
 	conditionMods := e.Conditions.GetACModifiers(attackerConds, attackerID)
 	conditionTotal := check.CalculateTotal(conditionMods)
 
-	return base + dexMod + profBonus + armorBonus + conditionTotal
+	return base + dexMod + profBonus + armorBonus + shieldBonus + conditionTotal
 }
 
 func (e *Entity) getArmorProficiency() ability.ProficiencyRank {
