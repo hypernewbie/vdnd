@@ -122,8 +122,8 @@ func init() {
 		}
 
 		h.Routine = NewRoutine(2).
-			AddAttack("Blade Slash", 1, 15, dice.DieRoll{Count: 2, Sides: 8, Modifier: 5}, item.Slashing).
-			AddAttack("Blade Slash", 1, 15, dice.DieRoll{Count: 2, Sides: 8, Modifier: 5}, item.Slashing)
+			AddAttack("Blade Slash", 1, 15, dice.DieRoll{Count: 2, Sides: 8, Modifier: 5}, item.Slashing, 1).
+			AddAttack("Blade Slash", 1, 15, dice.DieRoll{Count: 2, Sides: 8, Modifier: 5}, item.Slashing, 1)
 
 		return h
 	}
@@ -147,12 +147,12 @@ func init() {
 		}
 
 		h.Routine = NewRoutine(3).
-			AddAttack("Poison Dart", 1, 17, dice.DieRoll{Count: 1, Sides: 6, Modifier: 3}, item.Piercing).
+			AddAttack("Poison Dart", 1, 17, dice.DieRoll{Count: 1, Sides: 6, Modifier: 3}, item.Piercing, 1).
 			AddSaveEffect("Poison", 0, ability.SaveFortitude, 22,
 				"No effect",
 				"Sickened 1 and 1d6 poison damage",
 				"Sickened 2 and 2d6 poison damage").
-			AddAttack("Poison Dart", 1, 17, dice.DieRoll{Count: 1, Sides: 6, Modifier: 3}, item.Piercing)
+			AddAttack("Poison Dart", 1, 17, dice.DieRoll{Count: 1, Sides: 6, Modifier: 3}, item.Piercing, 1)
 
 		return h
 	}

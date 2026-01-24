@@ -22,7 +22,8 @@ const (
 type RoutineAction struct {
 	Name       string
 	Type       RoutineActionType
-	ActionCost int // 1, 2, or 3 actions
+	ActionCost int             // 1, 2, or 3 actions
+	TargetCount int            // How many targets it can affect (1 for most attacks, 0/all for AoE)
 
 	// For attacks
 	AttackBonus int
@@ -61,7 +62,7 @@ func NewRoutine(totalActions int) *HazardRoutine {
 }
 
 // AddAttack adds an attack action to the routine
-func (r *HazardRoutine) AddAttack(name string, cost int, attackBonus int, damage dice.DieRoll, damageType item.DamageType) *HazardRoutine {
+func (r *HazardRoutine) AddAttack(name string, cost int, attackBonus int, damage dice.DieRoll, damageType item.DamageType, targetCount int) *HazardRoutine {
 	r.Actions = append(r.Actions, RoutineAction{
 		Name:        name,
 		Type:        RoutineAttack,
@@ -69,6 +70,7 @@ func (r *HazardRoutine) AddAttack(name string, cost int, attackBonus int, damage
 		AttackBonus: attackBonus,
 		DamageDice:  damage,
 		DamageType:  damageType,
+		TargetCount: targetCount,
 	})
 	return r
 }

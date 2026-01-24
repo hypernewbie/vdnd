@@ -2,6 +2,8 @@ package hazard
 
 import (
 	"fmt"
+	"math/rand"
+	"time"
 	"uaa/vdnd/pkg/rules/ability"
 	"uaa/vdnd/pkg/rules/check"
 	"uaa/vdnd/pkg/rules/damage"
@@ -116,7 +118,24 @@ func (h *Hazard) executeAttack(action RoutineAction, targets []*entity.Entity) A
 		Targets:    make([]TargetResult, 0),
 	}
 
-	for _, target := range targets {
+	if len(targets) == 0 {
+		return result
+	}
+
+	// Select subset of targets if TargetCount > 0
+	affectedTargets := targets
+	if action.TargetCount > 0 && len(targets) > action.TargetCount {
+		// Randomly shuffle and take the first N
+		r := rand.New(rand.NewSource(time.Now().UnixNano()))
+		shuffled := make([]*entity.Entity, len(targets))
+		copy(shuffled, targets)
+		r.Shuffle(len(shuffled), func(i, j int) {
+			shuffled[i], shuffled[j] = shuffled[j], shuffled[i]
+		})
+		affectedTargets = shuffled[:action.TargetCount]
+	}
+
+	for _, target := range affectedTargets {
 		tr := TargetResult{
 			EntityID:   target.ID,
 			EntityName: target.Name,
@@ -222,13 +241,12 @@ func (h *Hazard) getParticipantSaveModifier(e *entity.Entity, saveType ability.S
 		return e.GetReflex()
 	case ability.SaveWill:
 		return e.GetWill()
-		default:
-			return 0
-		}
+	default:
+		return 0
 	}
-	
-	// Reset prepares the hazard to trigger again
-	func (h *Hazard) Reset() {
-		h.IsTriggered = false
-	}
-	
+}
+
+// Reset prepares the hazard to trigger again
+func (h *Hazard) Reset() {
+	h.IsTriggered = false
+}

@@ -94,7 +94,7 @@ func TestHazardPositionFiltering(t *testing.T) {
 	// Only inRoom should be affected
 
 	h.Routine = hazard.NewRoutine(1).
-		AddAttack("Test Attack", 1, 10, dice.DieRoll{Count: 1, Sides: 4}, item.Bludgeoning)
+		AddAttack("Test Attack", 1, 10, dice.DieRoll{Count: 1, Sides: 4}, item.Bludgeoning, 1)
 
 	result := h.TakeTurn(targets)
 
