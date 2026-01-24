@@ -24,7 +24,15 @@ type StrikeRecord struct {
 }
 
 func NewTurn(e *entity.Entity) *TurnState {
-	actions := 3
+	// PF2e base is 3, but minions get 0 unless commanded.
+	// We'll use 3 as default but allow callers to adjust if needed, 
+	// or better: let's keep NewTurn as 3 and handle minion logic in Encounter.
+	// Actually, let's add NewTurnWithActions for precision.
+	return NewTurnWithActions(e, 3)
+}
+
+func NewTurnWithActions(e *entity.Entity, base int) *TurnState {
+	actions := base
 
 	// Quickened grants +1 action
 	if e.Conditions.Has(condition.Quickened) {

@@ -62,10 +62,16 @@ func (p *Participant) IsActive() bool {
 
 // NewEntityParticipant creates a participant from an entity
 func NewEntityParticipant(e *entity.Entity) *Participant {
+	baseActions := 3
+	if e.Minion != nil {
+		baseActions = 0
+	}
+	ts := combat.NewTurnWithActions(e, baseActions)
+
 	return &Participant{
 		Type:      ParticipantEntity,
 		Entity:    e,
-		TurnState: combat.NewTurn(e),
+		TurnState: ts,
 	}
 }
 

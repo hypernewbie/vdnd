@@ -115,6 +115,10 @@ func CastRitual(attempt *RitualCastAttempt, primaryRoll int, secondaryRolls []in
 			Success:     attempt.FinalDegree >= check.Success,
 			Description: fmt.Sprintf("Ritual completed with %v", attempt.FinalDegree),
 		}
+		// Default refund logic if no custom effect
+		if attempt.FinalDegree == check.Failure {
+			outcome.RefundMaterials = true
+		}
 	}
 
 	if outcome.RefundMaterials {

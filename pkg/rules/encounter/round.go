@@ -21,12 +21,30 @@ func (e *Encounter) StartTurn() (*combat.TurnState, error) {
 	// Reset shield state from previous turn
 	combat.ResetShieldState(p.Entity)
 
-	// Create turn state
-	turn := combat.NewTurn(p.Entity)
-
-	// Minions start with 0 actions by default (unless independent)
-	if p.Type == ParticipantEntity && p.Entity.Minion != nil {
-		turn.ActionsRemaining = 0
+	// Create or reuse turn state
+	var turn *combat.TurnState
+	if p.TurnState != nil {
+		turn = p.TurnState
+		// Start-of-turn resets
+		base := 3
+		if p.Type == ParticipantEntity && p.Entity.Minion != nil {
+			base = 0
+		}
+		
+		// If they already have actions (from command), we might want to ADD or PRESERVE.
+		// Rules: "A minion can use 2 actions on your turn when you command it."
+		// In our model, we grant them during Master's turn. 
+		// If Minion turn follows, it should PRESERVE those actions.
+		if turn.ActionsRemaining == 0 {
+			newTS := combat.NewTurnWithActions(p.Entity, base)
+			turn.ActionsRemaining = newTS.ActionsRemaining
+		}
+	} else {
+		base := 3
+		if p.Type == ParticipantEntity && p.Entity.Minion != nil {
+			base = 0
+		}
+		turn = combat.NewTurnWithActions(p.Entity, base)
 	}
 
 	p.TurnState = turn
@@ -44,11 +62,10 @@ func (e *Encounter) EndTurn() error {
 		return errors.New("no current participant")
 	}
 
-	// Process end-of-turn effects
-	p.Entity.Conditions.EndTurn(p.Entity)
-
-	// Persistent damage etc would go here
-	// e.ProcessPersistentDamage(p.Entity)
+	// Process end-of-turn effects (Entities only)
+	if p.Type == ParticipantEntity && p.Entity != nil {
+		p.Entity.Conditions.EndTurn(p.Entity)
+	}
 
 	p.HasActed = true
 	p.TurnState = nil
