@@ -18,7 +18,12 @@ const (
 // RollInitiative rolls initiative for all participants using a default type
 func (e *Encounter) RollInitiative(initType InitiativeType) {
 	for _, p := range e.Participants {
-		p.Initiative = RollInitiativeFor(p.Entity, initType)
+		if p.Type == ParticipantEntity {
+			p.Initiative = RollInitiativeFor(p.Entity, initType)
+		} else if p.Type == ParticipantHazard && p.Hazard != nil {
+			roll := dice.DieRoll{Count: 1, Sides: 20}.Roll()
+			p.Initiative = roll + p.Hazard.Initiative
+		}
 	}
 	e.State = StateRollingInitiative
 }
@@ -45,8 +50,7 @@ func (e *Encounter) SortByInitiative() {
 		if e.Participants[i].Initiative != e.Participants[j].Initiative {
 			return e.Participants[i].Initiative > e.Participants[j].Initiative
 		}
-		// Tie-breaker: higher modifier goes first
-		// We'll use perception modifier as a default tie-breaker if same initiative
+		// Tie-breaker
 		return ResolveTie(e.Participants[i], e.Participants[j]) < 0
 	})
 }
@@ -54,8 +58,19 @@ func (e *Encounter) SortByInitiative() {
 // ResolveTie determines order when two participants have same initiative
 // Returns -1 if a first, 1 if b first
 func ResolveTie(a, b *Participant) int {
-	modA := a.Entity.GetPerception()
-	modB := b.Entity.GetPerception()
+	modA := 0
+	if a.Type == ParticipantEntity && a.Entity != nil {
+		modA = a.Entity.GetPerception()
+	} else if a.Type == ParticipantHazard && a.Hazard != nil {
+		modA = a.Hazard.Initiative
+	}
+
+	modB := 0
+	if b.Type == ParticipantEntity && b.Entity != nil {
+		modB = b.Entity.GetPerception()
+	} else if b.Type == ParticipantHazard && b.Hazard != nil {
+		modB = b.Hazard.Initiative
+	}
 
 	if modA > modB {
 		return -1
@@ -65,7 +80,7 @@ func ResolveTie(a, b *Participant) int {
 	}
 
 	// Still tied? Use ID for determinism
-	if a.Entity.ID < b.Entity.ID {
+	if a.GetID() < b.GetID() {
 		return -1
 	}
 	return 1

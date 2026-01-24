@@ -55,3 +55,11 @@ func (t TriggerCondition) Matches(event ability.Event, hazardPosition string) bo
 	}
 	return false
 }
+
+// TriggerResult describes the outcome of a hazard triggering
+type TriggerResult struct {
+	HazardID   string
+	HazardName string
+	Triggered  bool
+	Results    []HazardResult
+}

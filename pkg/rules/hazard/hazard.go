@@ -67,6 +67,9 @@ type Hazard struct {
 	IsDisabled  bool
 	CurrentHP   int
 	Position    string
+
+	// Routine for complex hazards
+	Routine *HazardRoutine
 }
 
 func NewHazard(id, name string, level int) *Hazard {

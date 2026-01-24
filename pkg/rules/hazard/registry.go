@@ -94,9 +94,138 @@ var (
 )
 
 var hazards = map[string]*Hazard{
-	"pit-trap":          &PitTrap,
-	"poison-dart-trap":  &PoisonDartTrap,
-	"blade-barrier":     &BladeBarrier,
+	"pit-trap":         &PitTrap,
+	"poison-dart-trap": &PoisonDartTrap,
+	"blade-barrier":    &BladeBarrier,
+}
+
+// StandardComplexHazards contains predefined complex hazards
+var StandardComplexHazards = map[string]func() *Hazard{}
+
+func init() {
+	// Spinning Blade Pillar - Level 4 Complex Trap
+	// src: rules/rules/gm/hazards/spinning-blade-pillar.md
+	StandardComplexHazards["spinning_blade_pillar"] = func() *Hazard {
+		h := NewHazard("spinning_blade_pillar", "Spinning Blade Pillar", 4)
+		h.Type = HazardTrap
+		h.Complexity = ComplexityComplex
+		h.StealthDC = 23
+		h.AC = 21
+		h.Fortitude = 14
+		h.Reflex = 10
+		h.HP = 50
+		h.Hardness = 10
+		h.Initiative = 8
+
+		h.DisableOptions = []DisableOption{
+			{Skill: ability.SkillThievery, DC: 21, Description: "Jam the mechanism"},
+		}
+
+		h.Routine = NewRoutine(2).
+			AddAttack("Blade Slash", 1, 15, dice.DieRoll{Count: 2, Sides: 8, Modifier: 5}, item.Slashing).
+			AddAttack("Blade Slash", 1, 15, dice.DieRoll{Count: 2, Sides: 8, Modifier: 5}, item.Slashing)
+
+		return h
+	}
+
+	// Poisoned Dart Gallery - Level 6 Complex Trap
+	StandardComplexHazards["poisoned_dart_gallery"] = func() *Hazard {
+		h := NewHazard("poisoned_dart_gallery", "Poisoned Dart Gallery", 6)
+		h.Type = HazardTrap
+		h.Complexity = ComplexityComplex
+		h.StealthDC = 26
+		h.AC = 24
+		h.Fortitude = 15
+		h.Reflex = 12
+		h.HP = 60
+		h.Hardness = 12
+		h.Initiative = 10
+
+		h.DisableOptions = []DisableOption{
+			{Skill: ability.SkillThievery, DC: 24, Description: "Block the dart holes"},
+			{Skill: ability.SkillAthletics, DC: 26, Description: "Smash the pressure plates"},
+		}
+
+		h.Routine = NewRoutine(3).
+			AddAttack("Poison Dart", 1, 17, dice.DieRoll{Count: 1, Sides: 6, Modifier: 3}, item.Piercing).
+			AddSaveEffect("Poison", 0, ability.SaveFortitude, 22,
+				"No effect",
+				"Sickened 1 and 1d6 poison damage",
+				"Sickened 2 and 2d6 poison damage").
+			AddAttack("Poison Dart", 1, 17, dice.DieRoll{Count: 1, Sides: 6, Modifier: 3}, item.Piercing)
+
+		return h
+	}
+
+	// Flooding Room - Level 8 Complex Trap
+	StandardComplexHazards["flooding_room"] = func() *Hazard {
+		h := NewHazard("flooding_room", "Flooding Room", 8)
+		h.Type = HazardTrap
+		h.Complexity = ComplexityComplex
+		h.StealthDC = 28
+		h.AC = 26
+		h.Fortitude = 18
+		h.Reflex = 14
+		h.HP = 80
+		h.Hardness = 15
+		h.Initiative = 12
+
+		h.DisableOptions = []DisableOption{
+			{Skill: ability.SkillThievery, DC: 28, Description: "Open the drainage grate"},
+			{Skill: ability.SkillAthletics, DC: 30, Description: "Force open the door"},
+		}
+
+		h.Routine = NewRoutine(1).
+			AddSaveEffect("Rising Waters", 1, ability.SaveReflex, 26,
+				"Avoid worst of current, take half damage",
+				"Swept off feet, 2d6 bludgeoning and prone",
+				"Pulled under, 4d6 bludgeoning, prone, and grabbed by water")
+
+		return h
+	}
+
+	// Haunted Stage - Level 5 Complex Haunt
+	StandardComplexHazards["haunted_stage"] = func() *Hazard {
+		h := NewHazard("haunted_stage", "Haunted Stage", 5)
+		h.Type = HazardHaunt
+		h.Complexity = ComplexityComplex
+		h.StealthDC = 24
+		h.Initiative = 9
+
+		h.DisableOptions = []DisableOption{
+			{Skill: ability.SkillReligion, DC: 22, Description: "Perform last rites"},
+			{Skill: ability.SkillPerformance, DC: 24, Description: "Complete the unfinished play"},
+		}
+
+		h.Routine = NewRoutine(2).
+			AddSaveEffect("Terrifying Visage", 1, ability.SaveWill, 22,
+				"Unaffected",
+				"Frightened 1",
+				"Frightened 2 and fleeing").
+			AddSaveEffect("Ghostly Props", 1, ability.SaveReflex, 20,
+				"Dodge the flying objects",
+				"2d6 bludgeoning from hurled props",
+				"4d6 bludgeoning and knocked prone")
+
+		return h
+	}
+}
+
+// GetComplexHazard retrieves a hazard template by ID
+func GetComplexHazard(id string) *Hazard {
+	if factory, ok := StandardComplexHazards[id]; ok {
+		return factory()
+	}
+	return nil
+}
+
+// ListComplexHazards returns all available complex hazard IDs
+func ListComplexHazards() []string {
+	ids := make([]string, 0, len(StandardComplexHazards))
+	for id := range StandardComplexHazards {
+		ids = append(ids, id)
+	}
+	return ids
 }
 
 func GetHazard(id string) (*Hazard, bool) {

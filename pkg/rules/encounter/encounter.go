@@ -2,7 +2,6 @@ package encounter
 
 import (
 	"errors"
-	"uaa/vdnd/pkg/rules/combat"
 	"uaa/vdnd/pkg/rules/entity"
 )
 
@@ -14,14 +13,6 @@ const (
 	StateInProgress
 	StateEnded
 )
-
-type Participant struct {
-	Entity     *entity.Entity
-	Initiative int
-	HasActed   bool // This round
-	IsDelaying bool
-	TurnState  *combat.TurnState
-}
 
 type Encounter struct {
 	ID           string
@@ -47,15 +38,13 @@ func NewEncounter(id string) *Encounter {
 
 // AddParticipant adds an entity to the encounter
 func (e *Encounter) AddParticipant(ent *entity.Entity) {
-	e.Participants = append(e.Participants, &Participant{
-		Entity: ent,
-	})
+	e.Participants = append(e.Participants, NewEntityParticipant(ent))
 }
 
 // RemoveParticipant removes an entity (fled, died, etc.)
 func (e *Encounter) RemoveParticipant(entityID string) {
 	for i, p := range e.Participants {
-		if p.Entity.ID == entityID {
+		if p.Type == ParticipantEntity && p.Entity.ID == entityID {
 			// Remove from slice
 			e.Participants = append(e.Participants[:i], e.Participants[i+1:]...)
 
