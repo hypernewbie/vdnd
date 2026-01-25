@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"strings"
 )
 
 // CommandHandler func(args []string, deps Deps) (string, error)
@@ -12,6 +13,7 @@ var commands = map[string]CommandHandler{
 	"scene new":  cmdSceneNew,
 	"scene save": cmdSceneSave,
 	"scene load": cmdSceneLoad,
+	"status":     cmdStatus,
 }
 
 // Run is the main entry point. Takes CLI args and dependencies, returns output and exit code.
@@ -63,6 +65,27 @@ func parseCommand(args []string) (string, []string) {
 
 func cmdHelp(args []string, deps Deps) (string, error) {
 	return helpText(), nil
+}
+
+func cmdStatus(args []string, deps Deps) (string, error) {
+	state, err := deps.Store.Load()
+	if err != nil {
+		return "", fmt.Errorf("failed to load state: %w", err)
+	}
+
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("# Scene: %s\n\n", state.SceneName))
+
+	if len(state.Entities) == 0 {
+		sb.WriteString("No entities in scene.\n")
+	} else {
+		sb.WriteString("## Entities\n")
+		for id, e := range state.Entities {
+			sb.WriteString(fmt.Sprintf("- **%s** (%s): HP %d/%d\n", id, e.Name, e.HP, e.MaxHP))
+		}
+	}
+
+	return sb.String(), nil
 }
 
 func helpText() string {

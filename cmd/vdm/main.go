@@ -2,21 +2,28 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"flag"
 	"fmt"
 	"log/slog"
 	"os"
 	"os/signal"
 	"strings"
+	"uaa/vdnd/internal/cli"
+	"uaa/vdnd/internal/llm"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/caarlos0/env/v11"
+	"github.com/joho/godotenv"
 )
 
 // Config holds the application configuration
 type Config struct {
 	Token          string `env:"DISCORD_TOKEN"`
 	RemoveCommands bool   `env:"DISCORD_REMOVE_COMMANDS" envDefault:"true"`
+	GeminiKey      string `env:"GEMINI_API_KEY"`
+	LLMProvider    string `env:"LLM_PROVIDER" envDefault:"ollama"`
+	LLMModel       string `env:"LLM_MODEL" envDefault:"deepseek-r1:7b"`
 }
 
 // loadConfig reads configuration from environment variables
@@ -29,17 +36,41 @@ func loadConfig() (*Config, error) {
 }
 
 func main() {
+	// Load .env file if it exists
+	_ = godotenv.Load()
+
 	// Initialize structured logger
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
 
 	// Parse flags
 	useDiscord := flag.Bool("discord", false, "Run in Discord bot mode")
+	verbose := flag.Bool("verbose", false, "Print configuration and secrets on startup")
+	providerFlag := flag.String("provider", "", "LLM provider (gemini, ollama)")
+	modelFlag := flag.String("model", "", "LLM model name")
+	promptModeFlag := flag.Bool("prompt-mode", true, "Force schema-constrained prompting (JSON)")
 	flag.Parse()
 
 	cfg, err := loadConfig()
 	if err != nil {
 		logger.Error("failed to load config", "error", err)
 		os.Exit(1)
+	}
+
+	// Flag overrides environment
+	if *providerFlag != "" {
+		cfg.LLMProvider = *providerFlag
+	}
+	if *modelFlag != "" {
+		cfg.LLMModel = *modelFlag
+	}
+
+	if *verbose {
+		fmt.Printf("--- VERBOSE STARTUP ---\n")
+		fmt.Printf("DISCORD_TOKEN: %s\n", cfg.Token)
+		fmt.Printf("GEMINI_API_KEY: %s\n", cfg.GeminiKey)
+		fmt.Printf("LLM_PROVIDER: %s\n", cfg.LLMProvider)
+		fmt.Printf("LLM_MODEL: %s\n", cfg.LLMModel)
+		fmt.Printf("------------------------\n")
 	}
 
 	if *useDiscord {
@@ -49,13 +80,43 @@ func main() {
 		}
 		runDiscord(logger, cfg)
 	} else {
-		runCLI(logger)
+		runCLI(logger, cfg, *promptModeFlag)
 	}
 }
 
-func runCLI(logger *slog.Logger) {
+func runCLI(logger *slog.Logger, cfg *Config, forcePromptMode bool) {
 	logger.Info("Starting CLI mode...")
-	fmt.Println("CLI mode enabled. Type 'exit' to quit.")
+
+	var orch *llm.Orchestrator
+
+	// Initialize Provider
+	var p llm.Provider
+	var err error
+
+	switch cfg.LLMProvider {
+	case "gemini":
+		if cfg.GeminiKey != "" {
+			p, err = llm.NewGeminiProvider(context.Background(), cfg.GeminiKey, cfg.LLMModel)
+		}
+	case "ollama":
+		p, err = llm.NewOllamaProvider(cfg.LLMModel)
+	}
+
+	if err != nil {
+		logger.Error("failed to initialize provider", "error", err)
+		os.Exit(1)
+	}
+
+	if p != nil {
+		orch = llm.NewOrchestrator(context.Background(), p, cli.DefaultDeps())
+		if forcePromptMode {
+			orch.EnablePromptMode(true)
+		}
+		defer orch.Close()
+		fmt.Printf("LLM mode enabled (Generative DM using %s/%s). Type 'exit' to quit.\n", cfg.LLMProvider, cfg.LLMModel)
+	} else {
+		fmt.Println("Standard CLI mode enabled. Type 'exit' to quit.")
+	}
 
 	scanner := bufio.NewScanner(os.Stdin)
 	for {
@@ -69,6 +130,18 @@ func runCLI(logger *slog.Logger) {
 		}
 
 		cmd, arg, _ := strings.Cut(line, " ")
+		if orch != nil {
+			llm.LogActivity("USER", line)
+			resp, err := orch.ProcessInput(context.Background(), line)
+			if err != nil {
+				logger.Error("orchestrator error", "error", err)
+				fmt.Printf("Error: %v\n", err)
+				continue
+			}
+			fmt.Printf("DM: %s\n", resp)
+			continue
+		}
+
 		switch cmd {
 		case "echo":
 			if arg == "" {
