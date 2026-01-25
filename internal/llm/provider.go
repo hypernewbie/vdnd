@@ -32,6 +32,7 @@ type Tool struct {
 type GenerationResponse struct {
 	Content      string
 	ToolCalls    []ToolCall
+	Thinking     string // Internal model reasoning/thoughts
 	FinishReason string // "stop" or "tool_calls"
 }
 

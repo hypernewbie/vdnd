@@ -14,6 +14,7 @@ import (
 type GroqMessage struct {
 	Role       string         `json:"role"`
 	Content    string         `json:"content,omitempty"`
+	Reasoning  string         `json:"reasoning,omitempty"`
 	ToolCalls  []GroqToolCall `json:"tool_calls,omitempty"`
 	ToolCallID string         `json:"tool_call_id,omitempty"`
 	Name       string         `json:"name,omitempty"`
@@ -142,12 +143,14 @@ func (p *GroqProvider) GenerateWithTools(ctx context.Context, messages []Message
 		}
 		return GenerationResponse{
 			ToolCalls:    toolCalls,
+			Thinking:     msg.Reasoning,
 			FinishReason: "tool_calls",
 		}, nil
 	}
 
 	return GenerationResponse{
 		Content:      msg.Content,
+		Thinking:     msg.Reasoning,
 		FinishReason: "stop",
 	}, nil
 }

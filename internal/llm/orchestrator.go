@@ -133,28 +133,29 @@ func (o *Orchestrator) generationLoop(ctx context.Context) (string, error) {
 			}
 			LogActivity("LLM_OUTPUT", content)
 
-			// Extract and log thinking if present
-			thinking := extractThinking(content)
-			if thinking != "" {
-				LogActivity("LLM_THINKING", thinking)
-			}
-
 			resp = o.parseJSONResponse(content)
+			// Thinking might be in the JSON or in the raw content
+			if resp.Thinking == "" {
+				resp.Thinking = extractThinking(content)
+			}
 		} else {
 			resp, err = o.provider.GenerateWithTools(ctx, o.history, o.tools)
 			if err != nil {
 				return "", err
 			}
 
-			// Extract and log thinking from Content if present in native mode
-			thinking := extractThinking(resp.Content)
-			if thinking != "" {
-				LogActivity("LLM_THINKING", thinking)
+			// Extract and log thinking from Content if present in native mode (as fallback)
+			if resp.Thinking == "" {
+				resp.Thinking = extractThinking(resp.Content)
 			}
 
 			// For tool calling provider, we might want to log the structured response too
 			respJSON, _ := json.MarshalIndent(resp, "", "  ")
 			LogActivity("LLM_OUTPUT", string(respJSON))
+		}
+
+		if resp.Thinking != "" {
+			LogActivity("LLM_THINKING", resp.Thinking)
 		}
 
 		if resp.FinishReason == "stop" {
