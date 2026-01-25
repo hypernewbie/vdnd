@@ -93,6 +93,14 @@ func (t *ConditionTracker) GetACModifiers(attacker *ConditionTracker, attackerID
 		})
 	}
 
+	if t.Has(TakingCover) {
+		mods = append(mods, check.Modifier{
+			Value:  4,
+			Type:   check.BonusCircumstance,
+			Source: "Taking Cover",
+		})
+	}
+
 	return mods
 }
 
@@ -141,6 +149,14 @@ func (t *ConditionTracker) GetSaveModifiers(saveType string) []check.Modifier {
 			Value:  2,
 			Type:   check.BonusCircumstance,
 			Source: "Standard Cover",
+		})
+	}
+
+	if t.Has(TakingCover) && saveType == "Reflex" {
+		mods = append(mods, check.Modifier{
+			Value:  4,
+			Type:   check.BonusCircumstance,
+			Source: "Taking Cover",
 		})
 	}
 

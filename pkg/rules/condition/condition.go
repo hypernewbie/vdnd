@@ -54,6 +54,7 @@ const (
 
 	// Cover
 	StandardCover ConditionID = "standard-cover"
+	TakingCover   ConditionID = "taking-cover"
 )
 
 type Condition struct {

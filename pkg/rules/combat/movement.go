@@ -2,6 +2,7 @@ package combat
 
 import (
 	"uaa/vdnd/pkg/rules/ability"
+	"uaa/vdnd/pkg/rules/condition"
 	"uaa/vdnd/pkg/rules/entity"
 	"uaa/vdnd/pkg/rules/trait"
 )
@@ -23,6 +24,8 @@ func (s *StrideAction) Execute(actor *entity.Entity, destination string, turn *T
 		return ability.ActionResult{Success: false, Description: err.Error()}
 	}
 
+	actor.Conditions.Remove(condition.TakingCover)
+
 	actor.Position = destination
 	return ability.ActionResult{Success: true, Description: "Strided to " + destination}
 }
@@ -43,6 +46,8 @@ func (s *StepAction) Execute(actor *entity.Entity, direction string, turn *TurnS
 	if err := turn.SpendActions(s.Cost()); err != nil {
 		return ability.ActionResult{Success: false, Description: err.Error()}
 	}
+
+	actor.Conditions.Remove(condition.TakingCover)
 
 	// Step doesn't change Position in our zone-based system usually,
 	// or it moves to adjacent zone if zones are small.
