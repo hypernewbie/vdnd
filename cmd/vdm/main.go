@@ -22,8 +22,9 @@ type Config struct {
 	Token          string `env:"DISCORD_TOKEN"`
 	RemoveCommands bool   `env:"DISCORD_REMOVE_COMMANDS" envDefault:"true"`
 	GeminiKey      string `env:"GEMINI_API_KEY"`
-	LLMProvider    string `env:"LLM_PROVIDER" envDefault:"ollama"`
-	LLMModel       string `env:"LLM_MODEL" envDefault:"deepseek-r1:7b"`
+	GroqKey        string `env:"GROQ_API_KEY"`
+	LLMProvider    string `env:"LLM_PROVIDER" envDefault:"groq"`
+	LLMModel       string `env:"LLM_MODEL" envDefault:"qwen/qwen3-32b"`
 }
 
 // loadConfig reads configuration from environment variables
@@ -45,9 +46,9 @@ func main() {
 	// Parse flags
 	useDiscord := flag.Bool("discord", false, "Run in Discord bot mode")
 	verbose := flag.Bool("verbose", false, "Print configuration and secrets on startup")
-	providerFlag := flag.String("provider", "", "LLM provider (gemini, ollama)")
+	providerFlag := flag.String("provider", "", "LLM provider (gemini, ollama, groq)")
 	modelFlag := flag.String("model", "", "LLM model name")
-	promptModeFlag := flag.Bool("prompt-mode", true, "Force schema-constrained prompting (JSON)")
+	promptModeFlag := flag.Bool("prompt-mode", false, "Force schema-constrained prompting (JSON)")
 	flag.Parse()
 
 	cfg, err := loadConfig()
@@ -68,6 +69,7 @@ func main() {
 		fmt.Printf("--- VERBOSE STARTUP ---\n")
 		fmt.Printf("DISCORD_TOKEN: %s\n", cfg.Token)
 		fmt.Printf("GEMINI_API_KEY: %s\n", cfg.GeminiKey)
+		fmt.Printf("GROQ_API_KEY: %s\n", cfg.GroqKey)
 		fmt.Printf("LLM_PROVIDER: %s\n", cfg.LLMProvider)
 		fmt.Printf("LLM_MODEL: %s\n", cfg.LLMModel)
 		fmt.Printf("------------------------\n")
@@ -100,6 +102,10 @@ func runCLI(logger *slog.Logger, cfg *Config, forcePromptMode bool) {
 		}
 	case "ollama":
 		p, err = llm.NewOllamaProvider(cfg.LLMModel)
+	case "groq":
+		if cfg.GroqKey != "" {
+			p, err = llm.NewGroqProvider(cfg.GroqKey, cfg.LLMModel)
+		}
 	}
 
 	if err != nil {

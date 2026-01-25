@@ -46,6 +46,10 @@ func (o *Orchestrator) getSystemPrompt() string {
 	return `You are the Virtual Dungeon Master (VDM) for a Pathfinder 2nd Edition game.
 Your goal is to narrate the game and use the provided deterministic tools to manage the game rules.
 
+REASONING:
+Before narrating or calling a tool, you should "think" about the current state, the rules of PF2E, and the user's intent.
+Provide your reasoning inside <thought> tags.
+
 RULES:
 1. Always check the current status using 'vd_status' if you are unsure about the state.
 2. Use 'vd_scene_new' to start a new game if one hasn't started.
@@ -56,6 +60,7 @@ If you want to suggest a command for the user to consider, use this format:
 >VD_SUGGEST_CMD command here
 
 Example:
+<thought>The player wants to attack. I'll check if they are in range.</thought>
 "You can try to hit the orc again."
 >VD_SUGGEST_CMD action strike hero orc
 
@@ -127,12 +132,26 @@ func (o *Orchestrator) generationLoop(ctx context.Context) (string, error) {
 				return "", err
 			}
 			LogActivity("LLM_OUTPUT", content)
+
+			// Extract and log thinking if present
+			thinking := extractThinking(content)
+			if thinking != "" {
+				LogActivity("LLM_THINKING", thinking)
+			}
+
 			resp = o.parseJSONResponse(content)
 		} else {
 			resp, err = o.provider.GenerateWithTools(ctx, o.history, o.tools)
 			if err != nil {
 				return "", err
 			}
+
+			// Extract and log thinking from Content if present in native mode
+			thinking := extractThinking(resp.Content)
+			if thinking != "" {
+				LogActivity("LLM_THINKING", thinking)
+			}
+
 			// For tool calling provider, we might want to log the structured response too
 			respJSON, _ := json.MarshalIndent(resp, "", "  ")
 			LogActivity("LLM_OUTPUT", string(respJSON))
@@ -142,8 +161,11 @@ func (o *Orchestrator) generationLoop(ctx context.Context) (string, error) {
 			// PORT FROM VAI: Detect and execute suggested command markers in text
 			resp.Content = o.handleTextMarkers(resp.Content)
 
+			// Clean up thinking before returning to user
+			cleanContent := stripThinking(resp.Content)
+
 			o.history = append(o.history, Message{Role: "model", Content: resp.Content})
-			return resp.Content, nil
+			return cleanContent, nil
 		}
 
 		if resp.FinishReason == "tool_calls" {
@@ -171,6 +193,9 @@ func (o *Orchestrator) generationLoop(ctx context.Context) (string, error) {
 }
 
 func (o *Orchestrator) handleTextMarkers(content string) string {
+	// Strip thinking before processing markers if any
+	content = stripThinking(content)
+
 	lines := strings.Split(content, "\n")
 	var newLines []string
 	for _, line := range lines {
@@ -190,6 +215,8 @@ func (o *Orchestrator) getSchemaPrompt() string {
 	var sb strings.Builder
 	sb.WriteString("You are the Virtual Dungeon Master (VDM) for a Pathfinder 2nd Edition game.\n")
 	sb.WriteString("Your goal is to narrate the game and use tools to manage rules.\n\n")
+	sb.WriteString("REASONING:\n")
+	sb.WriteString("Before responding, you should \"think\" inside <thought> tags.\n\n")
 	sb.WriteString("You MUST respond in valid JSON format only when you need to call a tool.\n")
 	sb.WriteString("JSON Schema for tool calls:\n")
 	sb.WriteString("{\n")
@@ -313,4 +340,38 @@ func (o *Orchestrator) EnablePromptMode(enabled bool) {
 	if len(o.history) > 0 {
 		o.history[0].Content = o.getSystemPrompt()
 	}
+}
+
+func extractThinking(content string) string {
+	startTag := "<thought>"
+	endTag := "</thought>"
+
+	start := strings.Index(content, startTag)
+	end := strings.Index(content, endTag)
+
+	if start != -1 && end != -1 && end > start {
+		return strings.TrimSpace(content[start+len(startTag) : end])
+	}
+
+	// Also handle cases where there's just a lot of text before the JSON in prompt mode
+	// which might be "implicit" thinking if not tagged.
+	// But the user specifically asked for "extract thinking", so we'll stick to tags for now.
+	return ""
+}
+
+func stripThinking(content string) string {
+	startTag := "<thought>"
+	endTag := "</thought>"
+
+	for {
+		start := strings.Index(content, startTag)
+		end := strings.Index(content, endTag)
+
+		if start != -1 && end != -1 && end > start {
+			content = content[:start] + content[end+len(endTag):]
+			continue
+		}
+		break
+	}
+	return strings.TrimSpace(content)
 }
