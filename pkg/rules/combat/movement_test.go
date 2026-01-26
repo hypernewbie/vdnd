@@ -45,3 +45,50 @@ func TestMovementActions(t *testing.T) {
 		t.Errorf("Expected 1 action remaining, got %d", turn.ActionsRemaining)
 	}
 }
+
+func TestStrideWithModes(t *testing.T) {
+	actor := entity.NewEntity("a1", "Flier", 1)
+	actor.BaseSpeed = 30
+	actor.FlySpeed = 50
+	turn := NewTurn(actor)
+
+	stride := &StrideAction{}
+
+	// 1. Ground Stride
+	res := stride.Execute(actor, "pos1", turn)
+	if !res.Success {
+		t.Errorf("Ground stride failed: %s", res.Description)
+	}
+	// Note: Exact string match depends on implementation, checking for key parts
+	// "Moved up to 30 ft (ground) to pos1"
+	if res.Description != "Moved up to 30 ft (ground) to pos1" {
+		t.Errorf("Unexpected description: %s", res.Description)
+	}
+
+	// 2. Switch to Fly
+	if err := actor.SetMoveMode(entity.MoveModeFly); err != nil {
+		t.Fatalf("Failed to set fly mode: %v", err)
+	}
+
+	// 3. Fly Stride
+	res = stride.Execute(actor, "pos2", turn)
+	if !res.Success {
+		t.Errorf("Fly stride failed: %s", res.Description)
+	}
+	if res.Description != "Moved up to 50 ft (fly) to pos2" {
+		t.Errorf("Unexpected description: %s", res.Description)
+	}
+
+	// 4. Invalid Mode Stride
+	// Set Swim (0 speed) via cheat (SetMoveMode would block it, so we manually set it to test Execute safety if state gets weird)
+	// Actually, SetMoveMode blocks it, so we can't easily get into that state via public API.
+	// But let's check if we manually force it (whitebox testing)
+	actor.CurrentMoveMode = entity.MoveModeSwim
+	res = stride.Execute(actor, "pos3", turn)
+	if res.Success {
+		t.Error("Expected stride failure with 0 swim speed")
+	}
+	if res.Description != "Cannot move: no swim speed" {
+		t.Errorf("Unexpected failure description: %s", res.Description)
+	}
+}

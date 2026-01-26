@@ -1,6 +1,7 @@
 package combat
 
 import (
+	"fmt"
 	"uaa/vdnd/pkg/rules/ability"
 	"uaa/vdnd/pkg/rules/condition"
 	"uaa/vdnd/pkg/rules/entity"
@@ -24,10 +25,21 @@ func (s *StrideAction) Execute(actor *entity.Entity, destination string, turn *T
 		return ability.ActionResult{Success: false, Description: err.Error()}
 	}
 
+	speed := actor.EffectiveSpeed()
+	if speed == 0 {
+		return ability.ActionResult{
+			Success:     false,
+			Description: fmt.Sprintf("Cannot move: no %s speed", actor.CurrentMoveMode),
+		}
+	}
+
 	actor.Conditions.Remove(condition.TakingCover)
 
 	actor.Position = destination
-	return ability.ActionResult{Success: true, Description: "Strided to " + destination}
+	return ability.ActionResult{
+		Success:     true,
+		Description: fmt.Sprintf("Moved up to %d ft (%s) to %s", speed, actor.CurrentMoveMode, destination),
+	}
 }
 
 type StepAction struct{}

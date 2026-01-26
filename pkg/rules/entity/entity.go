@@ -1,6 +1,7 @@
 package entity
 
 import (
+	"fmt"
 	"uaa/vdnd/pkg/rules/ability"
 	"uaa/vdnd/pkg/rules/affliction"
 	"uaa/vdnd/pkg/rules/condition"
@@ -28,6 +29,31 @@ const (
 	LangInfernal Language = "infernal"
 	LangSylvan   Language = "sylvan"
 )
+
+type MoveMode int
+
+const (
+	MoveModeGround MoveMode = iota
+	MoveModeFly
+	MoveModeSwim
+	MoveModeClimb
+	MoveModeBurrow
+)
+
+func (m MoveMode) String() string {
+	switch m {
+	case MoveModeFly:
+		return "fly"
+	case MoveModeSwim:
+		return "swim"
+	case MoveModeClimb:
+		return "climb"
+	case MoveModeBurrow:
+		return "burrow"
+	default:
+		return "ground"
+	}
+}
 
 type Alignment string
 
@@ -62,6 +88,12 @@ type Entity struct {
 
 	// Movement
 	BaseSpeed int
+	FlySpeed    int
+	SwimSpeed   int
+	ClimbSpeed  int
+	BurrowSpeed int
+
+	CurrentMoveMode MoveMode
 
 	// Flavour (for PCs primarily)
 	Ancestry   string
@@ -164,6 +196,71 @@ func (e *Entity) GetID() string {
 
 func (e *Entity) GetLevel() int {
 	return e.Level
+}
+
+// EffectiveSpeed returns the speed for the current movement mode.
+// Returns 0 if the creature cannot move in the current mode.
+func (e *Entity) EffectiveSpeed() int {
+	switch e.CurrentMoveMode {
+	case MoveModeFly:
+		return e.FlySpeed
+	case MoveModeSwim:
+		return e.SwimSpeed
+	case MoveModeClimb:
+		return e.ClimbSpeed
+	case MoveModeBurrow:
+		return e.BurrowSpeed
+	default:
+		return e.BaseSpeed
+	}
+}
+
+// SetMoveMode changes the current movement mode.
+// Returns an error if the creature has 0 speed for that mode.
+func (e *Entity) SetMoveMode(mode MoveMode) error {
+	// Check if the creature can use this mode
+	var speed int
+	switch mode {
+	case MoveModeFly:
+		speed = e.FlySpeed
+	case MoveModeSwim:
+		speed = e.SwimSpeed
+	case MoveModeClimb:
+		speed = e.ClimbSpeed
+	case MoveModeBurrow:
+		speed = e.BurrowSpeed
+	default:
+		speed = e.BaseSpeed
+	}
+
+	if speed == 0 && mode != MoveModeGround {
+		return fmt.Errorf("cannot use %s mode: no %s speed", mode, mode)
+	}
+
+	e.CurrentMoveMode = mode
+	return nil
+}
+
+// AllSpeeds returns a map of all non-zero speeds.
+// Useful for status display.
+func (e *Entity) AllSpeeds() map[string]int {
+	speeds := make(map[string]int)
+	if e.BaseSpeed > 0 {
+		speeds["ground"] = e.BaseSpeed
+	}
+	if e.FlySpeed > 0 {
+		speeds["fly"] = e.FlySpeed
+	}
+	if e.SwimSpeed > 0 {
+		speeds["swim"] = e.SwimSpeed
+	}
+	if e.ClimbSpeed > 0 {
+		speeds["climb"] = e.ClimbSpeed
+	}
+	if e.BurrowSpeed > 0 {
+		speeds["burrow"] = e.BurrowSpeed
+	}
+	return speeds
 }
 
 func (e *Entity) GetAbilityScore(ab ability.Ability) int {

@@ -179,3 +179,61 @@ func TestDying(t *testing.T) {
 		t.Error("Expected dead at Dying 4")
 	}
 }
+
+func TestMovementModes(t *testing.T) {
+	e := NewEntity("e1", "Mover", 1)
+	e.BaseSpeed = 30
+	e.FlySpeed = 40
+	e.SwimSpeed = 20
+	// Climb and Burrow are 0
+
+	// 1. Default Ground
+	if e.EffectiveSpeed() != 30 {
+		t.Errorf("Expected ground speed 30, got %d", e.EffectiveSpeed())
+	}
+	if e.CurrentMoveMode != MoveModeGround {
+		t.Error("Expected default MoveModeGround")
+	}
+
+	// 2. Set Fly
+	err := e.SetMoveMode(MoveModeFly)
+	if err != nil {
+		t.Errorf("Unexpected error setting fly mode: %v", err)
+	}
+	if e.EffectiveSpeed() != 40 {
+		t.Errorf("Expected fly speed 40, got %d", e.EffectiveSpeed())
+	}
+	if e.CurrentMoveMode.String() != "fly" {
+		t.Errorf("Expected mode string 'fly', got '%s'", e.CurrentMoveMode)
+	}
+
+	// 3. Set Swim
+	err = e.SetMoveMode(MoveModeSwim)
+	if err != nil {
+		t.Errorf("Unexpected error setting swim mode: %v", err)
+	}
+	if e.EffectiveSpeed() != 20 {
+		t.Errorf("Expected swim speed 20, got %d", e.EffectiveSpeed())
+	}
+
+	// 4. Invalid Climb (Speed 0)
+	err = e.SetMoveMode(MoveModeClimb)
+	if err == nil {
+		t.Error("Expected error setting climb mode with 0 speed")
+	}
+	if e.CurrentMoveMode != MoveModeSwim {
+		t.Error("Mode should not have changed on error")
+	}
+
+	// 5. AllSpeeds
+	speeds := e.AllSpeeds()
+	if len(speeds) != 3 {
+		t.Errorf("Expected 3 speeds, got %d", len(speeds))
+	}
+	if speeds["ground"] != 30 || speeds["fly"] != 40 || speeds["swim"] != 20 {
+		t.Error("Speeds map incorrect")
+	}
+	if _, ok := speeds["climb"]; ok {
+		t.Error("Climb should not be in speeds map")
+	}
+}
