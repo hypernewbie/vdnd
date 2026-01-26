@@ -8,7 +8,8 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
+	"os"
 	"regexp"
 	"strings"
 	"uaa/vdnd/internal/llm"
@@ -28,20 +29,35 @@ type Config struct {
 }
 
 func main() {
+	// Open log file
+	logFile, err := os.OpenFile("vdisc.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to open log file: %v\n", err)
+		os.Exit(1)
+	}
+	defer logFile.Close()
+
+	// Initialize structured logger
+	handler := slog.NewTextHandler(logFile, &slog.HandlerOptions{Level: slog.LevelDebug})
+	slog.SetDefault(slog.New(handler))
+
 	_ = godotenv.Load()
 
 	cfg := Config{}
 	if err := env.Parse(&cfg); err != nil {
-		log.Fatalf("failed to parse config: %v", err)
+		slog.Error("failed to parse config", "error", err)
+		os.Exit(1)
 	}
 
 	if cfg.Token == "" || cfg.ChannelID == "" {
-		log.Fatal("DISCORD_TOKEN and DISCORD_CHANNEL_ID must be set")
+		slog.Error("DISCORD_TOKEN and DISCORD_CHANNEL_ID must be set")
+		os.Exit(1)
 	}
 
 	dg, err := discordgo.New("Bot " + cfg.Token)
 	if err != nil {
-		log.Fatalf("error creating Discord session: %v", err)
+		slog.Error("error creating Discord session", "error", err)
+		os.Exit(1)
 	}
 
 	// Initialize LLM Provider
@@ -60,12 +76,14 @@ func main() {
 	}
 
 	if err != nil {
-		log.Fatalf("failed to initialize LLM provider: %v", err)
+		slog.Error("failed to initialize LLM provider", "error", err)
+		os.Exit(1)
 	}
 
 	err = dg.Open()
 	if err != nil {
-		log.Fatalf("error opening connection: %v", err)
+		slog.Error("error opening connection", "error", err)
+		os.Exit(1)
 	}
 	defer dg.Close()
 
@@ -97,7 +115,8 @@ func main() {
 	// Query last 100 messages
 	messages, err := dg.ChannelMessages(cfg.ChannelID, 100, "", "", "")
 	if err != nil {
-		log.Fatalf("error fetching messages: %v", err)
+		slog.Error("error fetching messages", "error", err)
+		os.Exit(1)
 	}
 
 	fmt.Println("Recent messages:")

@@ -98,7 +98,7 @@ func (p *OllamaProvider) Generate(ctx context.Context, messages []Message) (stri
 		return "", fmt.Errorf("ollama generation failed: %w", err)
 	}
 
-	return responseText, nil
+	return StripThinking(responseText), nil
 }
 
 func (p *OllamaProvider) GenerateWithTools(ctx context.Context, messages []Message, tools []Tool) (GenerationResponse, error) {
@@ -154,12 +154,14 @@ func (p *OllamaProvider) GenerateWithTools(ctx context.Context, messages []Messa
 		}
 		return GenerationResponse{
 			ToolCalls:    toolCalls,
+			Thinking:     ExtractThinking(resp.Message.Content),
 			FinishReason: "tool_calls",
 		}, nil
 	}
 
 	return GenerationResponse{
-		Content:      resp.Message.Content,
+		Content:      StripThinking(resp.Message.Content),
+		Thinking:     ExtractThinking(resp.Message.Content),
 		FinishReason: "stop",
 	}, nil
 }

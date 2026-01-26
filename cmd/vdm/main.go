@@ -37,11 +37,20 @@ func loadConfig() (*Config, error) {
 }
 
 func main() {
-	// Load .env file if it exists
-	_ = godotenv.Load()
+	// Open log file
+	logFile, err := os.OpenFile("vdm.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to open log file: %v\n", err)
+		os.Exit(1)
+	}
+	defer logFile.Close()
 
 	// Initialize structured logger
-	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
+	handler := slog.NewTextHandler(logFile, &slog.HandlerOptions{Level: slog.LevelDebug})
+	slog.SetDefault(slog.New(handler))
+
+	// Load .env file if it exists
+	_ = godotenv.Load()
 
 	// Parse flags
 	useDiscord := flag.Bool("discord", false, "Run in Discord bot mode")
@@ -53,7 +62,7 @@ func main() {
 
 	cfg, err := loadConfig()
 	if err != nil {
-		logger.Error("failed to load config", "error", err)
+		slog.Error("failed to load config", "error", err)
 		os.Exit(1)
 	}
 
@@ -77,17 +86,17 @@ func main() {
 
 	if *useDiscord {
 		if cfg.Token == "" {
-			logger.Error("DISCORD_TOKEN is required for discord mode")
+			slog.Error("DISCORD_TOKEN is required for discord mode")
 			os.Exit(1)
 		}
-		runDiscord(logger, cfg)
+		runDiscord(cfg)
 	} else {
-		runCLI(logger, cfg, *promptModeFlag)
+		runCLI(cfg, *promptModeFlag)
 	}
 }
 
-func runCLI(logger *slog.Logger, cfg *Config, forcePromptMode bool) {
-	logger.Info("Starting CLI mode...")
+func runCLI(cfg *Config, forcePromptMode bool) {
+	slog.Info("Starting CLI mode...")
 
 	var orch *llm.Orchestrator
 
@@ -109,7 +118,7 @@ func runCLI(logger *slog.Logger, cfg *Config, forcePromptMode bool) {
 	}
 
 	if err != nil {
-		logger.Error("failed to initialize provider", "error", err)
+		slog.Error("failed to initialize provider", "error", err)
 		os.Exit(1)
 	}
 
@@ -137,10 +146,10 @@ func runCLI(logger *slog.Logger, cfg *Config, forcePromptMode bool) {
 
 		cmd, arg, _ := strings.Cut(line, " ")
 		if orch != nil {
-			llm.LogActivity("USER", line)
+			slog.Info("USER", "content", line)
 			resp, err := orch.ProcessInput(context.Background(), line)
 			if err != nil {
-				logger.Error("orchestrator error", "error", err)
+				slog.Error("orchestrator error", "error", err)
 				fmt.Printf("Error: %v\n", err)
 				continue
 			}
@@ -154,10 +163,10 @@ func runCLI(logger *slog.Logger, cfg *Config, forcePromptMode bool) {
 				fmt.Println("Usage: echo <content>")
 				continue
 			}
-			logger.Info("received echo command", "content", arg)
+			slog.Info("received echo command", "content", arg)
 			fmt.Printf("Echo: %s\n", arg)
 		case "exit", "quit":
-			logger.Info("CLI mode shutting down")
+			slog.Info("CLI mode shutting down")
 			return
 		default:
 			fmt.Printf("Unknown command: %s\n", cmd)
@@ -165,15 +174,15 @@ func runCLI(logger *slog.Logger, cfg *Config, forcePromptMode bool) {
 	}
 
 	if err := scanner.Err(); err != nil {
-		logger.Error("error reading input", "error", err)
+		slog.Error("error reading input", "error", err)
 	}
 }
 
-func runDiscord(logger *slog.Logger, cfg *Config) {
+func runDiscord(cfg *Config) {
 	// Initialize Discord session
 	s, err := discordgo.New("Bot " + cfg.Token)
 	if err != nil {
-		logger.Error("invalid bot parameters", "error", err)
+		slog.Error("invalid bot parameters", "error", err)
 		os.Exit(1)
 	}
 
@@ -204,7 +213,7 @@ func runDiscord(logger *slog.Logger, cfg *Config) {
 			options := i.ApplicationCommandData().Options
 			content := options[0].StringValue()
 
-			logger.Info("received echo command",
+			slog.Info("received echo command",
 				"guild_id", i.GuildID,
 				"user_id", i.Member.User.ID,
 				"content", content,
@@ -217,7 +226,7 @@ func runDiscord(logger *slog.Logger, cfg *Config) {
 				},
 			})
 			if err != nil {
-				logger.Error("failed to respond to interaction", "error", err)
+				slog.Error("failed to respond to interaction", "error", err)
 			}
 		},
 	}
@@ -230,7 +239,7 @@ func runDiscord(logger *slog.Logger, cfg *Config) {
 	})
 
 	s.AddHandler(func(s *discordgo.Session, r *discordgo.Ready) {
-		logger.Info("logged in",
+		slog.Info("logged in",
 			"username", s.State.User.Username,
 			"discriminator", s.State.User.Discriminator,
 		)
@@ -239,42 +248,42 @@ func runDiscord(logger *slog.Logger, cfg *Config) {
 	// Open session
 	err = s.Open()
 	if err != nil {
-		logger.Error("cannot open the session", "error", err)
+		slog.Error("cannot open the session", "error", err)
 		os.Exit(1)
 	}
 	defer s.Close()
 
-	logger.Info("session opened")
+	slog.Info("session opened")
 
 	// Register commands
-	logger.Info("registering commands...")
+	slog.Info("registering commands...")
 	registeredCommands := make([]*discordgo.ApplicationCommand, len(commands))
 	for i, v := range commands {
 		cmd, err := s.ApplicationCommandCreate(s.State.User.ID, "", v)
 		if err != nil {
-			logger.Error("cannot create command", "name", v.Name, "error", err)
+			slog.Error("cannot create command", "name", v.Name, "error", err)
 			continue // Or exit/panic depending on strictness
 		}
 		registeredCommands[i] = cmd
-		logger.Info("registered command", "name", v.Name)
+		slog.Info("registered command", "name", v.Name)
 	}
 
 	// Wait here until CTRL-C or other term signal is received.
-	logger.Info("bot is now running. Press CTRL-C to exit.")
+	slog.Info("bot is now running. Press CTRL-C to exit.")
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt)
 	<-stop
 
 	// Cleanup
 	if cfg.RemoveCommands {
-		logger.Info("removing commands...")
+		slog.Info("removing commands...")
 		for _, v := range registeredCommands {
 			err := s.ApplicationCommandDelete(s.State.User.ID, "", v.ID)
 			if err != nil {
-				logger.Error("cannot delete command", "name", v.Name, "error", err)
+				slog.Error("cannot delete command", "name", v.Name, "error", err)
 			}
 		}
 	}
 
-	logger.Info("gracefully shutting down")
+	slog.Info("gracefully shutting down")
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"strings"
 
 	"uaa/vdnd/internal/cli"
@@ -46,10 +47,6 @@ func (o *Orchestrator) getSystemPrompt() string {
 	return `You are the Virtual Dungeon Master (VDM) for a Pathfinder 2nd Edition game.
 Your goal is to narrate the game and use the provided deterministic tools to manage the game rules.
 
-REASONING:
-Before narrating or calling a tool, you should "think" about the current state, the rules of PF2E, and the user's intent.
-Provide your reasoning inside <thought> tags.
-
 RULES:
 1. Always check the current status using 'vd_status' if you are unsure about the state.
 2. Use 'vd_scene_new' to start a new game if one hasn't started.
@@ -60,7 +57,6 @@ If you want to suggest a command for the user to consider, use this format:
 >VD_SUGGEST_CMD command here
 
 Example:
-<thought>The player wants to attack. I'll check if they are in range.</thought>
 "You can try to hit the orc again."
 >VD_SUGGEST_CMD action strike hero orc
 
@@ -124,49 +120,36 @@ func (o *Orchestrator) generationLoop(ctx context.Context) (string, error) {
 
 		// Log LLM Input (History)
 		historyJSON, _ := json.MarshalIndent(o.history, "", "  ")
-		LogActivity("LLM_INPUT", string(historyJSON))
+		slog.Debug("LLM_INPUT", "history", string(historyJSON))
 
 		if o.promptMode {
 			content, err := o.provider.Generate(ctx, o.history)
 			if err != nil {
 				return "", err
 			}
-			LogActivity("LLM_OUTPUT", content)
+			slog.Info("LLM_OUTPUT", "content", content)
 
 			resp = o.parseJSONResponse(content)
-			// Thinking might be in the JSON or in the raw content
-			if resp.Thinking == "" {
-				resp.Thinking = extractThinking(content)
-			}
 		} else {
 			resp, err = o.provider.GenerateWithTools(ctx, o.history, o.tools)
 			if err != nil {
 				return "", err
 			}
 
-			// Extract and log thinking from Content if present in native mode (as fallback)
-			if resp.Thinking == "" {
-				resp.Thinking = extractThinking(resp.Content)
-			}
-
 			// For tool calling provider, we might want to log the structured response too
 			respJSON, _ := json.MarshalIndent(resp, "", "  ")
-			LogActivity("LLM_OUTPUT", string(respJSON))
+			slog.Info("LLM_OUTPUT", "content", string(respJSON))
 		}
 
 		if resp.Thinking != "" {
-			LogActivity("LLM_THINKING", resp.Thinking)
+			slog.Debug("LLM_THINKING", "thinking", resp.Thinking)
 		}
 
 		if resp.FinishReason == "stop" {
-			// PORT FROM VAI: Detect and execute suggested command markers in text
 			resp.Content = o.handleTextMarkers(resp.Content)
 
-			// Clean up thinking before returning to user
-			cleanContent := stripThinking(resp.Content)
-
 			o.history = append(o.history, Message{Role: "model", Content: resp.Content})
-			return cleanContent, nil
+			return resp.Content, nil
 		}
 
 		if resp.FinishReason == "tool_calls" {
@@ -194,9 +177,6 @@ func (o *Orchestrator) generationLoop(ctx context.Context) (string, error) {
 }
 
 func (o *Orchestrator) handleTextMarkers(content string) string {
-	// Strip thinking before processing markers if any
-	content = stripThinking(content)
-
 	lines := strings.Split(content, "\n")
 	var newLines []string
 	for _, line := range lines {
@@ -341,38 +321,4 @@ func (o *Orchestrator) EnablePromptMode(enabled bool) {
 	if len(o.history) > 0 {
 		o.history[0].Content = o.getSystemPrompt()
 	}
-}
-
-func extractThinking(content string) string {
-	startTag := "<thought>"
-	endTag := "</thought>"
-
-	start := strings.Index(content, startTag)
-	end := strings.Index(content, endTag)
-
-	if start != -1 && end != -1 && end > start {
-		return strings.TrimSpace(content[start+len(startTag) : end])
-	}
-
-	// Also handle cases where there's just a lot of text before the JSON in prompt mode
-	// which might be "implicit" thinking if not tagged.
-	// But the user specifically asked for "extract thinking", so we'll stick to tags for now.
-	return ""
-}
-
-func stripThinking(content string) string {
-	startTag := "<thought>"
-	endTag := "</thought>"
-
-	for {
-		start := strings.Index(content, startTag)
-		end := strings.Index(content, endTag)
-
-		if start != -1 && end != -1 && end > start {
-			content = content[:start] + content[end+len(endTag):]
-			continue
-		}
-		break
-	}
-	return strings.TrimSpace(content)
 }

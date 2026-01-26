@@ -2,6 +2,7 @@ package llm
 
 import (
 	"context"
+	"strings"
 )
 
 // ToolCall represents a request from the LLM to call a specific tool.
@@ -43,4 +44,35 @@ type Provider interface {
 	Generate(ctx context.Context, messages []Message) (string, error)
 	GenerateWithTools(ctx context.Context, messages []Message, tools []Tool) (GenerationResponse, error)
 	SupportsToolCalling() bool
+}
+
+func ExtractThinking(content string) string {
+	startTag := "<thought>"
+	endTag := "</thought>"
+
+	start := strings.Index(content, startTag)
+	end := strings.Index(content, endTag)
+
+	if start != -1 && end != -1 && end > start {
+		return strings.TrimSpace(content[start+len(startTag) : end])
+	}
+
+	return ""
+}
+
+func StripThinking(content string) string {
+	startTag := "<thought>"
+	endTag := "</thought>"
+
+	for {
+		start := strings.Index(content, startTag)
+		end := strings.Index(content, endTag)
+
+		if start != -1 && end != -1 && end > start {
+			content = content[:start] + content[end+len(endTag):]
+			continue
+		}
+		break
+	}
+	return strings.TrimSpace(content)
 }

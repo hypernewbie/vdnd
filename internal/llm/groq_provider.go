@@ -148,6 +148,11 @@ func (p *GroqProvider) GenerateWithTools(ctx context.Context, messages []Message
 		}, nil
 	}
 
+	if msg.Reasoning == "" {
+		msg.Reasoning = ExtractThinking(msg.Content)
+	}
+	msg.Content = StripThinking(msg.Content)
+
 	return GenerationResponse{
 		Content:      msg.Content,
 		Thinking:     msg.Reasoning,

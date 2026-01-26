@@ -98,7 +98,8 @@ func (p *GeminiProvider) Generate(ctx context.Context, messages []Message) (stri
 		return "", fmt.Errorf("empty response from Gemini")
 	}
 
-	return geminiResp.Candidates[0].Content.Parts[0].Text, nil
+	content := geminiResp.Candidates[0].Content.Parts[0].Text
+	return StripThinking(content), nil
 }
 
 func (p *GeminiProvider) GenerateWithTools(ctx context.Context, messages []Message, tools []Tool) (GenerationResponse, error) {
@@ -147,6 +148,9 @@ func (p *GeminiProvider) GenerateWithTools(ctx context.Context, messages []Messa
 			result.FinishReason = "tool_calls"
 		}
 	}
+
+	result.Thinking = ExtractThinking(result.Content)
+	result.Content = StripThinking(result.Content)
 
 	return result, nil
 }
