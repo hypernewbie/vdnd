@@ -43,6 +43,7 @@ func DefaultRegistry() *Registry {
 		{Fleeing, "Fleeing", false, "Must run away."},
 		{Confused, "Confused", false, "Attack randomly, flat-footed."},
 		{PersistentDamage, "Persistent Damage", true, "Damage at end of turn."},
+		{TakingCover, "Taking Cover", false, "+4 circumstance bonus to AC and Reflex vs area effects."},
 	}
 
 	for _, c := range list {

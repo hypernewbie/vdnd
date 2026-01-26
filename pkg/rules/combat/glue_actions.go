@@ -112,8 +112,9 @@ func (t *TakeCoverAction) Execute(actor, _ *entity.Entity, turn *TurnState) abil
 	if err := turn.SpendActions(t.Cost()); err != nil {
 		return ability.ActionResult{Success: false, Description: err.Error()}
 	}
-	actor.Conditions.Apply(condition.NewCondition(
+	actor.Conditions.Apply(condition.NewValuedCondition(
 		condition.TakingCover,
+		4,
 		"Taking Cover",
 	))
 	return ability.ActionResult{
