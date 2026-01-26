@@ -59,6 +59,14 @@ func (s *StepAction) Execute(actor *entity.Entity, direction string, turn *TurnS
 		return ability.ActionResult{Success: false, Description: err.Error()}
 	}
 
+	speed := actor.EffectiveSpeed()
+	if speed == 0 {
+		return ability.ActionResult{
+			Success:     false,
+			Description: fmt.Sprintf("Cannot step: no %s speed", actor.CurrentMoveMode),
+		}
+	}
+
 	actor.Conditions.Remove(condition.TakingCover)
 
 	// Step doesn't change Position in our zone-based system usually,

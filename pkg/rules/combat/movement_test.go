@@ -53,6 +53,7 @@ func TestStrideWithModes(t *testing.T) {
 	turn := NewTurn(actor)
 
 	stride := &StrideAction{}
+	step := &StepAction{}
 
 	// 1. Ground Stride
 	res := stride.Execute(actor, "pos1", turn)
@@ -80,15 +81,24 @@ func TestStrideWithModes(t *testing.T) {
 	}
 
 	// 4. Invalid Mode Stride
+	// Reset actions for further testing
+	turn = NewTurn(actor)
 	// Set Swim (0 speed) via cheat (SetMoveMode would block it, so we manually set it to test Execute safety if state gets weird)
-	// Actually, SetMoveMode blocks it, so we can't easily get into that state via public API.
-	// But let's check if we manually force it (whitebox testing)
 	actor.CurrentMoveMode = entity.MoveModeSwim
 	res = stride.Execute(actor, "pos3", turn)
 	if res.Success {
 		t.Error("Expected stride failure with 0 swim speed")
 	}
 	if res.Description != "Cannot move: no swim speed" {
+		t.Errorf("Unexpected failure description: %s", res.Description)
+	}
+
+	// 5. Step with no speed
+	res = step.Execute(actor, "north", turn)
+	if res.Success {
+		t.Error("Expected step failure with 0 swim speed")
+	}
+	if res.Description != "Cannot step: no swim speed" {
 		t.Errorf("Unexpected failure description: %s", res.Description)
 	}
 }
