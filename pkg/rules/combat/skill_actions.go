@@ -228,17 +228,17 @@ func (r *RecallKnowledgeAction) Execute(actor, target *entity.Entity, turn *Turn
 		return ability.ActionResult{Success: false, Description: err.Error()}
 	}
 
-	dc := 15 
-	if target != nil {
-		dc = skill.LevelBasedDC(target.Level)
+		dc := 15
+		if target != nil {
+			dc = skill.LevelBasedDC(target.Level)
+		}
+	
+		learned, res := skill.RecallKnowledge(actor, r.Skill, dc)
+	
+		desc := "Recall Knowledge: " + res.Degree.String()
+		if learned {
+			desc += " - Success"
+		}
+	
+		return ability.ActionResult{Success: learned, Degree: res.Degree, Description: desc}
 	}
-
-	info, res := skill.RecallKnowledge(actor, r.Skill, dc, 0)
-
-	desc := "Recall Knowledge: " + res.Degree.String()
-	if res.Degree >= check.Success {
-		desc += " - " + info
-	}
-
-	return ability.ActionResult{Success: res.Degree >= check.Success, Degree: res.Degree, Description: desc}
-}

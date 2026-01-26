@@ -318,7 +318,7 @@ func TestExhaustiveSkills(t *testing.T) {
 			{"Failure", 2, check.Failure},
 			{"Critical Failure", 1, check.CriticalFailure},
 		} {
-			target.Conditions.Remove(condition.TreatWoundsImmunity)
+			target.Conditions.Remove(condition.ConditionTreatWoundsImmunity)
 			// Using dummy roller since we only check degree here
 			res := TreatWoundsWithRoll(actor, target, dc, tt.Roll, &dice.SimpleRoller{})
 			if res.Degree != tt.Want {

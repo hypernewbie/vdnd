@@ -1,6 +1,7 @@
 package entity
 
 import (
+	"fmt"
 	"testing"
 	"uaa/vdnd/pkg/rules/ability"
 	"uaa/vdnd/pkg/rules/condition"
@@ -235,5 +236,79 @@ func TestMovementModes(t *testing.T) {
 	}
 	if _, ok := speeds["climb"]; ok {
 		t.Error("Climb should not be in speeds map")
+	}
+}
+
+func TestMovementModes_ZeroSpeeds(t *testing.T) {
+	e := NewEntity("e1", "Immobile", 1)
+	e.BaseSpeed = 0 // Immobilized condition
+	e.FlySpeed = 0
+	e.SwimSpeed = 0
+	e.ClimbSpeed = 0
+	e.BurrowSpeed = 0
+
+	// 1. Ground mode with 0 speed should still work (immobilized)
+	if err := e.SetMoveMode(MoveModeGround); err != nil {
+		t.Errorf("SetMoveMode(Ground) should succeed even with 0 speed: %v", err)
+	}
+	if e.EffectiveSpeed() != 0 {
+		t.Errorf("EffectiveSpeed() should be 0 for ground with BaseSpeed 0, got %d", e.EffectiveSpeed())
+	}
+
+	// 2. Attempt to set fly/swim/climb/burrow with 0 speed should fail
+	tests := []struct {
+		mode MoveMode
+		name string
+	}{
+		{MoveModeFly, "fly"},
+		{MoveModeSwim, "swim"},
+		{MoveModeClimb, "climb"},
+		{MoveModeBurrow, "burrow"},
+	}
+	for _, tt := range tests {
+		err := e.SetMoveMode(tt.mode)
+		if err == nil {
+			t.Errorf("SetMoveMode(%s) with 0 speed should fail", tt.name)
+		}
+		expectedErr := fmt.Sprintf("cannot use %s mode: no %s speed", tt.mode, tt.mode)
+		if err.Error() != expectedErr {
+			t.Errorf("Wrong error for %s: got %q, want %q", tt.name, err.Error(), expectedErr)
+		}
+	}
+
+	// 3. AllSpeeds should return empty map when all speeds are 0
+	speeds := e.AllSpeeds()
+	if len(speeds) != 0 {
+		t.Errorf("AllSpeeds() should be empty when all speeds are 0, got %v", speeds)
+	}
+}
+
+func TestMovementModes_MixedZeroSpeeds(t *testing.T) {
+	e := NewEntity("e1", "Mixed", 1)
+	e.BaseSpeed = 30
+	e.FlySpeed = 0
+	e.SwimSpeed = 20
+	e.ClimbSpeed = 0
+	e.BurrowSpeed = 10
+
+	// AllSpeeds should only include non-zero speeds
+	speeds := e.AllSpeeds()
+	if len(speeds) != 3 {
+		t.Errorf("Expected 3 speeds, got %d: %v", len(speeds), speeds)
+	}
+	if speeds["ground"] != 30 {
+		t.Errorf("Expected ground speed 30, got %d", speeds["ground"])
+	}
+	if speeds["swim"] != 20 {
+		t.Errorf("Expected swim speed 20, got %d", speeds["swim"])
+	}
+	if speeds["burrow"] != 10 {
+		t.Errorf("Expected burrow speed 10, got %d", speeds["burrow"])
+	}
+	if _, ok := speeds["fly"]; ok {
+		t.Error("Fly speed 0 should not appear in AllSpeeds()")
+	}
+	if _, ok := speeds["climb"]; ok {
+		t.Error("Climb speed 0 should not appear in AllSpeeds()")
 	}
 }

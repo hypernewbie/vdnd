@@ -9,6 +9,16 @@ import (
 	"uaa/vdnd/pkg/rules/item"
 )
 
+const (
+	TreatWoundsDCStandard  = 15
+	TreatWoundsDCExpert    = 20
+	TreatWoundsDCMaster    = 30
+	TreatWoundsDCLegendary = 40
+
+	TreatWoundsBonusMaster    = 10
+	TreatWoundsBonusLegendary = 30
+)
+
 // PerformSkillCheck makes a skill check
 func PerformSkillCheck(actor *entity.Entity, id ability.SkillID, dc int) check.CheckResult {
 	mod := actor.GetSkillModifier(id)
@@ -331,17 +341,59 @@ func TreatWounds(healer, patient *entity.Entity, dc int, roller dice.Roller) Tre
 }
 
 // TreatWoundsWithRoll allows injecting a d20 roll for testing.
+//
+// This is a 10-minute exploration activity.
+// DC determines the difficulty and potential bonus healing:
+//   - DC 15: Base healing
+//   - DC 20: Base healing (requires Expert)
+//   - DC 30: +10 bonus healing (requires Master)
+//   - DC 40: +30 bonus healing (requires Legendary)
+//
+// Outcomes:
+//   - Critical Success: 4d8 + bonuses
+//   - Success: 2d8 + bonuses
+//   - Critical Failure: 1d8 damage to patient
+//
+// The patient gains ConditionTreatWoundsImmunity for 1 hour afterward.
+//
+// src: rules/compendium/skills.md "Treat Wounds"
 func TreatWoundsWithRoll(healer, patient *entity.Entity, dc, naturalRoll int, roller dice.Roller) TreatWoundsResult {
 	// Must be trained in Medicine
-	if healer.SkillProficiencies[ability.SkillMedicine] < ability.Trained {
+	medicineProf := healer.SkillProficiencies[ability.SkillMedicine]
+	if medicineProf < ability.Trained {
 		return TreatWoundsResult{
 			CheckResult: check.CheckResult{Degree: check.Failure},
 			Applied:     false,
 		}
 	}
 
+	// Enforce DC proficiency requirements
+	switch dc {
+	case TreatWoundsDCExpert:
+		if medicineProf < ability.Expert {
+			return TreatWoundsResult{
+				CheckResult: check.CheckResult{Degree: check.Failure},
+				Applied:     false,
+			}
+		}
+	case TreatWoundsDCMaster:
+		if medicineProf < ability.Master {
+			return TreatWoundsResult{
+				CheckResult: check.CheckResult{Degree: check.Failure},
+				Applied:     false,
+			}
+		}
+	case TreatWoundsDCLegendary:
+		if medicineProf < ability.Legendary {
+			return TreatWoundsResult{
+				CheckResult: check.CheckResult{Degree: check.Failure},
+				Applied:     false,
+			}
+		}
+	}
+
 	// Check for immunity
-	if patient.Conditions.Has(condition.TreatWoundsImmunity) {
+	if patient.Conditions.Has(condition.ConditionTreatWoundsImmunity) {
 		return TreatWoundsResult{
 			CheckResult: check.CheckResult{Degree: check.Failure},
 			Applied:     false,
@@ -357,10 +409,10 @@ func TreatWoundsWithRoll(healer, patient *entity.Entity, dc, naturalRoll int, ro
 
 	// Calculate bonus based on DC
 	bonus := 0
-	if dc >= 40 {
-		bonus = 30
-	} else if dc >= 30 {
-		bonus = 10
+	if dc >= TreatWoundsDCLegendary {
+		bonus = TreatWoundsBonusLegendary
+	} else if dc >= TreatWoundsDCMaster {
+		bonus = TreatWoundsBonusMaster
 	}
 
 	var healingAmount int
@@ -382,13 +434,13 @@ func TreatWoundsWithRoll(healer, patient *entity.Entity, dc, naturalRoll int, ro
 		patient.Heal(healingAmount)
 		applied = true
 	} else if healingAmount < 0 {
-		patient.ApplyDamage(-healingAmount)
+		patient.ApplyDamage(-healingAmount) // Untyped damage for medical mistake
 		applied = true
 	}
 
 	// Apply immunity (even on failure, the attempt was made)
 	patient.Conditions.Apply(condition.NewCondition(
-		condition.TreatWoundsImmunity,
+		condition.ConditionTreatWoundsImmunity,
 		"Treated by "+healer.ID,
 	))
 

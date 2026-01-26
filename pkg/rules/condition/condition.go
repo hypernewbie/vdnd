@@ -56,7 +56,11 @@ const (
 	StandardCover ConditionID = "standard-cover"
 	TakingCover   ConditionID = "taking-cover"
 
-	TreatWoundsImmunity ConditionID = "treat-wounds-immunity"
+	// ConditionTreatWoundsImmunity prevents being treated again for 1 hour.
+	// This condition is applied immediately when Treat Wounds is attempted,
+	// regardless of success or failure. The LLM/session manager is responsible
+	// for removing this condition after 1 hour of in-game time passes.
+	ConditionTreatWoundsImmunity ConditionID = "treat-wounds-immunity"
 )
 
 type Condition struct {

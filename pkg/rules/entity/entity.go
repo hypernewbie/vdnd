@@ -2,6 +2,7 @@ package entity
 
 import (
 	"fmt"
+	"sync"
 	"uaa/vdnd/pkg/rules/ability"
 	"uaa/vdnd/pkg/rules/affliction"
 	"uaa/vdnd/pkg/rules/condition"
@@ -153,8 +154,12 @@ type Entity struct {
 	// Master Data (ids of owned minions)
 	MinionIDs []string
 
+	// IsPlayerCharacter indicates if this is a PC (affects Hero Points, etc.)
+	IsPlayerCharacter bool
+
 	// Hero Points (for PCs only, NPCs typically have 0)
-	HeroPoints int
+	HeroPoints   int
+	heroPointsMu sync.Mutex
 }
 
 func NewEntity(id, name string, level int) *Entity {
@@ -187,6 +192,7 @@ func NewPC(id, name string, level int, ancestry, class, background string) *Enti
 	e.Class = class
 	e.Background = background
 	e.HeroPoints = 1
+	e.IsPlayerCharacter = true
 	return e
 }
 

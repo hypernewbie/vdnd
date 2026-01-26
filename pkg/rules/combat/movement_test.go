@@ -102,3 +102,18 @@ func TestStrideWithModes(t *testing.T) {
 		t.Errorf("Unexpected failure description: %s", res.Description)
 	}
 }
+
+func TestStrideWithZeroGroundSpeed(t *testing.T) {
+	actor := entity.NewEntity("a1", "Immobilized", 1)
+	actor.BaseSpeed = 0 // e.g., from Immobilized condition
+	turn := NewTurn(actor)
+	stride := &StrideAction{}
+
+	res := stride.Execute(actor, "zone-b", turn)
+	if res.Success {
+		t.Error("Expected stride failure with 0 ground speed")
+	}
+	if res.Description != "Cannot move: no ground speed" {
+		t.Errorf("Unexpected failure description: %s", res.Description)
+	}
+}

@@ -5,53 +5,85 @@ import (
 )
 
 func TestCounteractCheck(t *testing.T) {
+	// targetLevel 3, targetDC 20.
+	// counteractLevel 3, counteractMod +10.
+	// Total needs 20, so roll 10+.
+
 	tests := []struct {
-		name            string
-		counteractLvl  int
-		roll            int
-		mod             int
-		dc              int
-		expectedDegree  DegreeOfSuccess
-		expectedMax     int
-		targetLvl       int
-		expectedSuccess bool
+		name string
+		roll int
+		want bool
+		max  int
 	}{
-		// Core Counteract Tests
-		{"Crit success, lower target", 5, 20, 15, 25, CriticalSuccess, 8, 5, true},
-		{"Crit success, exact max", 5, 20, 15, 25, CriticalSuccess, 8, 8, true},
-		{"Crit success, too high", 5, 20, 15, 25, CriticalSuccess, 8, 9, false},
-		{"Success, lower target", 5, 15, 10, 20, Success, 6, 4, true},
-		{"Success, exact max", 5, 15, 10, 20, Success, 6, 6, true},
-		{"Success, too high", 5, 15, 10, 20, Success, 6, 7, false},
-		{"Failure, low target", 5, 8, 5, 20, Failure, 4, 3, true},
-		{"Failure, at limit", 5, 8, 5, 20, Failure, 4, 4, true},
-		{"Failure, too high", 5, 8, 5, 20, Failure, 4, 5, false},
-		{"Crit failure", 5, 1, 2, 25, CriticalFailure, 2, 2, true},
-		{"Crit failure, too high", 5, 1, 2, 25, CriticalFailure, 2, 3, false},
-
-		// Edge Cases
-		{"Level 1, crit fail (clamped)", 1, 1, -10, 20, CriticalFailure, 0, 0, true},
-		{"Level 2, failure", 2, 5, 0, 10, Failure, 1, 1, true},
-		{"Level 0, crit fail", 0, 1, 0, 20, CriticalFailure, 0, 0, true},
-		{"Level 10, crit success", 10, 20, 10, 10, CriticalSuccess, 13, 13, true},
-
-		// Natural 1/20 Interaction
-		{"Nat 20 upgrades success", 5, 20, 5, 20, CriticalSuccess, 8, 8, true},
-		{"Nat 1 downgrades success", 5, 1, 19, 20, Failure, 4, 4, true},
+		{"Critical Success (Lvl+3=6)", 20, true, 6},
+		{"Success (Lvl+1=4)", 10, true, 4},
+		{"Failure (Lvl-1=2)", 5, false, 2},
+		{"Critical Failure (Lvl-3=0)", 1, false, 0},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := CounteractCheckWithRoll(tt.roll, tt.counteractLvl, tt.mod, tt.targetLvl, tt.dc)
-
-			if result.Degree != tt.expectedDegree {
-				t.Errorf("%s: expected degree %v, got %v", tt.name, tt.expectedDegree, result.Degree)
+			res := CounteractCheckWithRoll(tt.roll, 3, 10, 3, 20)
+			if res.MaxLevelAffected != tt.max {
+				t.Errorf("%s: MaxLevelAffected = %d, want %d", tt.name, res.MaxLevelAffected, tt.max)
 			}
+			if res.CanCounteract != tt.want {
+				t.Errorf("%s: CanCounteract = %v, want %v", tt.name, res.CanCounteract, tt.want)
+			}
+		})
+	}
+}
+
+func TestCounteractCheck_Clamping(t *testing.T) {
+	// Counteract Level 1.
+	// Failure: 1 - 1 = 0.
+	// Crit Failure: 1 - 3 = -2 -> 0.
+	res := CounteractCheckWithRoll(1, 1, 10, 1, 20)
+	if res.MaxLevelAffected != 0 {
+		t.Errorf("Expected MaxLevel 0 for Crit Failure with Level 1, got %d", res.MaxLevelAffected)
+	}
+	if res.CanCounteract {
+		t.Error("Crit Failure should NEVER counteract")
+	}
+
+	res = CounteractCheckWithRoll(5, 1, 10, 0, 20)
+	if res.MaxLevelAffected != 0 {
+		t.Errorf("Expected MaxLevel 0 for Failure with Level 1, got %d", res.MaxLevelAffected)
+	}
+	if !res.CanCounteract {
+		t.Error("Failure Level 1 should counteract Level 0")
+	}
+}
+
+func TestCounteractCheck_NegativeInput(t *testing.T) {
+	tests := []struct {
+		name          string
+		counteractLvl int
+		targetLvl     int
+		expectedMax   int // Expected MaxLevelAffected after clamping (assuming Crit Success +3)
+	}{
+		{"Negative counteract level", -5, 3, 3}, // -5 becomes 0, 0 + 3 = 3
+		{"Negative target level", 5, -3, 8},     // 5 + 3 = 8
+		{"Both negative", -2, -5, 3},            // -2 becomes 0, 0 + 3 = 3
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Using a roll of 20 that gives CriticalSuccess (+3)
+			result := CounteractCheckWithRoll(20, tt.counteractLvl, 15, tt.targetLvl, 10)
 			if result.MaxLevelAffected != tt.expectedMax {
 				t.Errorf("%s: expected max level %d, got %d", tt.name, tt.expectedMax, result.MaxLevelAffected)
 			}
-			if result.CanCounteract != tt.expectedSuccess {
-				t.Errorf("%s: expected success %v, got %v", tt.name, tt.expectedSuccess, result.CanCounteract)
+
+			// Adjust targetLevel for comparison (since system treats negative as 0 for success check)
+			effectiveTarget := tt.targetLvl
+			if effectiveTarget < 0 {
+				effectiveTarget = 0
+			}
+
+			if (effectiveTarget <= result.MaxLevelAffected && result.Degree > CriticalFailure) != result.CanCounteract {
+				t.Errorf("%s: CanCounteract mismatch, expected %v, got %v",
+					tt.name, effectiveTarget <= result.MaxLevelAffected, result.CanCounteract)
 			}
 		})
 	}

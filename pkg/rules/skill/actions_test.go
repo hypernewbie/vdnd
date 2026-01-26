@@ -5,6 +5,7 @@ import (
 	"uaa/vdnd/pkg/rules/ability"
 	"uaa/vdnd/pkg/rules/check"
 	"uaa/vdnd/pkg/rules/condition"
+	"uaa/vdnd/pkg/rules/dice"
 	"uaa/vdnd/pkg/rules/entity"
 )
 
@@ -50,6 +51,29 @@ func TestRecallKnowledge(t *testing.T) {
 	}
 }
 
+func TestRecallKnowledgeSkillFor(t *testing.T) {
+	tests := []struct {
+		subjectType string
+		want        ability.SkillID
+	}{
+		{"aberration", ability.SkillOccultism},
+		{"beast", ability.SkillNature},
+		{"construct", ability.SkillArcana},
+		{"undead", ability.SkillReligion},
+		{"humanoid", ability.SkillSociety},
+		{"unknown", ability.SkillSociety}, // Default case
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.subjectType, func(t *testing.T) {
+			got := RecallKnowledgeSkillFor(tt.subjectType)
+			if got != tt.want {
+				t.Errorf("got %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestTreatWounds(t *testing.T) {
 	healer := entity.NewEntity("healer", "Healer", 1)
 	healer.Abilities = ability.AbilityScores{Strength: 10, Dexterity: 10, Constitution: 10, Intelligence: 10, Wisdom: 10, Charisma: 10}
@@ -61,7 +85,7 @@ func TestTreatWounds(t *testing.T) {
 
 	t.Run("Success DC 15", func(t *testing.T) {
 		patient.CurrentHP = 50
-		patient.Conditions.Remove(condition.TreatWoundsImmunity)
+		patient.Conditions.Remove(condition.ConditionTreatWoundsImmunity)
 		roller := &mockRoller{results: []int{4, 5}} // 2d8 -> 9
 		res := TreatWoundsWithRoll(healer, patient, 15, 15, roller)
 
@@ -74,14 +98,17 @@ func TestTreatWounds(t *testing.T) {
 		if patient.CurrentHP != 59 {
 			t.Errorf("Expected 59 HP, got %d", patient.CurrentHP)
 		}
-		if !patient.Conditions.Has(condition.TreatWoundsImmunity) {
-			t.Error("Expected TreatWoundsImmunity")
+		if !patient.Conditions.Has(condition.ConditionTreatWoundsImmunity) {
+			t.Error("Expected ConditionTreatWoundsImmunity")
+		}
+		if !res.Applied {
+			t.Error("Expected Applied to be true")
 		}
 	})
 
 	t.Run("Critical Success DC 15", func(t *testing.T) {
 		patient.CurrentHP = 50
-		patient.Conditions.Remove(condition.TreatWoundsImmunity)
+		patient.Conditions.Remove(condition.ConditionTreatWoundsImmunity)
 		roller := &mockRoller{results: []int{4, 5, 6, 7}} // 4d8 -> 22
 		res := TreatWoundsWithRoll(healer, patient, 15, 25, roller)
 
@@ -94,11 +121,15 @@ func TestTreatWounds(t *testing.T) {
 		if patient.CurrentHP != 72 {
 			t.Errorf("Expected 72 HP, got %d", patient.CurrentHP)
 		}
+		if !res.Applied {
+			t.Error("Expected Applied to be true")
+		}
 	})
 
 	t.Run("Success DC 30", func(t *testing.T) {
+		healer.SkillProficiencies[ability.SkillMedicine] = ability.Master
 		patient.CurrentHP = 50
-		patient.Conditions.Remove(condition.TreatWoundsImmunity)
+		patient.Conditions.Remove(condition.ConditionTreatWoundsImmunity)
 		roller := &mockRoller{results: []int{4, 5}} // 2d8 -> 9
 		res := TreatWoundsWithRoll(healer, patient, 30, 30, roller)
 
@@ -109,8 +140,9 @@ func TestTreatWounds(t *testing.T) {
 	})
 
 	t.Run("Crit Success DC 40", func(t *testing.T) {
+		healer.SkillProficiencies[ability.SkillMedicine] = ability.Legendary
 		patient.CurrentHP = 50
-		patient.Conditions.Remove(condition.TreatWoundsImmunity)
+		patient.Conditions.Remove(condition.ConditionTreatWoundsImmunity)
 		roller := &mockRoller{results: []int{4, 5, 6, 7}} // 4d8 -> 22
 		res := TreatWoundsWithRoll(healer, patient, 40, 50, roller)
 
@@ -121,8 +153,9 @@ func TestTreatWounds(t *testing.T) {
 	})
 
 	t.Run("Critical Failure", func(t *testing.T) {
+		healer.SkillProficiencies[ability.SkillMedicine] = ability.Trained
 		patient.CurrentHP = 50
-		patient.Conditions.Remove(condition.TreatWoundsImmunity)
+		patient.Conditions.Remove(condition.ConditionTreatWoundsImmunity)
 		roller := &mockRoller{results: []int{6}} // 1d8 damage
 		res := TreatWoundsWithRoll(healer, patient, 15, 1, roller)
 
@@ -135,13 +168,29 @@ func TestTreatWounds(t *testing.T) {
 		if patient.CurrentHP != 44 {
 			t.Errorf("Expected 44 HP, got %d", patient.CurrentHP)
 		}
-		if !patient.Conditions.Has(condition.TreatWoundsImmunity) {
+		if !patient.Conditions.Has(condition.ConditionTreatWoundsImmunity) {
 			t.Error("Expected immunity even on failure")
+		}
+		if !res.Applied {
+			t.Error("Expected Applied to be true on crit failure")
+		}
+	})
+
+	t.Run("Regular Failure", func(t *testing.T) {
+		patient.CurrentHP = 50
+		patient.Conditions.Remove(condition.ConditionTreatWoundsImmunity)
+		res := TreatWoundsWithRoll(healer, patient, 15, 10, &dice.SimpleRoller{})
+
+		if res.Degree != check.Failure {
+			t.Errorf("Expected Failure, got %v", res.Degree)
+		}
+		if res.Applied {
+			t.Error("Expected Applied to be false on regular failure")
 		}
 	})
 
 	t.Run("Immune patient", func(t *testing.T) {
-		patient.Conditions.Apply(condition.NewCondition(condition.TreatWoundsImmunity, "test"))
+		patient.Conditions.Apply(condition.NewCondition(condition.ConditionTreatWoundsImmunity, "test"))
 		res := TreatWoundsWithRoll(healer, patient, 15, 15, nil)
 
 		if res.Applied {
@@ -154,7 +203,7 @@ func TestTreatWounds(t *testing.T) {
 
 	t.Run("Untrained healer", func(t *testing.T) {
 		healer.SkillProficiencies[ability.SkillMedicine] = ability.Untrained
-		patient.Conditions.Remove(condition.TreatWoundsImmunity)
+		patient.Conditions.Remove(condition.ConditionTreatWoundsImmunity)
 		res := TreatWoundsWithRoll(healer, patient, 15, 15, nil)
 
 		if res.Applied {
@@ -162,6 +211,29 @@ func TestTreatWounds(t *testing.T) {
 		}
 		if res.Degree != check.Failure {
 			t.Errorf("Expected Failure for untrained healer, got %v", res.Degree)
+		}
+	})
+
+	t.Run("Insufficient proficiency for DC", func(t *testing.T) {
+		healer.SkillProficiencies[ability.SkillMedicine] = ability.Trained
+		patient.Conditions.Remove(condition.ConditionTreatWoundsImmunity)
+
+		// DC 20 requires Expert
+		res := TreatWoundsWithRoll(healer, patient, 20, 20, nil)
+		if res.Degree != check.Failure {
+			t.Errorf("Expected Failure for insufficient proficiency (DC 20), got %v", res.Degree)
+		}
+
+		// DC 30 requires Master
+		res = TreatWoundsWithRoll(healer, patient, 30, 20, nil)
+		if res.Degree != check.Failure {
+			t.Errorf("Expected Failure for insufficient proficiency (DC 30), got %v", res.Degree)
+		}
+
+		// DC 40 requires Legendary
+		res = TreatWoundsWithRoll(healer, patient, 40, 20, nil)
+		if res.Degree != check.Failure {
+			t.Errorf("Expected Failure for insufficient proficiency (DC 40), got %v", res.Degree)
 		}
 	})
 }

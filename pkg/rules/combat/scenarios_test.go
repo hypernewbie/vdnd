@@ -199,15 +199,17 @@ func TestScenarios(t *testing.T) {
 		patient := setupCombatant("Patient", 20, 15, nil)
 		patient.CurrentHP = 5
 
-		_, res := skill.TreatWounds(healer, patient, 15, 10) // Trained DC 15, Roll 10. Assuming healer has +5 mod.
+		res := skill.TreatWoundsWithRoll(healer, patient, 15, 10, &dice.SimpleRoller{}) // Trained DC 15, Roll 10. Assuming healer has +5 mod.
 		// Let's force mod to be exactly what we want for predictable results
 		// In setupCombatant, healer level is 1, so trained = 1 + 2 = 3. Wis is 10 (mod 0). Total +3.
 		// Roll 10 + 3 = 13. DC 15. Failure.
 		if res.Degree != check.Failure { t.Errorf("Expected Failure, got %s", res.Degree) }
 
 		// Let's try success
-		skill.TreatWounds(healer, patient, 15, 15) // 15 + 3 = 18. Success.
+		patient.Conditions.Remove(condition.ConditionTreatWoundsImmunity)
+		res = skill.TreatWoundsWithRoll(healer, patient, 15, 15, &dice.SimpleRoller{}) // 15 + 3 = 18. Success.
 		if patient.CurrentHP <= 5 { t.Error("Patient should have been healed") }
+		if !res.Applied { t.Error("Should be applied") }
 	})
 
 	// 9. Tactical Mobility
