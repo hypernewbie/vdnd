@@ -16,6 +16,24 @@ type DieRoll struct {
 	Modifier int // Flat bonus (e.g., 4 in "2d6+4")
 }
 
+// Roller abstracts dice rolling for testability.
+type Roller interface {
+	// Roll returns `count` individual die results, each 1 to `sides` inclusive.
+	Roll(count, sides int) []int
+}
+
+// SimpleRoller uses math/rand for rolling.
+type SimpleRoller struct{}
+
+func (r *SimpleRoller) Roll(count, sides int) []int {
+	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
+	results := make([]int, count)
+	for i := range results {
+		results[i] = rng.Intn(sides) + 1
+	}
+	return results
+}
+
 // Roll evaluates the dice expression using the default random source.
 func (d DieRoll) Roll() int {
 	return d.RollWithRNG(rand.New(rand.NewSource(time.Now().UnixNano())))

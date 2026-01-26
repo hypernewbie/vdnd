@@ -38,7 +38,7 @@ func (e *Entity) ApplyDamage(amount int) {
 	} else if wasAtZero {
 		// Taking 0 damage at 0 HP (from temp HP absorption) usually doesn't increase dying,
 		// but taking damage that IS absorbed might.
-		// Rule: "If you take damage while you already have the dying condition, 
+		// Rule: "If you take damage while you already have the dying condition,
 		// increase your dying value by 1 (or 2 if the damage was from a critical hit or critical failure on a save)."
 		// If amount was > 0, we already called CheckDying above.
 	}
@@ -49,7 +49,7 @@ func (e *Entity) Heal(amount int) {
 	if e.IsDead() {
 		return
 	}
-	
+
 	wasAtZero := e.CurrentHP <= 0
 	hadDying := e.Conditions.Has(condition.Dying)
 
@@ -62,7 +62,7 @@ func (e *Entity) Heal(amount int) {
 	if e.CurrentHP > 0 && (wasAtZero || hadDying) {
 		e.Conditions.Remove(condition.Dying)
 		e.Conditions.Remove(condition.Unconscious)
-		
+
 		woundedVal := e.Conditions.Value(condition.Wounded)
 		e.Conditions.Apply(condition.NewValuedCondition(condition.Wounded, woundedVal+1, "Healed from 0 HP"))
 	}

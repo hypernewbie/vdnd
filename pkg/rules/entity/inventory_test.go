@@ -12,7 +12,7 @@ func TestBulkCalculation(t *testing.T) {
 	inv := entity.NewInventory()
 
 	// Add items
-	inv.AddItem("rope", "Rope", entity.Bulk1, 2, nil)        // 2 Bulk
+	inv.AddItem("rope", "Rope", entity.Bulk1, 2, nil)       // 2 Bulk
 	inv.AddItem("torch", "Torch", entity.BulkLight, 5, nil) // 5 Light
 
 	total := inv.TotalBulk()

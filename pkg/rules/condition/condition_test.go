@@ -43,14 +43,24 @@ func TestPersistentDamageStacking(t *testing.T) {
 	for _, c := range all {
 		if c.ID == PersistentDamage {
 			pdCount++
-			if c.DamageType == "fire" { fireVal = c.Value }
-			if c.DamageType == "acid" { acidVal = c.Value }
+			if c.DamageType == "fire" {
+				fireVal = c.Value
+			}
+			if c.DamageType == "acid" {
+				acidVal = c.Value
+			}
 		}
 	}
 
-	if pdCount != 2 { t.Errorf("Expected 2 PD instances, got %d", pdCount) }
-	if fireVal != 10 { t.Errorf("Expected Fire 10, got %d", fireVal) }
-	if acidVal != 5 { t.Errorf("Expected Acid 5, got %d", acidVal) }
+	if pdCount != 2 {
+		t.Errorf("Expected 2 PD instances, got %d", pdCount)
+	}
+	if fireVal != 10 {
+		t.Errorf("Expected Fire 10, got %d", fireVal)
+	}
+	if acidVal != 5 {
+		t.Errorf("Expected Acid 5, got %d", acidVal)
+	}
 }
 
 func TestEndTurnPersistentDamage(t *testing.T) {
@@ -70,11 +80,11 @@ func TestEndTurnPersistentDamage(t *testing.T) {
 
 func TestFlatCheckRemoval(t *testing.T) {
 	// To test deterministic removal, we'd need to mock check.FlatCheck.
-	// Since we can't easily mock it without refactoring, we'll just ensure the logic exists 
+	// Since we can't easily mock it without refactoring, we'll just ensure the logic exists
 	// in tracker.go and run it in a loop to see it eventually clears.
 	tr := NewTracker()
 	tr.Apply(NewPersistentDamage(10, "fire", "Fire"))
-	
+
 	removed := false
 	for i := 0; i < 100; i++ {
 		tr.EndTurn(&MockActor{})
@@ -92,16 +102,16 @@ func TestValuedConditionDecay(t *testing.T) {
 	tr := NewTracker()
 	tr.Apply(NewValuedCondition(Frightened, 2, "Fear"))
 	tr.Apply(NewValuedCondition(Drained, 1, "Ghoul"))
-	
+
 	tr.EndTurn(nil)
-	
+
 	if tr.Value(Frightened) != 1 {
 		t.Errorf("Frightened should have decayed to 1, got %d", tr.Value(Frightened))
 	}
 	if tr.Value(Drained) != 1 {
 		t.Errorf("Drained should NOT have decayed, got %d", tr.Value(Drained))
 	}
-	
+
 	tr.EndTurn(nil)
 	if tr.Value(Frightened) != 0 {
 		t.Errorf("Frightened should have decayed to 0, got %d", tr.Value(Frightened))
@@ -114,14 +124,14 @@ func TestValuedConditionDecay(t *testing.T) {
 func TestRelationalConditionLogic(t *testing.T) {
 	tr := NewTracker()
 	tr.ApplyRelative(Hidden, "observer-1", "Stealth")
-	
+
 	if !tr.HasRelative(Hidden, "observer-1") {
 		t.Error("Should be hidden from observer-1")
 	}
 	if tr.HasRelative(Hidden, "observer-2") {
 		t.Error("Should NOT be hidden from observer-2")
 	}
-	
+
 	tr.RemoveRelative(Hidden, "observer-1")
 	if tr.HasRelative(Hidden, "observer-1") {
 		t.Error("Should no longer be hidden from observer-1")

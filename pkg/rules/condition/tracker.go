@@ -115,7 +115,7 @@ func (t *ConditionTracker) RemoveRelative(id ConditionID, targetID string) {
 	newConds := make([]*ConditionInstance, 0)
 	for _, c := range t.conditions {
 		if c.ID == id {
-			// If it's global, we don't remove it via RemoveRelative usually, 
+			// If it's global, we don't remove it via RemoveRelative usually,
 			// but if it has targets, we filter it.
 			if len(c.SpecificTo) > 0 {
 				newSpecific := make([]string, 0)
@@ -249,7 +249,9 @@ func (t *ConditionTracker) IsFlatFooted() bool {
 
 // IsFlatFootedTo checks if the entity is flat-footed specifically to an observer
 func (t *ConditionTracker) IsFlatFootedTo(observerID string) bool {
-	if t.IsFlatFooted() { return true }
+	if t.IsFlatFooted() {
+		return true
+	}
 	// Check specifically for relational flat-footed
 	return t.HasRelative(FlatFooted, observerID)
 }

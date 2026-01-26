@@ -46,15 +46,17 @@ const (
 	Unnoticed  ConditionID = "unnoticed"
 
 	// Attitudes (Relational)
-	Friendly   ConditionID = "friendly"
-	Helpful    ConditionID = "helpful"
-	Hostile    ConditionID = "hostile"
+	Friendly    ConditionID = "friendly"
+	Helpful     ConditionID = "helpful"
+	Hostile     ConditionID = "hostile"
 	Indifferent ConditionID = "indifferent"
-	Unfriendly ConditionID = "unfriendly"
+	Unfriendly  ConditionID = "unfriendly"
 
 	// Cover
 	StandardCover ConditionID = "standard-cover"
 	TakingCover   ConditionID = "taking-cover"
+
+	TreatWoundsImmunity ConditionID = "treat-wounds-immunity"
 )
 
 type Condition struct {

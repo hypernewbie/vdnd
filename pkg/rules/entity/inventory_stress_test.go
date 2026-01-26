@@ -25,7 +25,7 @@ func TestBagOfRocksStress(t *testing.T) {
 	if !e.Conditions.Has(condition.Immobilized) {
 		t.Error("Entity should be immobilized")
 	}
-	
+
 	if !e.Conditions.Has(condition.Encumbered) {
 		t.Error("Entity should be encumbered")
 	}
@@ -33,7 +33,7 @@ func TestBagOfRocksStress(t *testing.T) {
 
 func TestFractionalBulkArithmetic(t *testing.T) {
 	e := entity.NewEntity("math", "Math Tester", 1)
-	
+
 	// 9 Light items = 0 Bulk (10 L = 1 Bulk)
 	for i := 0; i < 9; i++ {
 		e.PickUpItem(fmt.Sprintf("light_%d", i), "Light Item", entity.BulkLight, 1, nil)
@@ -58,10 +58,10 @@ func TestFractionalBulkArithmetic(t *testing.T) {
 func TestDropToMove(t *testing.T) {
 	e := entity.NewEntity("drop", "Dropper", 1)
 	e.Abilities.Strength = 10 // Max 10
-	
+
 	// Add very heavy item
 	e.PickUpItem("boulder", "Boulder", entity.BulkValue(500), 1, nil)
-	
+
 	if !e.Conditions.Has(condition.Immobilized) {
 		t.Fatal("Should be immobilized")
 	}

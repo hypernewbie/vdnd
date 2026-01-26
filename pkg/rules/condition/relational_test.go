@@ -23,7 +23,7 @@ func TestRelationalVisibility(t *testing.T) {
 
 	// Rogue becomes Invisible (Global)
 	tracker.Apply(NewCondition(Invisible, "Potion"))
-	
+
 	// PF2E logic: Invisible implies Hidden to everyone
 	if !tracker.HasRelative(Invisible, guardB) {
 		t.Error("Should be Invisible relative to Guard B (Global)")

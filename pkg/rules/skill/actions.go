@@ -318,30 +318,95 @@ func Demoralize(actor, target *entity.Entity, naturalRoll int) check.CheckResult
 
 // --- Medicine ---
 
-func TreatWounds(healer, patient *entity.Entity, dc int, naturalRoll int) (int, check.CheckResult) {
+// TreatWoundsResult contains the outcome of a Treat Wounds attempt.
+type TreatWoundsResult struct {
+	check.CheckResult
+	HealingAmount int  // Positive for healing, negative for damage on crit fail
+	Applied       bool // Whether healing/damage was applied to the patient
+}
+
+// TreatWounds attempts to heal a patient using Medicine.
+func TreatWounds(healer, patient *entity.Entity, dc int, roller dice.Roller) TreatWoundsResult {
+	return TreatWoundsWithRoll(healer, patient, dc, 0, roller)
+}
+
+// TreatWoundsWithRoll allows injecting a d20 roll for testing.
+func TreatWoundsWithRoll(healer, patient *entity.Entity, dc, naturalRoll int, roller dice.Roller) TreatWoundsResult {
+	// Must be trained in Medicine
 	if healer.SkillProficiencies[ability.SkillMedicine] < ability.Trained {
-		return 0, check.CheckResult{Degree: check.Failure}
-	}
-	var res check.CheckResult
-	if naturalRoll > 0 {
-		res = PerformSkillCheckWithRoll(healer, ability.SkillMedicine, dc, naturalRoll)
-	} else {
-		res = PerformSkillCheck(healer, ability.SkillMedicine, dc)
+		return TreatWoundsResult{
+			CheckResult: check.CheckResult{Degree: check.Failure},
+			Applied:     false,
+		}
 	}
 
-	healing := 0
-	switch res.Degree {
+	// Check for immunity
+	if patient.Conditions.Has(condition.TreatWoundsImmunity) {
+		return TreatWoundsResult{
+			CheckResult: check.CheckResult{Degree: check.Failure},
+			Applied:     false,
+		}
+	}
+
+	var result check.CheckResult
+	if naturalRoll > 0 {
+		result = PerformSkillCheckWithRoll(healer, ability.SkillMedicine, dc, naturalRoll)
+	} else {
+		result = PerformSkillCheck(healer, ability.SkillMedicine, dc)
+	}
+
+	// Calculate bonus based on DC
+	bonus := 0
+	if dc >= 40 {
+		bonus = 30
+	} else if dc >= 30 {
+		bonus = 10
+	}
+
+	var healingAmount int
+	switch result.Degree {
 	case check.CriticalSuccess:
-		healing = dice.DieRoll{Count: 4, Sides: 8}.Roll()
+		healingAmount = rollDice(roller, 4, 8) + bonus
 	case check.Success:
-		healing = dice.DieRoll{Count: 2, Sides: 8}.Roll()
+		healingAmount = rollDice(roller, 2, 8) + bonus
 	case check.CriticalFailure:
-		patient.ApplyDamage(dice.DieRoll{Count: 1, Sides: 8}.Roll())
+		damage := rollDice(roller, 1, 8)
+		healingAmount = -damage
+	default:
+		healingAmount = 0
 	}
-	if healing > 0 {
-		patient.Heal(healing)
+
+	// Apply healing or damage
+	applied := false
+	if healingAmount > 0 {
+		patient.Heal(healingAmount)
+		applied = true
+	} else if healingAmount < 0 {
+		patient.ApplyDamage(-healingAmount)
+		applied = true
 	}
-	return healing, res
+
+	// Apply immunity (even on failure, the attempt was made)
+	patient.Conditions.Apply(condition.NewCondition(
+		condition.TreatWoundsImmunity,
+		"Treated by "+healer.ID,
+	))
+
+	return TreatWoundsResult{
+		CheckResult:   result,
+		HealingAmount: healingAmount,
+		Applied:       applied,
+	}
+}
+
+// Helper for rolling dice
+func rollDice(roller dice.Roller, count, sides int) int {
+	results := roller.Roll(count, sides)
+	total := 0
+	for _, r := range results {
+		total += r
+	}
+	return total
 }
 
 func AdministerFirstAid(healer, patient *entity.Entity, dc int, stabilize bool, naturalRoll int) check.CheckResult {
@@ -496,19 +561,49 @@ func Seek(actor *entity.Entity, dc int, modifiers []check.Modifier, naturalRoll 
 	return PerformSkillCheckWithModifiers(actor, ability.SkillPerception, dc, modifiers)
 }
 
-func RecallKnowledge(actor *entity.Entity, skillID ability.SkillID, dc int, naturalRoll int) (string, check.CheckResult) {
-	var res check.CheckResult
-	if naturalRoll > 0 {
-		res = PerformSkillCheckWithRoll(actor, skillID, dc, naturalRoll)
-	} else {
-		res = PerformSkillCheck(actor, skillID, dc)
-	}
+// RecallKnowledge attempts to identify a creature, object, or concept.
+//
+// The LLM determines:
+//   - Which skill to use (Arcana, Nature, Occultism, Religion, Society, etc.)
+//   - The DC based on the subject's level/rarity
+//
+// Returns:
+//   - learned: true if any information was gained (Success or CritSuccess)
+//   - result: the check result for degree of success
+//
+// On Critical Failure, the LLM should provide false information.
+//
+// src: rules/compendium/skills.md "Recall Knowledge"
+func RecallKnowledge(actor *entity.Entity, skillID ability.SkillID, dc int) (learned bool, result check.CheckResult) {
+	result = PerformSkillCheck(actor, skillID, dc)
+	learned = result.Degree >= check.Success
+	return
+}
 
-	info := ""
-	if res.Degree >= check.Success {
-		info = "General Information"
+// RecallKnowledgeWithRoll allows injecting the d20 result for testing.
+func RecallKnowledgeWithRoll(actor *entity.Entity, skillID ability.SkillID, dc, naturalRoll int) (learned bool, result check.CheckResult) {
+	result = PerformSkillCheckWithRoll(actor, skillID, dc, naturalRoll)
+	learned = result.Degree >= check.Success
+	return
+}
+
+// RecallKnowledgeSkillFor returns the typical skill for identifying a subject.
+// This is a helper for the LLM to determine which skill to use.
+func RecallKnowledgeSkillFor(subjectType string) ability.SkillID {
+	switch subjectType {
+	case "aberration", "spirit", "esoterica":
+		return ability.SkillOccultism
+	case "animal", "beast", "fey", "plant":
+		return ability.SkillNature
+	case "construct", "dragon", "ooze", "magic":
+		return ability.SkillArcana
+	case "undead", "celestial", "fiend", "divine":
+		return ability.SkillReligion
+	case "humanoid", "history", "culture":
+		return ability.SkillSociety
+	default:
+		return ability.SkillSociety // Default to Society
 	}
-	return info, res
 }
 
 func Grapple(attacker, target *entity.Entity, modifiers []check.Modifier, naturalRoll int) check.CheckResult {
@@ -696,4 +791,3 @@ func RepairShield(actor *entity.Entity, s *item.Shield, naturalRoll int) (Repair
 
 	return result, res
 }
-

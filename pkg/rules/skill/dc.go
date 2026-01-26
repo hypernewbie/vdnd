@@ -17,7 +17,7 @@ func DifficultyDC(diff Difficulty) int {
 var levelDCs = []int{
 	14, 15, 16, 18, 19, 20, 22, 23, 24, 26, // 0-9
 	27, 28, 30, 31, 32, 34, 35, 36, 38, 39, // 10-19
-	40, 42, 44, 46, 48, 50,                 // 20-25
+	40, 42, 44, 46, 48, 50, // 20-25
 }
 
 func LevelBasedDC(level int) int {

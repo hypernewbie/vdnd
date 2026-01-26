@@ -18,16 +18,16 @@ type ResistanceEntry struct {
 type Language string
 
 const (
-	LangCommon   Language = "common"
-	LangDraconic Language = "draconic"
-	LangElven    Language = "elven"
-	LangDwarven  Language = "dwarven"
-	LangGoblin   Language = "goblin"
-	LangOrcish   Language = "orcish"
-	LangAbyssal  Language = "abyssal"
+	LangCommon    Language = "common"
+	LangDraconic  Language = "draconic"
+	LangElven     Language = "elven"
+	LangDwarven   Language = "dwarven"
+	LangGoblin    Language = "goblin"
+	LangOrcish    Language = "orcish"
+	LangAbyssal   Language = "abyssal"
 	LangCelestial Language = "celestial"
-	LangInfernal Language = "infernal"
-	LangSylvan   Language = "sylvan"
+	LangInfernal  Language = "infernal"
+	LangSylvan    Language = "sylvan"
 )
 
 type MoveMode int
@@ -87,7 +87,7 @@ type Entity struct {
 	Languages []Language
 
 	// Movement
-	BaseSpeed int
+	BaseSpeed   int
 	FlySpeed    int
 	SwimSpeed   int
 	ClimbSpeed  int
@@ -152,6 +152,9 @@ type Entity struct {
 
 	// Master Data (ids of owned minions)
 	MinionIDs []string
+
+	// Hero Points (for PCs only, NPCs typically have 0)
+	HeroPoints int
 }
 
 func NewEntity(id, name string, level int) *Entity {
@@ -183,6 +186,7 @@ func NewPC(id, name string, level int, ancestry, class, background string) *Enti
 	e.Ancestry = ancestry
 	e.Class = class
 	e.Background = background
+	e.HeroPoints = 1
 	return e
 }
 

@@ -182,7 +182,7 @@ func (e *Entity) GetSpeed() int {
 func IsFlanking(target, a, b *Entity) bool {
 	// If they are on opposite sides, vector A to Target == -(vector B to Target)
 	// For 1x1: a.X + b.X == 2*target.X and a.Y + b.Y == 2*target.Y
-	return (a.X + b.X == 2*target.X) && (a.Y + b.Y == 2*target.Y)
+	return (a.X+b.X == 2*target.X) && (a.Y+b.Y == 2*target.Y)
 }
 
 // ProcessAfflictions advances the affliction tracker by one time unit.
