@@ -9,11 +9,16 @@ import (
 type CommandHandler func(args []string, deps Deps) (string, error)
 
 var commands = map[string]CommandHandler{
-	"help":       cmdHelp,
-	"scene new":  cmdSceneNew,
-	"scene save": cmdSceneSave,
-	"scene load": cmdSceneLoad,
-	"status":     cmdStatus,
+	"help":          cmdHelp,
+	"scene new":     cmdSceneNew,
+	"scene save":    cmdSceneSave,
+	"scene load":    cmdSceneLoad,
+	"status":        cmdStatus,
+	"entity add":    cmdEntityAdd,
+	"entity get":    cmdEntityGet,
+	"entity set":    cmdEntitySet,
+	"entity list":   cmdEntityList,
+	"entity spawn":  cmdEntitySpawn,
 }
 
 // Run is the main entry point. Takes CLI args and dependencies, returns output and exit code.
