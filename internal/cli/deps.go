@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"io"
 	"math/big"
+	mrand "math/rand"
 	"os"
 	"time"
 	"uaa/vdnd/internal/state"
@@ -62,6 +63,23 @@ func (r *FixedRoller) Roll(count, sides int) []int {
 	out := r.Results[r.Index : r.Index+count]
 	r.Index += count
 	return out
+}
+
+// SeededRoller uses a seeded PRNG for reproducible scenarios.
+type SeededRoller struct {
+	rng *mrand.Rand
+}
+
+func NewSeededRoller(seed int64) *SeededRoller {
+	return &SeededRoller{rng: mrand.New(mrand.NewSource(seed))}
+}
+
+func (r *SeededRoller) Roll(count, sides int) []int {
+	results := make([]int, count)
+	for i := range results {
+		results[i] = r.rng.Intn(sides) + 1
+	}
+	return results
 }
 
 // Clock abstracts time for testing time-based effects.

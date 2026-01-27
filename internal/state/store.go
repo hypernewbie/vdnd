@@ -3,6 +3,7 @@ package state
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 )
@@ -36,6 +37,9 @@ func (s *FileStore) Load() (*GameState, error) {
 	var state GameState
 	if err := json.NewDecoder(f).Decode(&state); err != nil {
 		return nil, err
+	}
+	if err := state.Validate(); err != nil {
+		return nil, fmt.Errorf("invalid state: %w", err)
 	}
 	return &state, nil
 }

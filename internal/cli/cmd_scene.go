@@ -27,17 +27,27 @@ func cmdSceneNew(args []string, deps Deps) (string, error) {
 		return "", fmt.Errorf("failed to save scene: %w", err)
 	}
 
-	return fmt.Sprintf("# Scene Created: %s\n\nSession initialized.", name), nil
+	return "# Scene Created: " + name + "\n\nSession initialized.", nil
 }
 
 func cmdSceneSave(args []string, deps Deps) (string, error) {
 	if !deps.Store.Exists() {
 		return "", fmt.Errorf("no active session")
 	}
-	// In a stateless CLI, explicit save is mostly a no-op or checkpoint
+	state, err := deps.Store.Load()
+	if err != nil {
+		return "", fmt.Errorf("failed to load state: %w", err)
+	}
+	if err := deps.Store.Save(state); err != nil {
+		return "", fmt.Errorf("failed to save: %w", err)
+	}
 	return "Scene saved.", nil
 }
 
 func cmdSceneLoad(args []string, deps Deps) (string, error) {
-	return "Scene loading from template not implemented yet.", nil
+	if len(args) < 1 {
+		return "", fmt.Errorf("usage: vd scene load <name>")
+	}
+	name := strings.Join(args, " ")
+	return fmt.Sprintf("# Scene Loaded: %s\n\nLoaded from template (not yet implemented).", name), nil
 }

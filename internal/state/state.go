@@ -1,6 +1,9 @@
 package state
 
-import "uaa/vdnd/pkg/rules/ability"
+import (
+	"fmt"
+	"uaa/vdnd/pkg/rules/ability"
+)
 
 type GameState struct {
 	// Scene
@@ -22,6 +25,34 @@ type GameState struct {
 
 	// Pending
 	PendingEvents []PendingEvent `json:"pendingEvents,omitempty"`
+}
+
+// Validate checks that the GameState has valid structure.
+func (g *GameState) Validate() error {
+	if g.SceneName == "" {
+		return fmt.Errorf("scene name cannot be empty")
+	}
+	if g.Positions == nil {
+		return fmt.Errorf("positions map cannot be nil")
+	}
+	if g.Entities == nil {
+		return fmt.Errorf("entities map cannot be nil")
+	}
+	if g.ReactionsUsed == nil {
+		return fmt.Errorf("reactionsUsed map cannot be nil")
+	}
+	for id, entity := range g.Entities {
+		if entity == nil {
+			return fmt.Errorf("entity %s is nil", id)
+		}
+		if entity.MaxHP <= 0 {
+			return fmt.Errorf("entity %s has invalid MaxHP: %d", id, entity.MaxHP)
+		}
+		if entity.AC <= 0 {
+			return fmt.Errorf("entity %s has invalid AC: %d", id, entity.AC)
+		}
+	}
+	return nil
 }
 
 type Zone struct {
