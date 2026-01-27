@@ -38,6 +38,9 @@ func (s *FileStore) Load() (*GameState, error) {
 	if err := json.NewDecoder(f).Decode(&state); err != nil {
 		return nil, err
 	}
+	if state.ReactionsUsed == nil {
+		state.ReactionsUsed = make(map[string]bool)
+	}
 	if err := state.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid state: %w", err)
 	}

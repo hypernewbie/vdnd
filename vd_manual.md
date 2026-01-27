@@ -46,6 +46,29 @@ Create and persist game states.
 ### 2. Entity Management
 Manage characters, monsters, and objects.
 
+#### Entity File Format
+The `--file` flag expects a simple Markdown file defining the entity.
+**Example (`goblin.md`):**
+```markdown
+# Goblin Warrior
+- Level: 1
+- HP: 15/15
+- AC: 16
+- Speed: 25ft
+- Fort: +5
+- Ref: +7
+- Will: +4
+- Perception: +5
+- Strength: 2
+- Dexterity: 4
+- Constitution: 2
+- Intelligence: -1
+- Wisdom: 0
+- Charisma: 0
+- Acrobatics: +5
+- Stealth: +5
+```
+
 - **`vd entity add <id> --file <path>`**
   Adds a single entity defined in a markdown file.
   *Example:* `vd entity add valeros --file sheets/valeros.md`

@@ -19,9 +19,10 @@ func cmdSceneNew(args []string, deps Deps) (string, error) {
 	}
 
 	newState := &state.GameState{
-		SceneName: name,
-		Positions: make(map[string]*state.Zone),
-		Entities:  make(map[string]*state.EntityState),
+		SceneName:     name,
+		Positions:     make(map[string]*state.Zone),
+		Entities:      make(map[string]*state.EntityState),
+		ReactionsUsed: make(map[string]bool),
 	}
 
 	if err := deps.Store.Save(newState); err != nil {
@@ -50,7 +51,7 @@ func cmdSceneLoad(args []string, deps Deps) (string, error) {
 		return "", fmt.Errorf("usage: vd scene load <path>")
 	}
 	path := args[0]
-	
+
 	// For now, let's just check if the file exists as a mock "load"
 	// In a real implementation we might copy it to state.json
 	if _, err := os.Stat(path); err != nil {
