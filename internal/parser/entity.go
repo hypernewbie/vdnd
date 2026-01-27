@@ -75,12 +75,20 @@ func ParseEntity(r io.Reader) (*state.EntityState, error) {
 			e.Reflex = parseModifier(val)
 		case "will":
 			e.Will = parseModifier(val)
+		case "perception":
+			e.Perception = parseModifier(val)
 		case "ancestry":
 			e.Ancestry = val
 		case "class":
 			e.Class = val
 		case "background":
 			e.Background = val
+		default:
+			// Check if it's a known skill or just any other skill
+			if e.Skills == nil {
+				e.Skills = make(map[string]int)
+			}
+			e.Skills[key] = parseModifier(val)
 		}
 	}
 

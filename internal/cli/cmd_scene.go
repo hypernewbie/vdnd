@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"os"
 	"strings"
 	"uaa/vdnd/internal/state"
 )
@@ -46,8 +47,15 @@ func cmdSceneSave(args []string, deps Deps) (string, error) {
 
 func cmdSceneLoad(args []string, deps Deps) (string, error) {
 	if len(args) < 1 {
-		return "", fmt.Errorf("usage: vd scene load <name>")
+		return "", fmt.Errorf("usage: vd scene load <path>")
 	}
-	name := strings.Join(args, " ")
-	return fmt.Sprintf("# Scene Loaded: %s\n\nLoaded from template (not yet implemented).", name), nil
+	path := args[0]
+	
+	// For now, let's just check if the file exists as a mock "load"
+	// In a real implementation we might copy it to state.json
+	if _, err := os.Stat(path); err != nil {
+		return "", fmt.Errorf("failed to load scene: %w", err)
+	}
+
+	return fmt.Sprintf("# Scene Loaded: %s\n\n(Note: This currently only validates the file exists)", path), nil
 }

@@ -2,6 +2,7 @@ package state
 
 import (
 	"fmt"
+	"strings"
 	"uaa/vdnd/pkg/rules/ability"
 )
 
@@ -89,6 +90,12 @@ type EntityState struct {
 	Reflex    int `json:"reflex"`
 	Will      int `json:"will"`
 
+	// Perception (total bonus)
+	Perception int `json:"perception"`
+
+	// Skills (total bonus)
+	Skills map[string]int `json:"skills,omitempty"`
+
 	// Abilities
 	Abilities ability.AbilityScores `json:"abilities"`
 
@@ -121,6 +128,20 @@ func (e *EntityState) GetAC() int {
 		}
 	}
 	return ac
+}
+
+func (e *EntityState) GetSkillModifier(skillID string) int {
+	skillID = strings.ToLower(skillID)
+	if skillID == "perception" {
+		return e.Perception
+	}
+	if val, ok := e.Skills[skillID]; ok {
+		return val
+	}
+	// Fallback to ability modifier + level (assume trained for MVP if not specified?)
+	// Actually, let's just use ability modifier if not specified.
+	return 0 // For now, if it's not in the map, return 0. 
+	// In a real implementation we'd do more complex calculation.
 }
 
 type ConditionInstance struct {

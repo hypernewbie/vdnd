@@ -1,3 +1,5 @@
 bin/
 tmp/
 *.env
+state.json
+coverage.out

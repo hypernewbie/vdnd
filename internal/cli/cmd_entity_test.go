@@ -84,6 +84,12 @@ func TestEntityCommands(t *testing.T) {
 		if !strings.Contains(out, "| goblin1 | Goblin Warrior | 1 | 10/15 |") {
 			t.Errorf("Unexpected list output: %s", out)
 		}
+
+		// List with zone filter
+		out, _ = cmdEntityList([]string{"--zone", "dungeon"}, deps)
+		if !strings.Contains(out, "No entities found in zone") {
+			t.Errorf("Expected 'no entities' message, got: %s", out)
+		}
 	})
 
 	// Test Entity Spawn

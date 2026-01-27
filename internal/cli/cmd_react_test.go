@@ -138,4 +138,47 @@ func TestReactions(t *testing.T) {
 			t.Errorf("Goblin should have moved to room2, got %s", st.Entities["goblin"].Position)
 		}
 	})
+
+	t.Run("React - Skip Specific", func(t *testing.T) {
+		// Reset state
+		s.PendingEvents = nil
+		s.Entities["goblin"].Position = "room1"
+		s.ReactionsUsed = make(map[string]bool)
+		
+		// Add another reactor
+		s.Entities["fighter2"] = &state.EntityState{
+			ID: "fighter2", Name: "Fighter 2", Position: "room1", Reactions: []string{"attack_of_opportunity"},
+		}
+		deps.Store.Save(s)
+
+		// Trigger
+		cmdActionStride([]string{"goblin", "--to", "room2"}, deps)
+
+		// Skip one
+		out, _ := cmdReactSkip([]string{"fighter"}, deps)
+		if !strings.Contains(out, "1 reactors remaining") {
+			t.Errorf("Expected 1 reactor left: %s", out)
+		}
+
+		// Skip last
+		out, _ = cmdReactSkip([]string{"fighter2"}, deps)
+		if !strings.Contains(out, "finished moving") {
+			t.Errorf("Expected movement to finish: %s", out)
+		}
+	})
+
+	t.Run("React Error States", func(t *testing.T) {
+		// No pending events
+		s.PendingEvents = nil
+		deps.Store.Save(s)
+		
+		_, err := cmdReact([]string{"fighter", "aoo"}, deps)
+		if err == nil { t.Error("Expected error with no pending events") }
+
+		_, err = cmdReactSkip([]string{"fighter"}, deps)
+		if err == nil { t.Error("Expected error with no pending events") }
+
+		_, err = cmdReactSkipAll([]string{}, deps)
+		if err == nil { t.Error("Expected error with no pending events") }
+	})
 }

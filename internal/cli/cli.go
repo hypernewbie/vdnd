@@ -23,10 +23,30 @@ var commands = map[string]CommandHandler{
 	"action stride":      cmdActionStride,
 	"action step":        cmdActionStep,
 	"action raise_shield": cmdActionRaiseShield,
+	"action cast":         cmdActionCast,
 	"pending":            cmdPending,
 	"react":              cmdReact,
 	"react skip":         cmdReactSkip,
 	"react skip_all":     cmdReactSkipAll,
+	"condition add":      cmdConditionAdd,
+	"condition remove":   cmdConditionRemove,
+	"condition reduce":   cmdConditionReduce,
+	"condition list":     cmdConditionList,
+	"damage":             cmdDamage,
+	"heal":               cmdHeal,
+	"temp_hp":            cmdTempHP,
+	"query distance":     cmdQueryDistance,
+	"query targets":      cmdQueryTargets,
+	"query flanking":     cmdQueryFlanking,
+	"query cover":        cmdQueryCover,
+	"roll":               cmdRoll,
+	"check":              cmdCheck,
+	"action grapple":     cmdActionGrapple,
+	"action trip":        cmdActionTrip,
+	"action shove":       cmdActionShove,
+	"action demoralize":  cmdActionDemoralize,
+	"action hide":        cmdActionHide,
+	"action seek":        cmdActionSeek,
 }
 
 // Run is the main entry point. Takes CLI args and dependencies, returns output and exit code.
@@ -122,9 +142,29 @@ Commands:
   action stride <actor> --to <zone>
   action step <actor> --to <zone>
   action raise_shield <actor>
+  action cast <actor> <spell> [flags]
   pending                 Show pending events requiring reactions
   react <id> <reaction>   Perform a reaction
   react skip [id]         Skip one or more reactions
   react skip_all          Skip all reactions for current event
+  condition add <id> <cond> [val]  Add condition
+  condition remove <id> <cond>     Remove condition
+  condition reduce <id> <cond> [n] Reduce condition value
+  condition list <id>              List entity conditions
+  damage <id> <amt> [type]         Apply damage to entity
+  heal <id> <amt>                  Heal entity
+  temp_hp <id> <amt>               Set temporary HP
+  query distance <id1> <id2>       Calculate distance between entities
+  query targets <id> [--range ft]  List valid attack targets
+  query flanking <id1> <id2>       Check if id1 flanks id2
+  query cover <id1> <id2>          Check cover id2 has from id1
+  roll <expression>                Roll dice (e.g. 2d6+4)
+  check <id> <skill> [--dc N]      Perform a skill check
+  action grapple <actor> <target>  Attempt to grapple target
+  action trip <actor> <target>     Attempt to trip target
+  action shove <actor> <target>    Attempt to shove target
+  action demoralize <actor> <target> Attempt to demoralize target
+  action hide <actor> [--dc N]     Attempt to hide
+  action seek <actor> <target>     Attempt to find hidden target
 `
 }
