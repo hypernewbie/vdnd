@@ -9,16 +9,24 @@ import (
 type CommandHandler func(args []string, deps Deps) (string, error)
 
 var commands = map[string]CommandHandler{
-	"help":          cmdHelp,
-	"scene new":     cmdSceneNew,
-	"scene save":    cmdSceneSave,
-	"scene load":    cmdSceneLoad,
-	"status":        cmdStatus,
-	"entity add":    cmdEntityAdd,
-	"entity get":    cmdEntityGet,
-	"entity set":    cmdEntitySet,
-	"entity list":   cmdEntityList,
-	"entity spawn":  cmdEntitySpawn,
+	"help":               cmdHelp,
+	"scene new":          cmdSceneNew,
+	"scene save":         cmdSceneSave,
+	"scene load":         cmdSceneLoad,
+	"status":             cmdStatus,
+	"entity add":         cmdEntityAdd,
+	"entity get":         cmdEntityGet,
+	"entity set":         cmdEntitySet,
+	"entity list":        cmdEntityList,
+	"entity spawn":       cmdEntitySpawn,
+	"action strike":      cmdActionStrike,
+	"action stride":      cmdActionStride,
+	"action step":        cmdActionStep,
+	"action raise_shield": cmdActionRaiseShield,
+	"pending":            cmdPending,
+	"react":              cmdReact,
+	"react skip":         cmdReactSkip,
+	"react skip_all":     cmdReactSkipAll,
 }
 
 // Run is the main entry point. Takes CLI args and dependencies, returns output and exit code.
@@ -100,6 +108,23 @@ Usage:
   vd <command> [args]
 
 Commands:
-  help    Show this help message
+  help                    Show this help message
+  status                  Show current scene status
+  scene new <name>        Create a new scene
+  scene save <path>       Save current scene to file
+  scene load <path>       Load scene from file
+  entity add <id> --file <path>  Add entity from file
+  entity get <id>         Show entity details
+  entity set <id> <field> <val>  Update entity field
+  entity list             List all entities
+  entity spawn <path>     Spawn multiple entities from template
+  action strike <actor> <target> [--weapon <id>] [--map <0|1|2>]
+  action stride <actor> --to <zone>
+  action step <actor> --to <zone>
+  action raise_shield <actor>
+  pending                 Show pending events requiring reactions
+  react <id> <reaction>   Perform a reaction
+  react skip [id]         Skip one or more reactions
+  react skip_all          Skip all reactions for current event
 `
 }

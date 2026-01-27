@@ -113,6 +113,16 @@ type EntityState struct {
 	Reactions []string `json:"reactions,omitempty"` // Available reaction types
 }
 
+func (e *EntityState) GetAC() int {
+	ac := e.AC
+	for _, c := range e.Conditions {
+		if c.ID == "raised_shield" {
+			ac += 2
+		}
+	}
+	return ac
+}
+
 type ConditionInstance struct {
 	ID       string `json:"id"`
 	Value    int    `json:"value,omitempty"`
@@ -132,16 +142,15 @@ type ArmorState struct {
 }
 
 type PendingEvent struct {
-	ID          string              `json:"id"`
-	Type        string              `json:"type"` // "movement", "attack", "spell"
-	Actor       string              `json:"actor"`
-	Description string              `json:"description"`
-	Reactors    []string            `json:"reactors"` // Entities that can react
-	Reactions   []AvailableReaction `json:"reactions"`
+	ID       string            `json:"id"`
+	Type     string            `json:"type"` // "movement", "strike", "spell"
+	ActorID  string            `json:"actorId"`
+	TargetID string            `json:"targetId,omitempty"`
+	Payload  map[string]string `json:"payload,omitempty"`
+	Reactors []AvailableReaction `json:"reactors"`
 }
 
 type AvailableReaction struct {
-	Entity   string `json:"entity"`
+	EntityID string `json:"entityId"`
 	Reaction string `json:"reaction"` // "attack_of_opportunity", "shield_block", etc
-	Trigger  string `json:"trigger"`
 }
