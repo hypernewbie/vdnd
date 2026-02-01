@@ -18,6 +18,25 @@ import (
 	"github.com/joho/godotenv"
 )
 
+// DiscordSession interface for testability
+type DiscordSession interface {
+	AddHandler(handler interface{}) func()
+	ApplicationCommandCreate(appID, guildID string, cmd *discordgo.ApplicationCommand, options ...discordgo.RequestOption) (ccmd *discordgo.ApplicationCommand, err error)
+	ApplicationCommandDelete(appID, guildID, cmdID string, options ...discordgo.RequestOption) error
+	InteractionRespond(i *discordgo.Interaction, r *discordgo.InteractionResponse, options ...discordgo.RequestOption) error
+	Open() error
+	Close() error
+	GetState() *discordgo.State
+}
+
+type discordSessionWrapper struct {
+	*discordgo.Session
+}
+
+func (w *discordSessionWrapper) GetState() *discordgo.State {
+	return w.Session.State
+}
+
 // Config holds the application configuration
 type Config struct {
 	Token          string `env:"DISCORD_TOKEN"`
@@ -53,29 +72,16 @@ func main() {
 	// Load .env file if it exists
 	_ = godotenv.Load()
 
-	// Parse flags
-	useDiscord := flag.Bool("discord", false, "Run in Discord bot mode")
-	verbose := flag.Bool("verbose", false, "Print configuration and secrets on startup")
-	providerFlag := flag.String("provider", "", "LLM provider (gemini, ollama, groq)")
-	modelFlag := flag.String("model", "", "LLM model name")
-	promptModeFlag := flag.Bool("prompt-mode", false, "Force schema-constrained prompting (JSON)")
-	flag.Parse()
-
-	cfg, err := loadConfig()
+	cfg, useDiscord, verbose, promptMode, err := parseConfig(os.Args[1:])
 	if err != nil {
-		slog.Error("failed to load config", "error", err)
+		if err == flag.ErrHelp {
+			os.Exit(0)
+		}
+		fmt.Fprintf(os.Stderr, "failed to parse config: %v\n", err)
 		os.Exit(1)
 	}
 
-	// Flag overrides environment
-	if *providerFlag != "" {
-		cfg.LLMProvider = *providerFlag
-	}
-	if *modelFlag != "" {
-		cfg.LLMModel = *modelFlag
-	}
-
-	if *verbose {
+	if verbose {
 		fmt.Printf("--- VERBOSE STARTUP ---\n")
 		fmt.Printf("DISCORD_TOKEN: %s\n", cfg.Token)
 		fmt.Printf("GEMINI_API_KEY: %s\n", cfg.GeminiKey)
@@ -85,23 +91,29 @@ func main() {
 		fmt.Printf("------------------------\n")
 	}
 
-	if *useDiscord {
+	if useDiscord {
 		if cfg.Token == "" {
 			slog.Error("DISCORD_TOKEN is required for discord mode")
 			os.Exit(1)
 		}
-		runDiscord(cfg)
+		s, err := discordgo.New("Bot " + cfg.Token)
+		if err != nil {
+			slog.Error("invalid bot parameters", "error", err)
+			os.Exit(1)
+		}
+		runDiscord(context.Background(), cfg, &discordSessionWrapper{s})
 	} else {
-		runCLI(context.Background(), os.Stdin, os.Stdout, cfg, *promptModeFlag)
+		p, err := initProvider(context.Background(), cfg)
+		if err != nil {
+			slog.Error("failed to initialize provider", "error", err)
+			os.Exit(1)
+		}
+
+		runCLI(context.Background(), os.Stdin, os.Stdout, cfg, p, cli.DefaultDeps(), promptMode)
 	}
 }
 
-func runCLI(ctx context.Context, in io.Reader, out io.Writer, cfg *Config, forcePromptMode bool) {
-	slog.Info("Starting CLI mode...")
-
-	var orch *llm.Orchestrator
-
-	// Initialize Provider
+func initProvider(ctx context.Context, cfg *Config) (llm.Provider, error) {
 	var p llm.Provider
 	var err error
 
@@ -117,14 +129,44 @@ func runCLI(ctx context.Context, in io.Reader, out io.Writer, cfg *Config, force
 			p, err = llm.NewGroqProvider(cfg.GroqKey, cfg.LLMModel)
 		}
 	}
+	return p, err
+}
 
-	if err != nil {
-		slog.Error("failed to initialize provider", "error", err)
-		os.Exit(1)
+func parseConfig(args []string) (cfg *Config, useDiscord bool, verbose bool, promptMode bool, err error) {
+	fs := flag.NewFlagSet("vdm", flag.ContinueOnError)
+	useDiscordPtr := fs.Bool("discord", false, "Run in Discord bot mode")
+	verbosePtr := fs.Bool("verbose", false, "Print configuration and secrets on startup")
+	providerFlag := fs.String("provider", "", "LLM provider (gemini, ollama, groq)")
+	modelFlag := fs.String("model", "", "LLM model name")
+	promptModeFlag := fs.Bool("prompt-mode", false, "Force schema-constrained prompting (JSON)")
+
+	if err := fs.Parse(args); err != nil {
+		return nil, false, false, false, err
 	}
 
+	cfg, err = loadConfig()
+	if err != nil {
+		return nil, false, false, false, err
+	}
+
+	// Flag overrides environment
+	if *providerFlag != "" {
+		cfg.LLMProvider = *providerFlag
+	}
+	if *modelFlag != "" {
+		cfg.LLMModel = *modelFlag
+	}
+
+	return cfg, *useDiscordPtr, *verbosePtr, *promptModeFlag, nil
+}
+
+func runCLI(ctx context.Context, in io.Reader, out io.Writer, cfg *Config, p llm.Provider, deps cli.Deps, forcePromptMode bool) {
+	slog.Info("Starting CLI mode...")
+
+	var orch *llm.Orchestrator
+
 	if p != nil {
-		orch = llm.NewOrchestrator(ctx, p, cli.DefaultDeps())
+		orch = llm.NewOrchestrator(ctx, p, deps)
 		if forcePromptMode {
 			orch.EnablePromptMode(true)
 		}
@@ -179,14 +221,7 @@ func runCLI(ctx context.Context, in io.Reader, out io.Writer, cfg *Config, force
 	}
 }
 
-func runDiscord(cfg *Config) {
-	// Initialize Discord session
-	s, err := discordgo.New("Bot " + cfg.Token)
-	if err != nil {
-		slog.Error("invalid bot parameters", "error", err)
-		os.Exit(1)
-	}
-
+func runDiscord(ctx context.Context, cfg *Config, s DiscordSession) {
 	// Define commands
 	commands := []*discordgo.ApplicationCommand{
 		{
@@ -203,51 +238,12 @@ func runDiscord(cfg *Config) {
 		},
 	}
 
-	// Define command handlers
-	commandHandlers := map[string]func(s *discordgo.Session, i *discordgo.InteractionCreate){
-		"echo": func(s *discordgo.Session, i *discordgo.InteractionCreate) {
-			// Enforce Guild-only interactions
-			if i.Member == nil {
-				return
-			}
-
-			options := i.ApplicationCommandData().Options
-			content := options[0].StringValue()
-
-			slog.Info("received echo command",
-				"guild_id", i.GuildID,
-				"user_id", i.Member.User.ID,
-				"content", content,
-			)
-
-			err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
-				Type: discordgo.InteractionResponseChannelMessageWithSource,
-				Data: &discordgo.InteractionResponseData{
-					Content: fmt.Sprintf("Echo: %s", content),
-				},
-			})
-			if err != nil {
-				slog.Error("failed to respond to interaction", "error", err)
-			}
-		},
-	}
-
 	// Register handlers
-	s.AddHandler(func(s *discordgo.Session, i *discordgo.InteractionCreate) {
-		if h, ok := commandHandlers[i.ApplicationCommandData().Name]; ok {
-			h(s, i)
-		}
-	})
-
-	s.AddHandler(func(s *discordgo.Session, r *discordgo.Ready) {
-		slog.Info("logged in",
-			"username", s.State.User.Username,
-			"discriminator", s.State.User.Discriminator,
-		)
-	})
+	s.AddHandler(handleInteraction(s))
+	s.AddHandler(handleReady)
 
 	// Open session
-	err = s.Open()
+	err := s.Open()
 	if err != nil {
 		slog.Error("cannot open the session", "error", err)
 		os.Exit(1)
@@ -260,7 +256,7 @@ func runDiscord(cfg *Config) {
 	slog.Info("registering commands...")
 	registeredCommands := make([]*discordgo.ApplicationCommand, len(commands))
 	for i, v := range commands {
-		cmd, err := s.ApplicationCommandCreate(s.State.User.ID, "", v)
+		cmd, err := s.ApplicationCommandCreate(s.GetState().User.ID, "", v)
 		if err != nil {
 			slog.Error("cannot create command", "name", v.Name, "error", err)
 			continue // Or exit/panic depending on strictness
@@ -269,17 +265,23 @@ func runDiscord(cfg *Config) {
 		slog.Info("registered command", "name", v.Name)
 	}
 
-	// Wait here until CTRL-C or other term signal is received.
+	// Wait here until context is canceled or term signal is received.
 	slog.Info("bot is now running. Press CTRL-C to exit.")
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt)
-	<-stop
+
+	select {
+	case <-stop:
+		slog.Info("interrupt signal received")
+	case <-ctx.Done():
+		slog.Info("context canceled")
+	}
 
 	// Cleanup
 	if cfg.RemoveCommands {
 		slog.Info("removing commands...")
 		for _, v := range registeredCommands {
-			err := s.ApplicationCommandDelete(s.State.User.ID, "", v.ID)
+			err := s.ApplicationCommandDelete(s.GetState().User.ID, "", v.ID)
 			if err != nil {
 				slog.Error("cannot delete command", "name", v.Name, "error", err)
 			}
@@ -287,4 +289,42 @@ func runDiscord(cfg *Config) {
 	}
 
 	slog.Info("gracefully shutting down")
+}
+
+func handleInteraction(s DiscordSession) func(sess *discordgo.Session, i *discordgo.InteractionCreate) {
+	return func(sess *discordgo.Session, i *discordgo.InteractionCreate) {
+		if i.ApplicationCommandData().Name != "echo" {
+			return
+		}
+		// Enforce Guild-only interactions
+		if i.Member == nil {
+			return
+		}
+
+		options := i.ApplicationCommandData().Options
+		content := options[0].StringValue()
+
+		slog.Info("received echo command",
+			"guild_id", i.GuildID,
+			"user_id", i.Member.User.ID,
+			"content", content,
+		)
+
+		err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Content: fmt.Sprintf("Echo: %s", content),
+			},
+		})
+		if err != nil {
+			slog.Error("failed to respond to interaction", "error", err)
+		}
+	}
+}
+
+func handleReady(sess *discordgo.Session, r *discordgo.Ready) {
+	slog.Info("logged in",
+		"username", sess.State.User.Username,
+		"discriminator", sess.State.User.Discriminator,
+	)
 }
