@@ -5,6 +5,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -91,11 +92,11 @@ func main() {
 		}
 		runDiscord(cfg)
 	} else {
-		runCLI(cfg, *promptModeFlag)
+		runCLI(context.Background(), os.Stdin, os.Stdout, cfg, *promptModeFlag)
 	}
 }
 
-func runCLI(cfg *Config, forcePromptMode bool) {
+func runCLI(ctx context.Context, in io.Reader, out io.Writer, cfg *Config, forcePromptMode bool) {
 	slog.Info("Starting CLI mode...")
 
 	var orch *llm.Orchestrator
@@ -107,7 +108,7 @@ func runCLI(cfg *Config, forcePromptMode bool) {
 	switch cfg.LLMProvider {
 	case "gemini":
 		if cfg.GeminiKey != "" {
-			p, err = llm.NewGeminiProvider(context.Background(), cfg.GeminiKey, cfg.LLMModel)
+			p, err = llm.NewGeminiProvider(ctx, cfg.GeminiKey, cfg.LLMModel)
 		}
 	case "ollama":
 		p, err = llm.NewOllamaProvider(cfg.LLMModel)
@@ -123,19 +124,19 @@ func runCLI(cfg *Config, forcePromptMode bool) {
 	}
 
 	if p != nil {
-		orch = llm.NewOrchestrator(context.Background(), p, cli.DefaultDeps())
+		orch = llm.NewOrchestrator(ctx, p, cli.DefaultDeps())
 		if forcePromptMode {
 			orch.EnablePromptMode(true)
 		}
 		defer orch.Close()
-		fmt.Printf("LLM mode enabled (Generative DM using %s/%s). Type 'exit' to quit.\n", cfg.LLMProvider, cfg.LLMModel)
+		fmt.Fprintf(out, "LLM mode enabled (Generative DM using %s/%s). Type 'exit' to quit.\n", cfg.LLMProvider, cfg.LLMModel)
 	} else {
-		fmt.Println("Standard CLI mode enabled. Type 'exit' to quit.")
+		fmt.Fprintln(out, "Standard CLI mode enabled. Type 'exit' to quit.")
 	}
 
-	scanner := bufio.NewScanner(os.Stdin)
+	scanner := bufio.NewScanner(in)
 	for {
-		fmt.Print("> ")
+		fmt.Fprint(out, "> ")
 		if !scanner.Scan() {
 			break
 		}
@@ -147,29 +148,29 @@ func runCLI(cfg *Config, forcePromptMode bool) {
 		cmd, arg, _ := strings.Cut(line, " ")
 		if orch != nil {
 			slog.Info("USER", "content", line)
-			resp, err := orch.ProcessInput(context.Background(), line)
+			resp, err := orch.ProcessInput(ctx, line)
 			if err != nil {
 				slog.Error("orchestrator error", "error", err)
-				fmt.Printf("Error: %v\n", err)
+				fmt.Fprintf(out, "Error: %v\n", err)
 				continue
 			}
-			fmt.Printf("DM: %s\n", resp)
+			fmt.Fprintf(out, "DM: %s\n", resp)
 			continue
 		}
 
 		switch cmd {
 		case "echo":
 			if arg == "" {
-				fmt.Println("Usage: echo <content>")
+				fmt.Fprintln(out, "Usage: echo <content>")
 				continue
 			}
 			slog.Info("received echo command", "content", arg)
-			fmt.Printf("Echo: %s\n", arg)
+			fmt.Fprintf(out, "Echo: %s\n", arg)
 		case "exit", "quit":
 			slog.Info("CLI mode shutting down")
 			return
 		default:
-			fmt.Printf("Unknown command: %s\n", cmd)
+			fmt.Fprintf(out, "Unknown command: %s\n", cmd)
 		}
 	}
 
