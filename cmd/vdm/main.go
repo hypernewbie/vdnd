@@ -43,6 +43,7 @@ type Config struct {
 	RemoveCommands bool   `env:"DISCORD_REMOVE_COMMANDS" envDefault:"true"`
 	GeminiKey      string `env:"GEMINI_API_KEY"`
 	GroqKey        string `env:"GROQ_API_KEY"`
+	DeepSeekKey    string `env:"DEEPSEEK_API_KEY"`
 	LLMProvider    string `env:"LLM_PROVIDER" envDefault:"groq"`
 	LLMModel       string `env:"LLM_MODEL" envDefault:"qwen/qwen3-32b"`
 }
@@ -86,6 +87,7 @@ func main() {
 		fmt.Printf("DISCORD_TOKEN: %s\n", cfg.Token)
 		fmt.Printf("GEMINI_API_KEY: %s\n", cfg.GeminiKey)
 		fmt.Printf("GROQ_API_KEY: %s\n", cfg.GroqKey)
+		fmt.Printf("DEEPSEEK_API_KEY: %s\n", cfg.DeepSeekKey)
 		fmt.Printf("LLM_PROVIDER: %s\n", cfg.LLMProvider)
 		fmt.Printf("LLM_MODEL: %s\n", cfg.LLMModel)
 		fmt.Printf("------------------------\n")
@@ -127,6 +129,10 @@ func initProvider(ctx context.Context, cfg *Config) (llm.Provider, error) {
 	case "groq":
 		if cfg.GroqKey != "" {
 			p, err = llm.NewGroqProvider(cfg.GroqKey, cfg.LLMModel)
+		}
+	case "deepseek":
+		if cfg.DeepSeekKey != "" {
+			p, err = llm.NewDeepSeekProvider(cfg.DeepSeekKey, cfg.LLMModel)
 		}
 	}
 	return p, err
