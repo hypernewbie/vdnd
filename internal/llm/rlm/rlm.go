@@ -5,14 +5,29 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"regexp"
-	"strings"
 
 	"uaa/vdnd/internal/llm"
 )
 
 // SystemPromptBuilder is a function that constructs the system prompt.
 type SystemPromptBuilder func(contextSize int, depth int) string
+
+var RLMTools = []llm.Tool{
+	{
+		Name:        "execute_python",
+		Description: "Execute Python code in the persistent sandbox environment to explore context, search rules, or perform calculations.",
+		Parameters: map[string]any{
+			"type": "object",
+			"properties": map[string]map[string]any{
+				"code": {
+					"type":        "string",
+					"description": "The Python code to execute.",
+				},
+			},
+			"required": []string{"code"},
+		},
+	},
+}
 
 // RLM implementation.
 type RLM struct {
@@ -98,64 +113,86 @@ func (r *RLM) Complete(ctx context.Context, query string, contextData string, hi
 	}
 
 	systemPrompt := r.promptBuilder(len(contextData), r.currentDepth)
-	messages := []llm.Message{
-		{Role: "system", Content: systemPrompt},
-		{Role: "user", Content: query},
-	}
-
-	finalAnswerPattern := regexp.MustCompile(`(?s)FINAL_ANSWER:\s*(.*)`)
-	codeBlockPattern := regexp.MustCompile("(?s)```python\n(.*?)\n```")
+	messages := append([]llm.Message{}, history...)
+	messages = append(messages, llm.Message{Role: "system", Content: systemPrompt})
+	messages = append(messages, llm.Message{Role: "user", Content: query})
 
 	for i := 0; i < r.maxIterations; i++ {
-		response, err := r.provider.Generate(ctx, messages)
+		response, err := r.provider.GenerateWithTools(ctx, messages, RLMTools)
 		if err != nil {
 			return "", fmt.Errorf("LLM generation failed: %w", err)
 		}
 
-		// Handle thinking if present in response
-		cleanResponse := llm.StripThinking(response)
-		messages = append(messages, llm.Message{Role: "model", Content: response})
-
-		// Try to find code blocks
-		matches := codeBlockPattern.FindStringSubmatch(cleanResponse)
-		var code string
-		if len(matches) > 1 {
-			code = matches[1]
-		} else {
-			// Fallback: maybe it just wrote code without blocks? Or it's the final answer.
-			// If it contains FINAL(...), we'll catch it in the REPL execution result or by parsing.
-			code = cleanResponse
+		if response.Thinking != "" {
+			slog.Debug("RLM_THINKING", "thinking", response.Thinking)
 		}
 
-		// Execute in REPL
-		slog.Debug("REPL_EXECUTE", "code", code)
-		replResult, err := repl.Execute(code)
-		if err != nil {
-			observation := fmt.Sprintf("Execution error: %v", err)
-			messages = append(messages, llm.Message{Role: "user", Content: observation})
+		if response.FinishReason == "stop" {
+			// When the model stops without calling a tool, we treat its content as the final answer.
+			// This matches Orchestrator's behavior.
+			if response.Content != "" {
+				return response.Content, nil
+			}
 			continue
 		}
 
-		observation := ""
-		if replResult.Error != "" {
-			observation = fmt.Sprintf("Python Error:\n%s", replResult.Error)
-		} else {
-			observation = replResult.Stdout
-		}
+		if response.FinishReason == "tool_calls" {
+			messages = append(messages, llm.Message{Role: "model", ToolCalls: response.ToolCalls})
 
-		// Check for final answer in either LLM response or REPL output
-		if finalMatches := finalAnswerPattern.FindStringSubmatch(cleanResponse); len(finalMatches) > 1 {
-			return strings.TrimSpace(finalMatches[1]), nil
-		}
-		if finalMatches := finalAnswerPattern.FindStringSubmatch(observation); len(finalMatches) > 1 {
-			return strings.TrimSpace(finalMatches[1]), nil
-		}
+			for _, call := range response.ToolCalls {
+				if call.Name != "execute_python" {
+					messages = append(messages, llm.Message{
+						Role:       "tool",
+						Name:       call.Name,
+						ToolCallID: call.ID,
+						Content:    fmt.Sprintf("Error: Unknown tool %s", call.Name),
+					})
+					continue
+				}
 
-		if observation == "" {
-			observation = "(Success: no output)"
-		}
+				var args struct {
+					Code string `json:"code"`
+				}
+				if err := json.Unmarshal([]byte(call.Arguments), &args); err != nil {
+					messages = append(messages, llm.Message{
+						Role:       "tool",
+						Name:       call.Name,
+						ToolCallID: call.ID,
+						Content:    fmt.Sprintf("Error parsing arguments: %v", err),
+					})
+					continue
+				}
 
-		messages = append(messages, llm.Message{Role: "user", Content: observation})
+				slog.Debug("REPL_EXECUTE", "code", args.Code)
+				replResult, err := repl.Execute(args.Code)
+				observation := ""
+				if err != nil {
+					observation = fmt.Sprintf("Error executing code: %v", err)
+				} else {
+					observation = replResult.Stdout
+					if replResult.Error != "" {
+						if observation != "" {
+							observation += "\n"
+						}
+						observation += "Traceback:\n" + replResult.Error
+					}
+				}
+
+				if observation == "" {
+					observation = "(Success: no output)"
+				}
+
+				slog.Info("REPL_EXECUTE", "output", observation)
+
+				messages = append(messages, llm.Message{
+					Role:       "tool",
+					Name:       call.Name,
+					ToolCallID: call.ID,
+					Content:    observation,
+				})
+			}
+			continue
+		}
 	}
 
 	return "", fmt.Errorf("max iterations (%d) exceeded without final answer", r.maxIterations)

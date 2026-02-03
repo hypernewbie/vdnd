@@ -9,26 +9,26 @@ import (
 )
 
 type MockProvider struct {
-	responses []string
+	responses []llm.GenerationResponse
 	calls     int
 }
 
 func (m *MockProvider) Name() string      { return "mock" }
 func (m *MockProvider) ModelName() string { return "mock-model" }
 func (m *MockProvider) Generate(ctx context.Context, messages []llm.Message) (string, error) {
+	return "", nil
+}
+
+func (m *MockProvider) GenerateWithTools(ctx context.Context, messages []llm.Message, tools []llm.Tool) (llm.GenerationResponse, error) {
 	if m.calls < len(m.responses) {
 		res := m.responses[m.calls]
 		m.calls++
 		return res, nil
 	}
-	return "FINAL_ANSWER: I don't know", nil
+	return llm.GenerationResponse{Content: "FINAL_ANSWER: I don't know", FinishReason: "stop"}, nil
 }
 
-func (m *MockProvider) GenerateWithTools(ctx context.Context, messages []llm.Message, tools []llm.Tool) (llm.GenerationResponse, error) {
-	return llm.GenerationResponse{}, nil
-}
-
-func (m *MockProvider) SupportsToolCalling() bool { return false }
+func (m *MockProvider) SupportsToolCalling() bool { return true }
 
 func TestRLMStepByStep(t *testing.T) {
 	absRoot, _ := filepath.Abs("../../../")
@@ -36,9 +36,31 @@ func TestRLMStepByStep(t *testing.T) {
 	scriptPath := filepath.Join(absRoot, "py", "restricted_python.py")
 
 	mock := &MockProvider{
-		responses: []string{
-			"```python\nprint(context[:5])\n```",
-			"```python\nFINAL(\"Hello\")\n```",
+		responses: []llm.GenerationResponse{
+			{
+				FinishReason: "tool_calls",
+				ToolCalls: []llm.ToolCall{
+					{
+						ID:        "call_1",
+						Name:      "execute_python",
+						Arguments: `{"code": "print(context[:5])"}`,
+					},
+				},
+			},
+			{
+				FinishReason: "tool_calls",
+				ToolCalls: []llm.ToolCall{
+					{
+						ID:        "call_2",
+						Name:      "execute_python",
+						Arguments: `{"code": "print('done')"}`,
+					},
+				},
+			},
+			{
+				FinishReason: "stop",
+				Content:      "Hello",
+			},
 		},
 	}
 
@@ -57,8 +79,8 @@ func TestRLMStepByStep(t *testing.T) {
 		t.Errorf("Expected 'Hello', got %q", answer)
 	}
 
-	if mock.calls != 2 {
-		t.Errorf("Expected 2 LLM calls, got %d", mock.calls)
+	if mock.calls != 3 {
+		t.Errorf("Expected 3 LLM calls, got %d", mock.calls)
 	}
 }
 
@@ -69,9 +91,27 @@ func TestRLMRecursion(t *testing.T) {
 
 	// This mock will handle both the top-level call and the recursive call
 	mock := &MockProvider{
-		responses: []string{
-			"```python\nsub_res = recursive_llm(\"What is X?\", \"X is 42\")\nFINAL(f\"The answer is {sub_res}\")\n```",
-			"```python\nFINAL(\"42\")\n```",
+		responses: []llm.GenerationResponse{
+			{
+				FinishReason: "tool_calls",
+				ToolCalls: []llm.ToolCall{
+					{
+						ID:        "call_1",
+						Name:      "execute_python",
+						Arguments: `{"code": "sub_res = recursive_llm(\"What is X?\", \"X is 42\")"}`,
+					},
+				},
+			},
+			{
+				// This response is for the sub-call
+				FinishReason: "stop",
+				Content:      "42",
+			},
+			{
+				// Final response for top-level call
+				FinishReason: "stop",
+				Content:      "The answer is 42",
+			},
 		},
 	}
 
@@ -91,8 +131,7 @@ func TestRLMRecursion(t *testing.T) {
 		t.Errorf("Expected 'The answer is 42', got %q", answer)
 	}
 
-	// 1 for top level, 1 for sub-call
-	if mock.calls != 2 {
-		t.Errorf("Expected 2 LLM calls total, got %d", mock.calls)
+	if mock.calls != 3 {
+		t.Errorf("Expected 3 LLM calls total (2 for main, 1 for sub), got %d", mock.calls)
 	}
 }

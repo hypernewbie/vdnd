@@ -25,21 +25,29 @@ ALLOWED_DIRS = {
 def safe_open(filename, mode="r", *args, **kwargs):
     # Normalize path
     filename = os.path.realpath(filename)
+    sandbox_dir = os.path.join(PROJECT_ROOT, "sandbox")
 
-    # Enforce read-only
-    if mode not in ("r", "rb"):
-        raise PermissionError("Write access is not allowed")
-
+    # Check directory whitelist
+    allowed = False
+    is_sandbox = filename.startswith(sandbox_dir + os.sep)
+    
     # Check whitelist
     if filename in ALLOWED_FILES:
-        return open(filename, mode, *args, **kwargs)
+        allowed = True
+    else:
+        for allowed_dir in ALLOWED_DIRS:
+            if filename.startswith(allowed_dir + os.sep) and filename.endswith(".md"):
+                allowed = True
+                break
 
-    # Check directory whitelist for .md files
-    for allowed_dir in ALLOWED_DIRS:
-        if filename.startswith(allowed_dir + os.sep) and filename.endswith(".md"):
-            return open(filename, mode, *args, **kwargs)
+    if not allowed:
+        raise PermissionError(f"Access to '{filename}' is not allowed")
 
-    raise PermissionError(f"Access to '{filename}' is not allowed")
+    # Enforce read-only for non-sandbox areas
+    if not is_sandbox and mode not in ("r", "rb"):
+        raise PermissionError("Write access is only allowed in the sandbox directory")
+
+    return open(filename, mode, *args, **kwargs)
 
 class UniversalPrint:
     def __init__(self, _getattr_=None):
@@ -103,7 +111,7 @@ class SandboxREPL:
                     if filename.endswith(".md"):
                         files.append(os.path.join(root, filename))
         res = sorted(list(set(files)))
-        if len(res) > 100:
+        if len(res) > 200:
             return f"Too many files ({len(res)}). Use list_dir() or search_files() instead."
         return res
 
@@ -187,8 +195,13 @@ class SandboxREPL:
         
         try:
             # Compile in restricted mode
-            # We use 'exec' to allow multiple statements
-            compiled = compile_restricted(code, "<sandbox>", "exec")
+            # We use 'exec' to allow multiple statements.
+            # Python 3.13+ may emit SyntaxWarning for the 'printed' variable 
+            # injected by RestrictedPython if not read within the same scope.
+            import warnings
+            with warnings.catch_warnings():
+                warnings.filterwarnings("ignore", category=SyntaxWarning)
+                compiled = compile_restricted(code, "<sandbox>", "exec")
             
             # Execute with stdout redirection
             with redirect_stdout(f):

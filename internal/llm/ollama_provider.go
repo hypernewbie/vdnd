@@ -9,13 +9,19 @@ type OllamaProvider struct {
 	*OpenAIProvider
 }
 
-func NewOllamaProvider(model string) (*OllamaProvider, error) {
+func NewOllamaProvider(model string, baseURL string) (*OllamaProvider, error) {
 	if model == "" {
 		model = "deepseek-r1:7b"
 	}
+
+	if baseURL == "" {
+		baseURL = "http://127.0.0.1:11434"
+	}
+	baseURL = strings.TrimSuffix(baseURL, "/")
+
 	config := OpenAIProviderConfig{
 		Name:          "ollama",
-		BaseURL:       "http://127.0.0.1:11434/v1/chat/completions",
+		BaseURL:       baseURL + "/v1/chat/completions",
 		APIKey:        "ollama", // Required but ignored by Ollama
 		Model:         model,
 		SupportsTools: !strings.Contains(strings.ToLower(model), "deepseek-r1"),

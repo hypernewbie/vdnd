@@ -46,6 +46,7 @@ type Config struct {
 	GeminiKey      string `env:"GEMINI_API_KEY"`
 	GroqKey        string `env:"GROQ_API_KEY"`
 	DeepSeekKey    string `env:"DEEPSEEK_API_KEY"`
+	OllamaURL      string `env:"OLLAMA_URL"`
 	LLMProvider    string `env:"LLM_PROVIDER" envDefault:"groq"`
 	LLMModel       string `env:"LLM_MODEL" envDefault:"qwen/qwen3-32b"`
 }
@@ -141,7 +142,7 @@ func initProvider(ctx context.Context, cfg *Config) (llm.Provider, error) {
 			p, err = llm.NewGeminiProvider(ctx, cfg.GeminiKey, cfg.LLMModel)
 		}
 	case "ollama":
-		p, err = llm.NewOllamaProvider(cfg.LLMModel)
+		p, err = llm.NewOllamaProvider(cfg.LLMModel, cfg.OllamaURL)
 	case "groq":
 		if cfg.GroqKey != "" {
 			p, err = llm.NewGroqProvider(cfg.GroqKey, cfg.LLMModel)
