@@ -9,9 +9,11 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"uaa/vdnd/internal/cli"
 	"uaa/vdnd/internal/llm"
+	"uaa/vdnd/internal/llm/rlm"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/caarlos0/env/v11"
@@ -111,7 +113,21 @@ func main() {
 			os.Exit(1)
 		}
 
-		runCLI(context.Background(), os.Stdin, os.Stdout, cfg, p, cli.DefaultDeps(), promptMode)
+		// Detect project root and setup RLM paths
+		wd, _ := os.Getwd()
+		python := rlm.FindPythonPath(wd)
+		script := filepath.Join(wd, "py", "restricted_python.py")
+
+		// Initialize RLM with DM prompt
+		rlmModel := rlm.NewRLM(p, rlm.Config{
+			MaxIterations:       10,
+			MaxDepth:            2,
+			PythonPath:          python,
+			ScriptPath:          script,
+			SystemPromptBuilder: rlm.BuildDMSystemPrompt,
+		})
+
+		runCLI(context.Background(), os.Stdin, os.Stdout, cfg, p, rlmModel, cli.DefaultDeps(), promptMode)
 	}
 }
 
@@ -166,18 +182,21 @@ func parseConfig(args []string) (cfg *Config, useDiscord bool, verbose bool, pro
 	return cfg, *useDiscordPtr, *verbosePtr, *promptModeFlag, nil
 }
 
-func runCLI(ctx context.Context, in io.Reader, out io.Writer, cfg *Config, p llm.Provider, deps cli.Deps, forcePromptMode bool) {
+func runCLI(ctx context.Context, in io.Reader, out io.Writer, cfg *Config, p llm.Provider, rlmModel *rlm.RLM, deps cli.Deps, forcePromptMode bool) {
 	slog.Info("Starting CLI mode...")
 
 	var orch *llm.Orchestrator
 
 	if p != nil {
 		orch = llm.NewOrchestrator(ctx, p, deps)
+		if rlmModel != nil {
+			orch.SetRLM(rlmModel)
+		}
 		if forcePromptMode {
 			orch.EnablePromptMode(true)
 		}
 		defer orch.Close()
-		fmt.Fprintf(out, "LLM mode enabled (Generative DM using %s/%s). Type 'exit' to quit.\n", cfg.LLMProvider, cfg.LLMModel)
+		fmt.Fprintf(out, "LLM mode enabled (Generative DM using %s/%s with RLM). Type 'exit' to quit.\n", cfg.LLMProvider, cfg.LLMModel)
 	} else {
 		fmt.Fprintln(out, "Standard CLI mode enabled. Type 'exit' to quit.")
 	}

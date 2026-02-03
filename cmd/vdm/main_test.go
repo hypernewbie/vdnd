@@ -11,6 +11,7 @@ import (
 	"uaa/vdnd/internal/cli"
 	"uaa/vdnd/internal/llm"
 	"uaa/vdnd/internal/state"
+
 	"github.com/bwmarrin/discordgo"
 )
 
@@ -77,10 +78,10 @@ type mockProvider struct {
 	toolCallResponse    llm.GenerationResponse
 }
 
-func (m *mockProvider) Name() string                                     { return "mock" }
-func (m *mockProvider) ModelName() string                                { return "mock-model" }
-func (m *mockProvider) SupportsToolCalling() bool                       { return m.supportsToolCalling }
-func (m *mockProvider) Close() error                                    { return nil }
+func (m *mockProvider) Name() string              { return "mock" }
+func (m *mockProvider) ModelName() string         { return "mock-model" }
+func (m *mockProvider) SupportsToolCalling() bool { return m.supportsToolCalling }
+func (m *mockProvider) Close() error              { return nil }
 func (m *mockProvider) Generate(ctx context.Context, messages []llm.Message) (string, error) {
 	return m.generateResponse, m.generateError
 }
@@ -94,7 +95,7 @@ func TestRunCLI_EchoLoop(t *testing.T) {
 	out := new(bytes.Buffer)
 	cfg := &Config{LLMProvider: "none"}
 
-	runCLI(context.Background(), in, out, cfg, nil, mockDeps(), false)
+	runCLI(context.Background(), in, out, cfg, nil, nil, mockDeps(), false)
 
 	outputStr := out.String()
 	if !strings.Contains(outputStr, "Standard CLI mode enabled") {
@@ -119,7 +120,7 @@ func TestRunCLI_EdgeCases(t *testing.T) {
 		{
 			name:     "Empty input",
 			input:    "\n\nexit\n",
-			expected: []string{ "> > > " },
+			expected: []string{"> > > "},
 		},
 		{
 			name:     "Echo usage",
@@ -139,7 +140,7 @@ func TestRunCLI_EdgeCases(t *testing.T) {
 			out := new(bytes.Buffer)
 			cfg := &Config{LLMProvider: "none"}
 
-			runCLI(context.Background(), in, out, cfg, nil, mockDeps(), false)
+			runCLI(context.Background(), in, out, cfg, nil, nil, mockDeps(), false)
 
 			output := out.String()
 			for _, exp := range tt.expected {
@@ -164,8 +165,7 @@ func TestRunCLI_LLMMode(t *testing.T) {
 		mockProv := &mockProvider{
 			generateResponse: "Welcome adventurer!",
 		}
-
-		runCLI(context.Background(), in, out, cfg, mockProv, mockDeps(), false)
+		runCLI(context.Background(), in, out, cfg, mockProv, nil, mockDeps(), false)
 
 		output := out.String()
 		if !strings.Contains(output, "LLM mode enabled") {
@@ -186,7 +186,7 @@ func TestRunCLI_LLMMode(t *testing.T) {
 			generateError: fmt.Errorf("api failure"),
 		}
 
-		runCLI(context.Background(), in, out, cfg, mockProv, mockDeps(), false)
+		runCLI(context.Background(), in, out, cfg, mockProv, nil, mockDeps(), false)
 
 		output := out.String()
 		if !strings.Contains(output, "Error: api failure") {
@@ -305,8 +305,6 @@ func TestInitProvider(t *testing.T) {
 
 	})
 
-
-
 	t.Run("GeminiMissingKey", func(t *testing.T) {
 
 		cfg := &Config{LLMProvider: "gemini"}
@@ -326,8 +324,6 @@ func TestInitProvider(t *testing.T) {
 		}
 
 	})
-
-
 
 	t.Run("GeminiWithKey", func(t *testing.T) {
 
@@ -349,8 +345,6 @@ func TestInitProvider(t *testing.T) {
 
 	})
 
-
-
 	t.Run("GroqWithKey", func(t *testing.T) {
 
 		cfg := &Config{LLMProvider: "groq", GroqKey: "test-key"}
@@ -370,8 +364,6 @@ func TestInitProvider(t *testing.T) {
 		}
 
 	})
-
-
 
 	t.Run("GroqMissingKey", func(t *testing.T) {
 
@@ -395,10 +387,6 @@ func TestInitProvider(t *testing.T) {
 
 }
 
-
-
-
-
 func TestDiscordHandlers(t *testing.T) {
 
 	t.Run("HandleReady", func(t *testing.T) {
@@ -411,31 +399,23 @@ func TestDiscordHandlers(t *testing.T) {
 
 					User: &discordgo.User{
 
-						Username:      "test-bot",
+						Username: "test-bot",
 
 						Discriminator: "1234",
-
 					},
-
 				},
-
 			},
-
 		}
 
 		handleReady(sess, &discordgo.Ready{})
 
 	})
 
-
-
 	t.Run("HandleInteraction_Echo", func(t *testing.T) {
 
 		m := &mockDiscordSession{}
 
 		handler := handleInteraction(m)
-
-
 
 		i := &discordgo.InteractionCreate{
 
@@ -447,98 +427,51 @@ func TestDiscordHandlers(t *testing.T) {
 
 					Name: "echo",
 
-										Options: []*discordgo.ApplicationCommandInteractionDataOption{
+					Options: []*discordgo.ApplicationCommandInteractionDataOption{
 
-											{
+						{
 
-												Type:  discordgo.ApplicationCommandOptionString,
+							Type: discordgo.ApplicationCommandOptionString,
 
-												Value: "hello world",
-
-											},
-
-										},
-
-					
-
+							Value: "hello world",
+						},
+					},
 				},
 
 				Member: &discordgo.Member{
 
 					User: &discordgo.User{ID: "user-id"},
-
 				},
 
 				GuildID: "guild-id",
-
 			},
-
 		}
-
-
 
 		handler(nil, i)
 
 	})
 
+	t.Run("HandleInteraction_NonEcho", func(t *testing.T) {
 
+		m := &mockDiscordSession{}
 
-		t.Run("HandleInteraction_NonEcho", func(t *testing.T) {
+		handler := handleInteraction(m)
 
+		i := &discordgo.InteractionCreate{
 
+			Interaction: &discordgo.Interaction{
 
-			m := &mockDiscordSession{}
+				Type: discordgo.InteractionApplicationCommand,
 
+				Data: discordgo.ApplicationCommandInteractionData{
 
-
-			handler := handleInteraction(m)
-
-
-
-	
-
-
-
-			i := &discordgo.InteractionCreate{
-
-
-
-				Interaction: &discordgo.Interaction{
-
-
-
-					Type: discordgo.InteractionApplicationCommand,
-
-
-
-					Data: discordgo.ApplicationCommandInteractionData{
-
-
-
-						Name: "unknown",
-
-
-
-					},
-
-
-
+					Name: "unknown",
 				},
+			},
+		}
 
+		handler(nil, i)
 
-
-			}
-
-
-
-			handler(nil, i)
-
-
-
-		})
-
-
-
-	
+	})
 
 }

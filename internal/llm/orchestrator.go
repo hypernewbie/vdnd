@@ -12,9 +12,15 @@ import (
 
 const defaultModel = "gemini-2.0-flash-exp"
 
+// RLMCompleter interface for recursive learning models.
+type RLMCompleter interface {
+	Complete(ctx context.Context, query string, contextData string, history []Message) (string, error)
+}
+
 // Orchestrator coordinates communication between the user, the LLM, and the rules engine.
 type Orchestrator struct {
 	provider   Provider
+	rlm        RLMCompleter
 	deps       cli.Deps
 	tools      []Tool
 	history    []Message
@@ -38,6 +44,10 @@ func NewOrchestrator(context context.Context, provider Provider, deps cli.Deps) 
 	}
 
 	return o
+}
+
+func (o *Orchestrator) SetRLM(rlm RLMCompleter) {
+	o.rlm = rlm
 }
 
 func (o *Orchestrator) getSystemPrompt() string {
@@ -106,6 +116,35 @@ func (o *Orchestrator) ProcessInput(ctx context.Context, input string) (string, 
 	if exitCode != 0 {
 		stdout = "No active game session found. A new session must be created."
 	}
+
+	if o.rlm != nil {
+		slog.Debug("RLM_START", "query", input)
+		resp, err := o.rlm.Complete(ctx, input, stdout, o.history)
+		if err != nil {
+			return "", err
+		}
+		slog.Info("RLM_END", "response", resp)
+
+		// Process markers and tools
+		processedResp := o.handleTextMarkers(resp)
+
+		// If it's a JSON response (for tool calling models), parse it
+		genResp := o.parseJSONResponse(processedResp)
+		if genResp.FinishReason == "tool_calls" {
+			// If the RLM output a tool call, we handle it through the standard loop
+			// This is a bit complex since RLM is one-shot Complete.
+			// For now, let's just use handleTextMarkers which covers VD_SUGGEST_CMD.
+		}
+
+		finalResp := genResp.Content
+
+		// We still append to history for the simple state tracking
+		o.history = append(o.history, Message{Role: "user", Content: input})
+		o.history = append(o.history, Message{Role: "model", Content: finalResp})
+
+		return finalResp, nil
+	}
+
 	contextInput := fmt.Sprintf("Current Game State:\n%s\n\nUser Input: %s", stdout, input)
 
 	o.history = append(o.history, Message{Role: "user", Content: contextInput})
