@@ -29,6 +29,7 @@ type DiscordSession interface {
 	Open() error
 	Close() error
 	GetState() *discordgo.State
+	ChannelMessages(channelID string, limit int, beforeID, afterID, aroundID string, options ...discordgo.RequestOption) (st []*discordgo.Message, err error)
 }
 
 type discordSessionWrapper struct {
@@ -49,6 +50,7 @@ type Config struct {
 	OllamaURL      string `env:"OLLAMA_URL"`
 	LLMProvider    string `env:"LLM_PROVIDER" envDefault:"groq"`
 	LLMModel       string `env:"LLM_MODEL" envDefault:"qwen/qwen3-32b"`
+	DryRun         bool   `env:"DRY_RUN" envDefault:"false"`
 }
 
 // loadConfig reads configuration from environment variables
@@ -96,6 +98,29 @@ func main() {
 		fmt.Printf("------------------------\n")
 	}
 
+	p, err := initProvider(context.Background(), cfg)
+	if err != nil {
+		slog.Error("failed to initialize provider", "error", err)
+		os.Exit(1)
+	}
+
+	var rlmModel *rlm.RLM
+	if p != nil {
+		// Detect project root and setup RLM paths
+		wd, _ := os.Getwd()
+		python := rlm.FindPythonPath(wd)
+		script := filepath.Join(wd, "py", "restricted_python.py")
+
+		// Initialize RLM with DM prompt
+		rlmModel = rlm.NewRLM(p, rlm.Config{
+			MaxIterations:       10,
+			MaxDepth:            2,
+			PythonPath:          python,
+			ScriptPath:          script,
+			SystemPromptBuilder: rlm.BuildDMSystemPrompt,
+		})
+	}
+
 	if useDiscord {
 		if cfg.Token == "" {
 			slog.Error("DISCORD_TOKEN is required for discord mode")
@@ -106,33 +131,21 @@ func main() {
 			slog.Error("invalid bot parameters", "error", err)
 			os.Exit(1)
 		}
-		runDiscord(context.Background(), cfg, &discordSessionWrapper{s})
+		s.Identify.Intents = discordgo.IntentGuildMessages | discordgo.IntentMessageContent
+		runDiscord(context.Background(), cfg, &discordSessionWrapper{s}, p, rlmModel, cli.DefaultDeps(), promptMode)
 	} else {
-		p, err := initProvider(context.Background(), cfg)
-		if err != nil {
-			slog.Error("failed to initialize provider", "error", err)
-			os.Exit(1)
+		if cfg.DryRun {
+			slog.Info("DRY RUN MODE ENABLED. Prompts will be echoed back.")
 		}
-
-		// Detect project root and setup RLM paths
-		wd, _ := os.Getwd()
-		python := rlm.FindPythonPath(wd)
-		script := filepath.Join(wd, "py", "restricted_python.py")
-
-		// Initialize RLM with DM prompt
-		rlmModel := rlm.NewRLM(p, rlm.Config{
-			MaxIterations:       10,
-			MaxDepth:            2,
-			PythonPath:          python,
-			ScriptPath:          script,
-			SystemPromptBuilder: rlm.BuildDMSystemPrompt,
-		})
-
 		runCLI(context.Background(), os.Stdin, os.Stdout, cfg, p, rlmModel, cli.DefaultDeps(), promptMode)
 	}
 }
 
 func initProvider(ctx context.Context, cfg *Config) (llm.Provider, error) {
+	if cfg.DryRun {
+		return llm.NewDummyProvider(cfg.LLMModel), nil
+	}
+
 	var p llm.Provider
 	var err error
 
@@ -158,10 +171,11 @@ func initProvider(ctx context.Context, cfg *Config) (llm.Provider, error) {
 func parseConfig(args []string) (cfg *Config, useDiscord bool, verbose bool, promptMode bool, err error) {
 	fs := flag.NewFlagSet("vdm", flag.ContinueOnError)
 	useDiscordPtr := fs.Bool("discord", false, "Run in Discord bot mode")
-	verbosePtr := fs.Bool("verbose", false, "Print configuration and secrets on startup")
 	providerFlag := fs.String("provider", "", "LLM provider (gemini, ollama, groq)")
 	modelFlag := fs.String("model", "", "LLM model name")
 	promptModeFlag := fs.Bool("prompt-mode", false, "Force schema-constrained prompting (JSON)")
+	dryRunFlag := fs.Bool("dry-run", false, "Enable dry run mode (echo prompts)")
+	verbosePtr := fs.Bool("verbose", false, "Print configuration and secrets on startup")
 
 	if err := fs.Parse(args); err != nil {
 		return nil, false, false, false, err
@@ -178,6 +192,14 @@ func parseConfig(args []string) (cfg *Config, useDiscord bool, verbose bool, pro
 	}
 	if *modelFlag != "" {
 		cfg.LLMModel = *modelFlag
+	}
+
+	if *promptModeFlag {
+		cfg.LLMProvider = "prompt" // internal marker for prompt mode
+	}
+
+	if *dryRunFlag {
+		cfg.DryRun = true
 	}
 
 	return cfg, *useDiscordPtr, *verbosePtr, *promptModeFlag, nil
@@ -247,9 +269,22 @@ func runCLI(ctx context.Context, in io.Reader, out io.Writer, cfg *Config, p llm
 	}
 }
 
-func runDiscord(ctx context.Context, cfg *Config, s DiscordSession) {
+func runDiscord(ctx context.Context, cfg *Config, s DiscordSession, p llm.Provider, rlmModel *rlm.RLM, deps cli.Deps, forcePromptMode bool) {
+	cache := NewMessageCache(100)
 	// Define commands
 	commands := []*discordgo.ApplicationCommand{
+		{
+			Name:        "vdm",
+			Description: "Talk to the Virtual Dungeon Master",
+			Options: []*discordgo.ApplicationCommandOption{
+				{
+					Type:        discordgo.ApplicationCommandOptionString,
+					Name:        "input",
+					Description: "Your message to the DM",
+					Required:    true,
+				},
+			},
+		},
 		{
 			Name:        "echo",
 			Description: "Echoes back your text",
@@ -264,8 +299,21 @@ func runDiscord(ctx context.Context, cfg *Config, s DiscordSession) {
 		},
 	}
 
+	var orch *llm.Orchestrator
+	if p != nil {
+		orch = llm.NewOrchestrator(ctx, p, deps)
+		if rlmModel != nil {
+			orch.SetRLM(rlmModel)
+		}
+		if forcePromptMode {
+			orch.EnablePromptMode(true)
+		}
+		defer orch.Close()
+	}
+
 	// Register handlers
-	s.AddHandler(handleInteraction(s))
+	s.AddHandler(handleMessageCreate(cache))
+	s.AddHandler(handleInteraction(s, orch, cfg.DryRun, cache))
 	s.AddHandler(handleReady)
 
 	// Open session
@@ -317,9 +365,10 @@ func runDiscord(ctx context.Context, cfg *Config, s DiscordSession) {
 	slog.Info("gracefully shutting down")
 }
 
-func handleInteraction(s DiscordSession) func(sess *discordgo.Session, i *discordgo.InteractionCreate) {
+func handleInteraction(s DiscordSession, orch *llm.Orchestrator, dryRun bool, cache *MessageCache) func(sess *discordgo.Session, i *discordgo.InteractionCreate) {
 	return func(sess *discordgo.Session, i *discordgo.InteractionCreate) {
-		if i.ApplicationCommandData().Name != "echo" {
+		name := i.ApplicationCommandData().Name
+		if name != "echo" && name != "vdm" {
 			return
 		}
 		// Enforce Guild-only interactions
@@ -329,6 +378,96 @@ func handleInteraction(s DiscordSession) func(sess *discordgo.Session, i *discor
 
 		options := i.ApplicationCommandData().Options
 		content := options[0].StringValue()
+
+		if name == "vdm" {
+			if orch == nil && !dryRun {
+				s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+					Type: discordgo.InteractionResponseChannelMessageWithSource,
+					Data: &discordgo.InteractionResponseData{
+						Content: "Error: Orchestrator not initialized. Check your LLM configuration.",
+					},
+				})
+				return
+			}
+
+			// Acknowledge the interaction immediately to avoid timeout
+			s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+				Type: discordgo.InteractionResponseDeferredChannelMessageWithSource,
+			})
+
+			// Fetch recent messages for context ("Party Talk") from our live cache
+			var partyTalk strings.Builder
+			botID := s.GetState().User.ID
+			recentMsgs := cache.Get(i.ChannelID)
+
+			var collected []string
+			// Process messages newest first, but the cache is oldest first
+			for j := len(recentMsgs) - 1; j >= 0; j-- {
+				m := recentMsgs[j]
+				// Stop if we hit the previous bot response or a very old message
+				if m.Author.ID == botID {
+					break
+				}
+				// Don't include system messages
+				if m.Type != discordgo.MessageTypeDefault && m.Type != discordgo.MessageTypeReply {
+					continue
+				}
+				displayName := getDisplayName(m.Author)
+				collected = append(collected, fmt.Sprintf("%s: %s", displayName, m.Content))
+			}
+
+			if len(collected) > 0 {
+				partyTalk.WriteString("CHANNEL MESSAGES (Party Talk):\n")
+				// collected is now newest first, we want oldest first for the prompt
+				for j := len(collected) - 1; j >= 0; j-- {
+					partyTalk.WriteString(collected[j] + "\n")
+				}
+				partyTalk.WriteString("\n")
+			}
+			// Clear cache for this channel after consumption to avoid "double-hearing" same messages
+			cache.Clear(i.ChannelID)
+
+			userDisplayName := getDisplayName(i.Member.User)
+			content = fmt.Sprintf("%s: %s", userDisplayName, content)
+
+			fullInput := partyTalk.String() + "DM_COMMAND:\n" + content
+			slog.Info("vdm command",
+				"guild_id", i.GuildID,
+				"channel_id", i.ChannelID,
+				"user_id", i.Member.User.ID,
+				"full_input", fullInput,
+			)
+			var resp string
+			var err error
+			if dryRun {
+				resp = "=== DRY RUN (Full Input) ===\n" + fullInput
+			} else {
+				resp, err = orch.ProcessInput(context.Background(), fullInput)
+				if err != nil {
+					slog.Error("orchestrator error", "error", err)
+					msg := fmt.Sprintf("Error: %v", err)
+					sess.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{
+						Content: &msg,
+					})
+					return
+				}
+			}
+
+			// Prepend user input as a quote
+			resp = fmt.Sprintf("> %s\n\n%s", content, resp)
+
+			if len(resp) > 1900 {
+				resp = resp[:1890] + "\n...(truncated)"
+			}
+
+			_, err = sess.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{
+				Content: &resp,
+			})
+			if err != nil {
+				slog.Error("failed to edit interaction response", "error", err)
+			}
+			return
+		}
 
 		slog.Info("received echo command",
 			"guild_id", i.GuildID,
@@ -345,6 +484,28 @@ func handleInteraction(s DiscordSession) func(sess *discordgo.Session, i *discor
 		if err != nil {
 			slog.Error("failed to respond to interaction", "error", err)
 		}
+	}
+}
+
+func getDisplayName(u *discordgo.User) string {
+	if u.GlobalName != "" {
+		return u.GlobalName
+	}
+	return u.Username
+}
+
+func handleMessageCreate(cache *MessageCache) func(sess *discordgo.Session, m *discordgo.MessageCreate) {
+	return func(sess *discordgo.Session, m *discordgo.MessageCreate) {
+		// Ignore bot messages
+		if m.Author.Bot {
+			return
+		}
+		slog.Info("channel message",
+			"channel_id", m.ChannelID,
+			"author", getDisplayName(m.Author),
+			"content", m.Content,
+		)
+		cache.Add(m.Message)
 	}
 }
 

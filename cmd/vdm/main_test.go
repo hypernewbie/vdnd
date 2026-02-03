@@ -57,6 +57,10 @@ func (m *mockDiscordSession) GetState() *discordgo.State {
 	}
 }
 
+func (m *mockDiscordSession) ChannelMessages(channelID string, limit int, beforeID, afterID, aroundID string, options ...discordgo.RequestOption) ([]*discordgo.Message, error) {
+	return nil, nil
+}
+
 func mockDeps() cli.Deps {
 	return cli.Deps{
 		Roller: &cli.CryptoRoller{},
@@ -273,7 +277,7 @@ func TestRunDiscord(t *testing.T) {
 		cancel()
 	}()
 
-	runDiscord(ctx, cfg, m)
+	runDiscord(ctx, cfg, m, nil, nil, mockDeps(), false)
 
 	if len(m.commandsCreated) == 0 {
 		t.Errorf("Expected commands to be created")
@@ -415,7 +419,7 @@ func TestDiscordHandlers(t *testing.T) {
 
 		m := &mockDiscordSession{}
 
-		handler := handleInteraction(m)
+		handler := handleInteraction(m, nil, false, NewMessageCache(10))
 
 		i := &discordgo.InteractionCreate{
 
@@ -455,7 +459,7 @@ func TestDiscordHandlers(t *testing.T) {
 
 		m := &mockDiscordSession{}
 
-		handler := handleInteraction(m)
+		handler := handleInteraction(m, nil, false, NewMessageCache(10))
 
 		i := &discordgo.InteractionCreate{
 
