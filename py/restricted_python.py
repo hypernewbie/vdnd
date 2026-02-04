@@ -111,7 +111,7 @@ class SandboxREPL:
                     if filename.endswith(".md"):
                         files.append(os.path.join(root, filename))
         res = sorted(list(set(files)))
-        if len(res) > 200:
+        if len(res) > 2000:
             return f"Too many files ({len(res)}). Use list_dir() or search_files() instead."
         return res
 

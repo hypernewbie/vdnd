@@ -6,9 +6,13 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"sync"
 
 	"uaa/vdnd/internal/cli"
 )
+
+// ErrOrchestratorBusy is returned when the orchestrator is already processing a request.
+var ErrOrchestratorBusy = fmt.Errorf("the DM is currently busy thinking... please wait")
 
 const defaultModel = "gemini-2.0-flash-exp"
 
@@ -19,12 +23,14 @@ type RLMCompleter interface {
 
 // Orchestrator coordinates communication between the user, the LLM, and the rules engine.
 type Orchestrator struct {
-	provider   Provider
-	rlm        RLMCompleter
-	deps       cli.Deps
-	tools      []Tool
-	history    []Message
-	promptMode bool
+	mu           sync.Mutex
+	activeCancel context.CancelFunc
+	provider     Provider
+	rlm          RLMCompleter
+	deps         cli.Deps
+	tools        []Tool
+	history      []Message
+	promptMode   bool
 }
 
 // NewOrchestrator creates a new LLM orchestrator.
@@ -48,6 +54,14 @@ func NewOrchestrator(context context.Context, provider Provider, deps cli.Deps) 
 
 func (o *Orchestrator) SetRLM(rlm RLMCompleter) {
 	o.rlm = rlm
+}
+
+// ProviderInfo returns the provider name and model name.
+func (o *Orchestrator) ProviderInfo() (string, string) {
+	if o.provider == nil {
+		return "none", "none"
+	}
+	return o.provider.Name(), o.provider.ModelName()
 }
 
 func (o *Orchestrator) getSystemPrompt() string {
@@ -111,6 +125,19 @@ func defineTools() []Tool {
 
 // ProcessInput takes natural language input and returns a narrated response.
 func (o *Orchestrator) ProcessInput(ctx context.Context, input string) (string, error) {
+	if !o.mu.TryLock() {
+		return "", ErrOrchestratorBusy
+	}
+	defer o.mu.Unlock()
+
+	// Create a cancelable context for this specific run
+	runCtx, cancel := context.WithCancel(ctx)
+	o.activeCancel = cancel
+	defer func() {
+		cancel()
+		o.activeCancel = nil
+	}()
+
 	// Include status context in the message content as seen in previous implementation
 	stdout, exitCode := cli.Run([]string{"status"}, o.deps)
 	if exitCode != 0 {
@@ -119,7 +146,7 @@ func (o *Orchestrator) ProcessInput(ctx context.Context, input string) (string, 
 
 	if o.rlm != nil {
 		slog.Debug("RLM_START", "query", input)
-		resp, err := o.rlm.Complete(ctx, input, stdout, o.history)
+		resp, err := o.rlm.Complete(runCtx, input, stdout, o.history)
 		if err != nil {
 			return "", err
 		}
@@ -149,7 +176,20 @@ func (o *Orchestrator) ProcessInput(ctx context.Context, input string) (string, 
 
 	o.history = append(o.history, Message{Role: "user", Content: contextInput})
 
-	return o.generationLoop(ctx)
+	return o.generationLoop(runCtx)
+}
+
+// Interrupt cancels any active processing in the orchestrator.
+// Returns true if an active process was cancelled.
+func (o *Orchestrator) Interrupt() bool {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	if o.activeCancel != nil {
+		o.activeCancel()
+		o.activeCancel = nil
+		return true
+	}
+	return false
 }
 
 func (o *Orchestrator) generationLoop(ctx context.Context) (string, error) {

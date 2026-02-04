@@ -297,6 +297,14 @@ func runDiscord(ctx context.Context, cfg *Config, s DiscordSession, p llm.Provid
 				},
 			},
 		},
+		{
+			Name:        "vstop",
+			Description: "Interrupt the DM's current thinking process",
+		},
+		{
+			Name:        "vstatus",
+			Description: "Report current DM provider and model status",
+		},
 	}
 
 	var orch *llm.Orchestrator
@@ -368,7 +376,7 @@ func runDiscord(ctx context.Context, cfg *Config, s DiscordSession, p llm.Provid
 func handleInteraction(s DiscordSession, orch *llm.Orchestrator, dryRun bool, cache *MessageCache) func(sess *discordgo.Session, i *discordgo.InteractionCreate) {
 	return func(sess *discordgo.Session, i *discordgo.InteractionCreate) {
 		name := i.ApplicationCommandData().Name
-		if name != "echo" && name != "vdm" {
+		if name != "echo" && name != "vdm" && name != "vstop" && name != "vstatus" {
 			return
 		}
 		// Enforce Guild-only interactions
@@ -376,8 +384,59 @@ func handleInteraction(s DiscordSession, orch *llm.Orchestrator, dryRun bool, ca
 			return
 		}
 
+		var content string
 		options := i.ApplicationCommandData().Options
-		content := options[0].StringValue()
+		if len(options) > 0 {
+			content = options[0].StringValue()
+		}
+
+		if name == "vstop" {
+			slog.Info("vstop command")
+			if orch == nil {
+				s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+					Type: discordgo.InteractionResponseChannelMessageWithSource,
+					Data: &discordgo.InteractionResponseData{
+						Content: "Error: Orchestrator not initialized.",
+					},
+				})
+				return
+			}
+			if orch.Interrupt() {
+				s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+					Type: discordgo.InteractionResponseChannelMessageWithSource,
+					Data: &discordgo.InteractionResponseData{
+						Content: "DM has been interrupted. Ready for new commands.",
+					},
+				})
+			} else {
+				s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+					Type: discordgo.InteractionResponseChannelMessageWithSource,
+					Data: &discordgo.InteractionResponseData{
+						Content: "The DM is already idle.",
+					},
+				})
+			}
+			return
+		}
+
+		if name == "vstatus" {
+			providerName := "none"
+			modelName := "none"
+			if orch != nil {
+				providerName, modelName = orch.ProviderInfo()
+			}
+			status := fmt.Sprintf("**VDM Status**\n**Provider:** %s\n**Model:** %s", providerName, modelName)
+			if dryRun {
+				status += "\n**Dry Run:** Active"
+			}
+			s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+				Type: discordgo.InteractionResponseChannelMessageWithSource,
+				Data: &discordgo.InteractionResponseData{
+					Content: status,
+				},
+			})
+			return
+		}
 
 		if name == "vdm" {
 			if orch == nil && !dryRun {
@@ -445,11 +504,7 @@ func handleInteraction(s DiscordSession, orch *llm.Orchestrator, dryRun bool, ca
 				resp, err = orch.ProcessInput(context.Background(), fullInput)
 				if err != nil {
 					slog.Error("orchestrator error", "error", err)
-					msg := fmt.Sprintf("Error: %v", err)
-					sess.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{
-						Content: &msg,
-					})
-					return
+					resp = fmt.Sprintf("Error: %v", err)
 				}
 			}
 
