@@ -47,6 +47,7 @@ type Config struct {
 	GeminiKey      string `env:"GEMINI_API_KEY"`
 	GroqKey        string `env:"GROQ_API_KEY"`
 	DeepSeekKey    string `env:"DEEPSEEK_API_KEY"`
+	GLMKey         string `env:"GLM_API_KEY"`
 	OllamaURL      string `env:"OLLAMA_URL"`
 	LLMProvider    string `env:"LLM_PROVIDER" envDefault:"groq"`
 	LLMModel       string `env:"LLM_MODEL" envDefault:"qwen/qwen3-32b"`
@@ -93,6 +94,7 @@ func main() {
 		fmt.Printf("GEMINI_API_KEY: %s\n", cfg.GeminiKey)
 		fmt.Printf("GROQ_API_KEY: %s\n", cfg.GroqKey)
 		fmt.Printf("DEEPSEEK_API_KEY: %s\n", cfg.DeepSeekKey)
+		fmt.Printf("GLM_API_KEY: %s\n", cfg.GLMKey)
 		fmt.Printf("LLM_PROVIDER: %s\n", cfg.LLMProvider)
 		fmt.Printf("LLM_MODEL: %s\n", cfg.LLMModel)
 		fmt.Printf("------------------------\n")
@@ -113,7 +115,7 @@ func main() {
 
 		// Initialize RLM with DM prompt
 		rlmModel = rlm.NewRLM(p, rlm.Config{
-			MaxIterations:       10,
+			MaxIterations:       30,
 			MaxDepth:            2,
 			PythonPath:          python,
 			ScriptPath:          script,
@@ -163,6 +165,10 @@ func initProvider(ctx context.Context, cfg *Config) (llm.Provider, error) {
 	case "deepseek":
 		if cfg.DeepSeekKey != "" {
 			p, err = llm.NewDeepSeekProvider(cfg.DeepSeekKey, cfg.LLMModel)
+		}
+	case "glm":
+		if cfg.GLMKey != "" {
+			p, err = llm.NewGLMProvider(cfg.GLMKey, cfg.LLMModel)
 		}
 	}
 	return p, err

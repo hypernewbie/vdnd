@@ -35,20 +35,24 @@ go run ./cmd/vd [args]
 go run ./cmd/vdm [args]
 ```
 
-### Configuration
+The application uses environment variables for configuration. Create your own `.env` file by copying the provided `.env.example` template and filling in your API keys:
 
-The application uses environment variables for configuration. You should create a `.env` file in the root directory which will be read automatically.
+```bash
+cp .env.example .env
+```
 
-Required and optional variables:
+### Configuration Variables
 
 | Variable | Description |
 |----------|-------------|
 | `DISCORD_TOKEN` | Your Discord bot token (required for `--discord` mode) |
+| `DISCORD_CHANNEL_ID` | Optional Discord channel ID to restrict the bot to |
 | `GEMINI_API_KEY` | Google Gemini API Key |
 | `GROQ_API_KEY` | Groq Cloud API Key |
 | `DEEPSEEK_API_KEY` | DeepSeek API Key |
+| `GLM_API_KEY` | Zhipu AI GLM API Key |
 | `OLLAMA_URL` | Custom Ollama server URL (defaults to `http://127.0.0.1:11434`) |
-| `LLM_PROVIDER` | Default provider (`gemini`, `groq`, `ollama`, `deepseek`) |
+| `LLM_PROVIDER` | Default provider (`gemini`, `groq`, `ollama`, `deepseek`, `glm`) |
 | `LLM_MODEL` | Default model name for the chosen provider |
 
 ### Running

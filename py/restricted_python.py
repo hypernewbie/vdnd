@@ -3,6 +3,9 @@ import sys
 import json
 import io
 import traceback
+import re
+import random
+import math
 from contextlib import redirect_stdout
 from RestrictedPython import compile_restricted
 from RestrictedPython.Guards import safe_builtins, full_write_guard, safer_getattr, guarded_iter_unpack_sequence
@@ -70,6 +73,15 @@ class SandboxREPL:
         self.globals_dict["open"] = safe_open
         self.globals_dict["message_history"] = []
         self.globals_dict["json"] = json
+        self.globals_dict["re"] = re
+        self.globals_dict["random"] = random
+        self.globals_dict["math"] = math
+        
+        def guarded_import(name, globals=None, locals=None, fromlist=(), level=0):
+            if name in ("re", "json", "random", "math"):
+                return __import__(name, globals, locals, fromlist, level)
+            raise ImportError(f"import of '{name}' is not allowed")
+        self.globals_dict["__import__"] = guarded_import
         
         # Necessary guards for RestrictedPython
         self.globals_dict["_getattr_"] = safer_getattr
@@ -100,7 +112,6 @@ class SandboxREPL:
     def allowed_files(self):
         """
         Returns a list of all files the sandbox is allowed to open.
-        WARNING: This can be very large in character-rich environments.
         """
         files = list(ALLOWED_FILES)
         for allowed_dir in ALLOWED_DIRS:
