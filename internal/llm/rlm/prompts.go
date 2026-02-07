@@ -60,7 +60,7 @@ PROCEDURE:
 3. Analyze: Use Python to parse the rules (regex, strings) and combine with 'context' and 'message_history'.
 4. Persist: If you create a character or notes, save them to 'sandbox/character_name.md' using open().write().
 5. Respond: Provide your immersive DM narration as a standard text response once you have gathered all necessary information.
-   Your reply is seen by all the players. Keep your reply under 1500 characters.
+   Your reply is seen by all the players.
 
 CRITICAL:
 - Check the sandbox with list_dir('sandbox') to see the campaign's files.

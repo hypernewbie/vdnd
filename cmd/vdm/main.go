@@ -517,15 +517,31 @@ func handleInteraction(s DiscordSession, orch *llm.Orchestrator, dryRun bool, ca
 			// Prepend user input as a quote
 			resp = fmt.Sprintf("> %s\n\n%s", content, resp)
 
-			if len(resp) > 1900 {
-				resp = resp[:1890] + "\n...(truncated)"
+			// Split response into chunks of 1900 characters
+			var chunks []string
+			for len(resp) > 1900 {
+				chunks = append(chunks, resp[:1900]+"...")
+				resp = "..." + resp[1900:]
 			}
+			chunks = append(chunks, resp)
 
+			// Send the first chunk as an InteractionResponseEdit
 			_, err = sess.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{
-				Content: &resp,
+				Content: &chunks[0],
 			})
 			if err != nil {
 				slog.Error("failed to edit interaction response", "error", err)
+			}
+
+			// Send subsequent chunks as new messages
+			for _, chunk := range chunks[1:] {
+				if chunk == "" {
+					continue
+				}
+				_, err = sess.ChannelMessageSend(i.ChannelID, chunk)
+				if err != nil {
+					slog.Error("failed to send subsequent chunk", "error", err)
+				}
 			}
 			return
 		}
