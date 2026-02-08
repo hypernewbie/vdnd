@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"uaa/vdnd/internal/cli"
 	"uaa/vdnd/internal/llm/ripgrep"
@@ -222,6 +223,18 @@ func defineTools() []Tool {
 			},
 		},
 
+		{
+			Name:        "vd_action_stride",
+			Description: "Move an entity to a new zone, potentially triggering reactions.",
+			Parameters: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"actor": map[string]any{"type": "string", "description": "Entity ID to move"},
+					"to":    map[string]any{"type": "string", "description": "Target zone ID"},
+				},
+				"required": []any{"actor", "to"},
+			},
+		},
 		// C) Manual tool
 		{
 			Name:        "vd_manual",
@@ -349,6 +362,10 @@ func (o *Orchestrator) generationLoop(ctx context.Context) (string, error) {
 		}
 
 		if resp.FinishReason == "tool_calls" {
+			slog.Info("LLM_TOOL_CHOICE",
+				"tools", resp.ToolCalls,
+				"thinking", resp.Thinking,
+			)
 			// Add assistant tool calls to history
 			o.history = append(o.history, Message{Role: "model", ToolCalls: resp.ToolCalls, Thinking: resp.Thinking})
 
@@ -460,6 +477,11 @@ func (o *Orchestrator) parseJSONResponse(content string) GenerationResponse {
 }
 
 func (o *Orchestrator) executeTool(call ToolCall) string {
+	start := time.Now()
+	var stdout string
+	var exitCode int
+	var cmdArgs []string
+
 	// Special-case tools that don't go through mapToolToArgs
 	switch call.Name {
 	case "vd":
@@ -472,7 +494,12 @@ func (o *Orchestrator) executeTool(call ToolCall) string {
 			return errorJSON("Missing 'cmd' field")
 		}
 		// Use the Phase-0 helper
-		return vdhelpers.ExecuteGenericVD(cmd, o.deps)
+		res := vdhelpers.ExecuteGenericVD(cmd, o.deps)
+		var vdr vdhelpers.VDResult
+		json.Unmarshal([]byte(res), &vdr)
+		stdout = vdr.Stdout
+		exitCode = vdr.ExitCode
+		goto LOG
 
 	case "vd_manual":
 		// Read vd_manual.md from the project root
@@ -480,12 +507,9 @@ func (o *Orchestrator) executeTool(call ToolCall) string {
 		if err != nil {
 			return errorJSON(fmt.Sprintf("Could not read vd_manual.md: %v", err))
 		}
-		result := vdhelpers.VDResult{
-			Stdout:   string(content),
-			ExitCode: 0,
-		}
-		b, _ := json.Marshal(result)
-		return string(b)
+		stdout = string(content)
+		exitCode = 0
+		goto LOG
 
 	case "ripgrep":
 		var args map[string]any
@@ -502,21 +526,50 @@ func (o *Orchestrator) executeTool(call ToolCall) string {
 			return errorJSON(fmt.Sprintf("Ripgrep search failed: %v", err))
 		}
 		// ripgrep.Search already returns JSON-ready string via ToJSON()
-		return result.ToJSON()
+		res := result.ToJSON()
+		var resMap map[string]any
+		json.Unmarshal([]byte(res), &resMap)
+		stdout = res // For logging
+		exitCode = 0
+		goto LOG
 	}
 
 	// Structured tools (including the original 4 scene tools)
-	cmdArgs := o.mapToolToArgs(call)
+	cmdArgs = o.mapToolToArgs(call)
 	if cmdArgs == nil {
 		return errorJSON(fmt.Sprintf("Unknown tool or invalid arguments for %s", call.Name))
 	}
 
-	stdout, exitCode := cli.Run(cmdArgs, o.deps)
+	stdout, exitCode = cli.Run(cmdArgs, o.deps)
+
+LOG:
+	duration := time.Since(start)
+	
+	// Create a summary of the result (first 100 chars)
+	resultSummary := stdout
+	if len(resultSummary) > 100 {
+		resultSummary = resultSummary[:100] + "..."
+	}
+
+	pName, pModel := o.ProviderInfo()
+
+	slog.Info("TOOL_CALL",
+		"tool", call.Name,
+		"arguments", call.Arguments,
+		"mapped_args", cmdArgs,
+		"stdout_len", len(stdout),
+		"result_summary", resultSummary,
+		"exit_code", exitCode,
+		"duration_ms", duration.Milliseconds(),
+		"provider", pName,
+		"model", pModel,
+	)
+
 	result := vdhelpers.VDResult{
 		Stdout:   stdout,
 		ExitCode: exitCode,
 	}
-	if exitCode != 0 {
+	if exitCode != 0 && result.Error == "" {
 		result.Error = "Command failed (non-zero exit)"
 	}
 	b, _ := json.Marshal(result)
@@ -593,6 +646,14 @@ func (o *Orchestrator) mapToolToArgs(call ToolCall) []string {
 			argv = append(argv, "--map", strconv.Itoa(mapVal))
 		}
 		return argv
+
+	case "vd_action_stride":
+		actor := getString("actor")
+		to := getString("to")
+		if actor == "" || to == "" {
+			return nil
+		}
+		return []string{"action", "stride", actor, "--to", to}
 
 	case "vd_damage":
 		id := getString("id")

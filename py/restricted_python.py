@@ -215,6 +215,14 @@ class SandboxREPL:
         result = None
         
         try:
+            # Detect potential state mutation attempts
+            if any(k in code.lower() for k in ("damage", "heal", "strike")):
+                self.original_stdout.write(json.dumps({
+                    "type": "python_state_mutation_attempt",
+                    "code_snippet": code[:100],
+                }) + "\n")
+                self.original_stdout.flush()
+
             # Compile in restricted mode
             # We use 'exec' to allow multiple statements.
             # Python 3.13+ may emit SyntaxWarning for the 'printed' variable 

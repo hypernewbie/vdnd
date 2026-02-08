@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -18,11 +19,12 @@ type REPLResult struct {
 
 // REPLMessage represents a message from the Python sandbox.
 type REPLMessage struct {
-	Type    string `json:"type"`
-	Stdout  string `json:"stdout,omitempty"`
-	Error   string `json:"error,omitempty"`
-	Query   string `json:"query,omitempty"`
-	Context string `json:"context,omitempty"`
+	Type        string `json:"type"`
+	Stdout      string `json:"stdout,omitempty"`
+	Error       string `json:"error,omitempty"`
+	Query       string `json:"query,omitempty"`
+	Context     string `json:"context,omitempty"`
+	CodeSnippet string `json:"code_snippet,omitempty"`
 }
 
 // RecursiveHandler is a callback function for handling recursive LLM calls.
@@ -88,6 +90,8 @@ func (r *REPLExecutor) Execute(code string) (*REPLResult, error) {
 		}
 
 		switch msg.Type {
+		case "python_state_mutation_attempt":
+			slog.Warn("PYTHON_STATE_ATTEMPT", "snippet", msg.CodeSnippet)
 		case "recursive_call":
 			if r.RecursiveHandler == nil {
 				r.sendRecursiveResponse("Error: Recursive calls not supported in this environment")

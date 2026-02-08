@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
@@ -10,7 +11,10 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"time"
+
 	"uaa/vdnd/internal/cli"
 	"uaa/vdnd/internal/llm"
 	"uaa/vdnd/internal/llm/rlm"
@@ -40,6 +44,24 @@ func (w *discordSessionWrapper) GetState() *discordgo.State {
 	return w.Session.State
 }
 
+type Feedback struct {
+	Timestamp string `json:"timestamp"`
+	User      string `json:"user"`
+	Rating    int    `json:"rating"`
+	Comments  string `json:"comments"`
+	Provider  string `json:"provider,omitempty"`
+	Model     string `json:"model,omitempty"`
+}
+
+func saveFeedback(f Feedback) error {
+	filename := fmt.Sprintf("feedback/feedback_%d.json", time.Now().UnixNano())
+	data, err := json.MarshalIndent(f, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(filename, data, 0644)
+}
+
 // Config holds the application configuration
 type Config struct {
 	Token          string `env:"DISCORD_TOKEN"`
@@ -53,6 +75,7 @@ type Config struct {
 	LLMProvider    string `env:"LLM_PROVIDER" envDefault:"groq"`
 	LLMModel       string `env:"LLM_MODEL" envDefault:"qwen/qwen3-32b"`
 	DryRun         bool   `env:"DRY_RUN" envDefault:"false"`
+	Feedback       bool   `env:"FEEDBACK" envDefault:"false"`
 }
 
 // loadConfig reads configuration from environment variables
@@ -187,6 +210,7 @@ func parseConfig(args []string) (cfg *Config, useDiscord bool, verbose bool, pro
 	modelFlag := fs.String("model", "", "LLM model name")
 	promptModeFlag := fs.Bool("prompt-mode", false, "Force schema-constrained prompting (JSON)")
 	dryRunFlag := fs.Bool("dry-run", false, "Enable dry run mode (echo prompts)")
+	feedbackFlag := fs.Bool("feedback", false, "Collect feedback after CLI session")
 	verbosePtr := fs.Bool("verbose", false, "Print configuration and secrets on startup")
 
 	if err := fs.Parse(args); err != nil {
@@ -212,6 +236,10 @@ func parseConfig(args []string) (cfg *Config, useDiscord bool, verbose bool, pro
 
 	if *dryRunFlag {
 		cfg.DryRun = true
+	}
+
+	if *feedbackFlag {
+		cfg.Feedback = true
 	}
 
 	return cfg, *useDiscordPtr, *verbosePtr, *promptModeFlag, nil
@@ -279,6 +307,53 @@ func runCLI(ctx context.Context, in io.Reader, out io.Writer, cfg *Config, p llm
 	if err := scanner.Err(); err != nil {
 		slog.Error("error reading input", "error", err)
 	}
+
+	if cfg.Feedback {
+		collectCLIFeedback(in, out, cfg, p)
+	}
+}
+
+func collectCLIFeedback(in io.Reader, out io.Writer, cfg *Config, p llm.Provider) {
+	fmt.Fprintln(out, "\n--- FEEDBACK ---")
+	fmt.Fprint(out, "How would you rate the DM's performance? (1-5 stars): ")
+	
+	scanner := bufio.NewScanner(in)
+	if !scanner.Scan() {
+		return
+	}
+	
+	rating, _ := strconv.Atoi(strings.TrimSpace(scanner.Text()))
+	if rating < 1 || rating > 5 {
+		fmt.Fprintln(out, "Invalid rating. Skipping feedback.")
+		return
+	}
+
+	fmt.Fprint(out, "Any additional comments? (optional): ")
+	if !scanner.Scan() {
+		return
+	}
+	comments := strings.TrimSpace(scanner.Text())
+
+	provider, model := "none", "none"
+	if p != nil {
+		provider = p.Name()
+		model = p.ModelName()
+	}
+
+	fb := Feedback{
+		Timestamp: time.Now().Format(time.RFC3339),
+		User:      "cli",
+		Rating:    rating,
+		Comments:  comments,
+		Provider:  provider,
+		Model:     model,
+	}
+
+	if err := saveFeedback(fb); err != nil {
+		fmt.Fprintf(out, "Error saving feedback: %v\n", err)
+	} else {
+		fmt.Fprintln(out, "Thank you for your feedback!")
+	}
 }
 
 func runDiscord(ctx context.Context, cfg *Config, s DiscordSession, p llm.Provider, rlmModel *rlm.RLM, deps cli.Deps, forcePromptMode bool) {
@@ -316,6 +391,31 @@ func runDiscord(ctx context.Context, cfg *Config, s DiscordSession, p llm.Provid
 		{
 			Name:        "vstatus",
 			Description: "Report current DM provider and model status",
+		},
+		{
+			Name:        "vfeedback",
+			Description: "Provide feedback on the DM's performance",
+			Options: []*discordgo.ApplicationCommandOption{
+				{
+					Type:        discordgo.ApplicationCommandOptionInteger,
+					Name:        "rating",
+					Description: "Rate the DM from 1 to 5 stars",
+					Required:    true,
+					Choices: []*discordgo.ApplicationCommandOptionChoice{
+						{Name: "1 Star", Value: 1},
+						{Name: "2 Stars", Value: 2},
+						{Name: "3 Stars", Value: 3},
+						{Name: "4 Stars", Value: 4},
+						{Name: "5 Stars", Value: 5},
+					},
+				},
+				{
+					Type:        discordgo.ApplicationCommandOptionString,
+					Name:        "comments",
+					Description: "Additional comments or suggestions",
+					Required:    false,
+				},
+			},
 		},
 	}
 
@@ -388,7 +488,7 @@ func runDiscord(ctx context.Context, cfg *Config, s DiscordSession, p llm.Provid
 func handleInteraction(s DiscordSession, orch *llm.Orchestrator, dryRun bool, cache *MessageCache) func(sess *discordgo.Session, i *discordgo.InteractionCreate) {
 	return func(sess *discordgo.Session, i *discordgo.InteractionCreate) {
 		name := i.ApplicationCommandData().Name
-		if name != "echo" && name != "vdm" && name != "vstop" && name != "vstatus" {
+		if name != "echo" && name != "vdm" && name != "vstop" && name != "vstatus" && name != "vfeedback" {
 			return
 		}
 		// Enforce Guild-only interactions
@@ -445,6 +545,47 @@ func handleInteraction(s DiscordSession, orch *llm.Orchestrator, dryRun bool, ca
 				Type: discordgo.InteractionResponseChannelMessageWithSource,
 				Data: &discordgo.InteractionResponseData{
 					Content: status,
+				},
+			})
+			return
+		}
+
+		if name == "vfeedback" {
+			rating := int(options[0].IntValue())
+			comments := ""
+			if len(options) > 1 {
+				comments = options[1].StringValue()
+			}
+
+			provider, model := "unknown", "unknown"
+			if orch != nil {
+				provider, model = orch.ProviderInfo()
+			}
+
+			fb := Feedback{
+				Timestamp: time.Now().Format(time.RFC3339),
+				User:      fmt.Sprintf("discord:%s", i.Member.User.ID),
+				Rating:    rating,
+				Comments:  comments,
+				Provider:  provider,
+				Model:     model,
+			}
+
+			if err := saveFeedback(fb); err != nil {
+				slog.Error("failed to save feedback", "error", err)
+				s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+					Type: discordgo.InteractionResponseChannelMessageWithSource,
+					Data: &discordgo.InteractionResponseData{
+						Content: "Error: Failed to save feedback.",
+					},
+				})
+				return
+			}
+
+			s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+				Type: discordgo.InteractionResponseChannelMessageWithSource,
+				Data: &discordgo.InteractionResponseData{
+					Content: "Thank you for your feedback! It has been saved for review.",
 				},
 			})
 			return

@@ -210,6 +210,13 @@ func (r *RLM) Complete(ctx context.Context, query string, contextData string, hi
 						})
 						continue
 					}
+					
+					slog.Info("TOOL_CALL",
+						"tool", "ripgrep",
+						"arguments", call.Arguments,
+						"provider", r.provider.Name(),
+						"model", r.provider.ModelName(),
+					)
 					result, err := ripgrep.Search(args.Pattern, args.Path)
 					observation := ""
 					if err != nil {
