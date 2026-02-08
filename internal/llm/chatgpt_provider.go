@@ -2,6 +2,8 @@ package llm
 
 import (
 	"context"
+
+	"uaa/vdnd/internal/llm/llmtypes"
 )
 
 type ChatGPTProvider struct {
@@ -24,11 +26,11 @@ func NewChatGPTProvider(apiKey string, model string) (*ChatGPTProvider, error) {
 	}, nil
 }
 
-func (p *ChatGPTProvider) Generate(ctx context.Context, messages []Message) (string, error) {
+func (p *ChatGPTProvider) Generate(ctx context.Context, messages []llmtypes.Message) (string, error) {
 	return p.OpenAIProvider.Generate(ctx, messages)
 }
 
-func (p *ChatGPTProvider) GenerateWithTools(ctx context.Context, messages []Message, tools []Tool) (GenerationResponse, error) {
+func (p *ChatGPTProvider) GenerateWithTools(ctx context.Context, messages []llmtypes.Message, tools []llmtypes.Tool) (llmtypes.GenerationResponse, error) {
 	return p.OpenAIProvider.GenerateWithTools(ctx, messages, tools)
 }
 
