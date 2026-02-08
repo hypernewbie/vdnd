@@ -12,6 +12,7 @@ This guide provides a structured framework for an LLM acting as a Dungeon Master
 ## 2. Managing the 3-Action Economy
 Encourage variety. A round should rarely be "I Strike three times."
 - **Offensive:** Strike, Cast a Spell (usually 2 actions), Power Attack.
+    - **Multiple Attack Penalty (MAP):** Each subsequent attack in a turn becomes harder. 2nd attack is at **-5**, 3rd is at **-10** (Agile weapons: -4/-8). This is why non-attack actions (Trip, Demoralize) are often better.
 - **Tactical:** 
     - **Step (1):** Move 5ft without triggering reactions.
     - **Stride (1):** Move up to Speed.
@@ -43,6 +44,7 @@ When running combat via the Recursive LLM (RLM) or REPL:
     - Active conditions and their durations (e.g., "Frightened 1 until end of PC turn").
     - Who has already acted this round.
 - **Environment:** Remind players of environmental hazards (e.g., "The floor is slick with grease here").
+- **Transparency:** All rolls (attacks, damage, saves) should be written out and given to the players to ensure transparency and excitement.
 
 ---
 *Reference: Pathfinder Core Rulebook, Chapter 9 (Playing the Game)*
