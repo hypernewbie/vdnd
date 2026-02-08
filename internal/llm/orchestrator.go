@@ -5,10 +5,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"os"
+	"strconv"
 	"strings"
 	"sync"
 
 	"uaa/vdnd/internal/cli"
+	"uaa/vdnd/internal/llm/ripgrep"
+	"uaa/vdnd/internal/llm/vdhelpers"
 )
 
 // ErrOrchestratorBusy is returned when the orchestrator is already processing a request.
@@ -117,6 +121,99 @@ func defineTools() []Tool {
 		{
 			Name:        "vd_status",
 			Description: "Get the current scene status and entity list",
+		},
+		// ----- NEW TOOLS -----
+		// A) Generic vd tool
+		{
+			Name:        "vd",
+			Description: "Execute any VD CLI command as a raw string.",
+			Parameters: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"cmd": map[string]any{
+						"type":        "string",
+						"description": "Full command string (e.g., 'action strike hero goblin --weapon sword')",
+					},
+				},
+				"required": []any{"cmd"},
+			},
+		},
+
+		// B) Top-5 structured tools
+		{
+			Name:        "vd_action_strike",
+			Description: "Perform a melee or ranged attack.",
+			Parameters: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"actor":  map[string]any{"type": "string", "description": "Attacker entity ID"},
+					"target": map[string]any{"type": "string", "description": "Target entity ID"},
+					"weapon": map[string]any{"type": "string", "description": "Weapon ID (optional)"},
+					"map":    map[string]any{"type": "integer", "description": "Multi-Attack Penalty (0=None,1=-5,2=-10)", "enum": []int{0, 1, 2}},
+				},
+				"required": []any{"actor", "target"},
+			},
+		},
+		{
+			Name:        "vd_damage",
+			Description: "Apply damage to an entity, respecting immunities/weaknesses/resistances.",
+			Parameters: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"id":     map[string]any{"type": "string", "description": "Target entity ID"},
+					"amount": map[string]any{"type": "integer", "description": "Damage amount"},
+					"type":   map[string]any{"type": "string", "description": "Damage type (optional)"},
+				},
+				"required": []any{"id", "amount"},
+			},
+		},
+		{
+			Name:        "vd_heal",
+			Description: "Restore HP to an entity.",
+			Parameters: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"id":     map[string]any{"type": "string", "description": "Target entity ID"},
+					"amount": map[string]any{"type": "integer", "description": "Healing amount"},
+				},
+				"required": []any{"id", "amount"},
+			},
+		},
+		{
+			Name:        "vd_condition_add",
+			Description: "Apply a condition to an entity.",
+			Parameters: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"id":        map[string]any{"type": "string", "description": "Target entity ID"},
+					"condition": map[string]any{"type": "string", "description": "Condition name (e.g., 'frightened', 'prone')"},
+					"value":     map[string]any{"type": "integer", "description": "Condition value (optional)"},
+					"duration":  map[string]any{"type": "integer", "description": "Duration in rounds (optional)"},
+					"source":    map[string]any{"type": "string", "description": "Source of condition (optional)"},
+				},
+				"required": []any{"id", "condition"},
+			},
+		},
+
+		// C) Manual tool
+		{
+			Name:        "vd_manual",
+			Description: "Retrieve the full VD CLI manual (vd_manual.md).",
+			Parameters:  nil, // no arguments
+		},
+
+		// D) Ripgrep tool
+		{
+			Name:        "ripgrep",
+			Description: "Search for text in rule files using ripgrep (fast). If rg is not installed, a loud warning will be printed.",
+			Parameters: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"pattern": map[string]any{"type": "string", "description": "Search pattern (regex)"},
+					"path":    map[string]any{"type": "string", "description": "Directory to search (default: 'rules/')"},
+				},
+				"required": []any{"pattern"},
+			},
 		},
 	}
 }
@@ -333,16 +430,77 @@ func (o *Orchestrator) parseJSONResponse(content string) GenerationResponse {
 }
 
 func (o *Orchestrator) executeTool(call ToolCall) string {
-	cmdArgs := o.mapToolToArgs(call)
-	if cmdArgs == nil {
-		return fmt.Sprintf("Error: Unknown tool %s", call.Name)
+	// Special-case tools that don't go through mapToolToArgs
+	switch call.Name {
+	case "vd":
+		var args map[string]any
+		if err := json.Unmarshal([]byte(call.Arguments), &args); err != nil {
+			return errorJSON(fmt.Sprintf("Error parsing arguments: %v", err))
+		}
+		cmd, _ := args["cmd"].(string)
+		if cmd == "" {
+			return errorJSON("Missing 'cmd' field")
+		}
+		// Use the Phase-0 helper
+		return vdhelpers.ExecuteGenericVD(cmd, o.deps)
+
+	case "vd_manual":
+		// Read vd_manual.md from the project root
+		content, err := os.ReadFile("vd_manual.md")
+		if err != nil {
+			return errorJSON(fmt.Sprintf("Could not read vd_manual.md: %v", err))
+		}
+		result := vdhelpers.VDResult{
+			Stdout:   string(content),
+			ExitCode: 0,
+		}
+		b, _ := json.Marshal(result)
+		return string(b)
+
+	case "ripgrep":
+		var args map[string]any
+		if err := json.Unmarshal([]byte(call.Arguments), &args); err != nil {
+			return errorJSON(fmt.Sprintf("Error parsing arguments: %v", err))
+		}
+		pattern, _ := args["pattern"].(string)
+		path, _ := args["path"].(string)
+		if pattern == "" {
+			return errorJSON("Missing 'pattern' field")
+		}
+		result, err := ripgrep.Search(pattern, path)
+		if err != nil {
+			return errorJSON(fmt.Sprintf("Ripgrep search failed: %v", err))
+		}
+		// ripgrep.Search already returns JSON-ready string via ToJSON()
+		return result.ToJSON()
 	}
 
-	stdout, _ := cli.Run(cmdArgs, o.deps)
+	// Structured tools (including the original 4 scene tools)
+	cmdArgs := o.mapToolToArgs(call)
+	if cmdArgs == nil {
+		return errorJSON(fmt.Sprintf("Unknown tool or invalid arguments for %s", call.Name))
+	}
 
-	// Wrap in a result map for Gemini
-	res := map[string]any{"result": stdout}
-	b, _ := json.Marshal(res)
+	stdout, exitCode := cli.Run(cmdArgs, o.deps)
+	result := vdhelpers.VDResult{
+		Stdout:   stdout,
+		ExitCode: exitCode,
+	}
+	if exitCode != 0 {
+		result.Error = "Command failed (non-zero exit)"
+	}
+	b, _ := json.Marshal(result)
+	return string(b)
+}
+
+// Helper for error responses
+func errorJSON(msg string) string {
+	result := vdhelpers.VDResult{
+		Stdout:   "",
+		ExitCode: 1,
+		Error:    msg,
+	}
+	b, _ := json.Marshal(result)
 	return string(b)
 }
 
@@ -357,6 +515,17 @@ func (o *Orchestrator) mapToolToArgs(call ToolCall) []string {
 		}
 		s, _ := v.(string)
 		return s
+	}
+	getInt := func(key string) int {
+		v, ok := args[key]
+		if !ok || v == nil {
+			return 0
+		}
+		// JSON numbers decode as float64
+		if f, ok := v.(float64); ok {
+			return int(f)
+		}
+		return 0
 	}
 
 	switch call.Name {
@@ -376,6 +545,67 @@ func (o *Orchestrator) mapToolToArgs(call ToolCall) []string {
 		return []string{"scene", "load", name}
 	case "vd_status":
 		return []string{"status"}
+
+	// ----- NEW STRUCTURED TOOLS -----
+	case "vd_action_strike":
+		actor := getString("actor")
+		target := getString("target")
+		weapon := getString("weapon")
+		mapVal := getInt("map")
+		if actor == "" || target == "" {
+			return nil
+		}
+		argv := []string{"action", "strike", actor, target}
+		if weapon != "" {
+			argv = append(argv, "--weapon", weapon)
+		}
+		if mapVal > 0 && mapVal <= 2 {
+			argv = append(argv, "--map", strconv.Itoa(mapVal))
+		}
+		return argv
+
+	case "vd_damage":
+		id := getString("id")
+		amount := getInt("amount")
+		dmgType := getString("type")
+		if id == "" || amount == 0 {
+			return nil
+		}
+		argv := []string{"damage", id, strconv.Itoa(amount)}
+		if dmgType != "" {
+			argv = append(argv, dmgType)
+		}
+		return argv
+
+	case "vd_heal":
+		id := getString("id")
+		amount := getInt("amount")
+		if id == "" || amount == 0 {
+			return nil
+		}
+		return []string{"heal", id, strconv.Itoa(amount)}
+
+	case "vd_condition_add":
+		id := getString("id")
+		condition := getString("condition")
+		value := getInt("value")
+		duration := getInt("duration")
+		source := getString("source")
+		if id == "" || condition == "" {
+			return nil
+		}
+		argv := []string{"condition", "add", id, condition}
+		if value != 0 {
+			argv = append(argv, strconv.Itoa(value))
+		}
+		if duration > 0 {
+			argv = append(argv, "--duration", strconv.Itoa(duration))
+		}
+		if source != "" {
+			argv = append(argv, "--source", source)
+		}
+		return argv
+
 	default:
 		return nil
 	}

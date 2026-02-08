@@ -6,6 +6,71 @@ import (
 	"testing"
 )
 
+func TestOrchestrator_MapToolToArgs(t *testing.T) {
+	o := &Orchestrator{}
+
+	tests := []struct {
+		name     string
+		call     ToolCall
+		expected []string
+	}{
+		{
+			name: "vd_action_strike basic",
+			call: ToolCall{
+				Name:      "vd_action_strike",
+				Arguments: `{"actor": "hero", "target": "goblin"}`,
+			},
+			expected: []string{"action", "strike", "hero", "goblin"},
+		},
+		{
+			name: "vd_action_strike with weapon and map",
+			call: ToolCall{
+				Name:      "vd_action_strike",
+				Arguments: `{"actor": "hero", "target": "goblin", "weapon": "longsword", "map": 1}`,
+			},
+			expected: []string{"action", "strike", "hero", "goblin", "--weapon", "longsword", "--map", "1"},
+		},
+		{
+			name: "vd_damage",
+			call: ToolCall{
+				Name:      "vd_damage",
+				Arguments: `{"id": "goblin", "amount": 10, "type": "fire"}`,
+			},
+			expected: []string{"damage", "goblin", "10", "fire"},
+		},
+		{
+			name: "vd_heal",
+			call: ToolCall{
+				Name:      "vd_heal",
+				Arguments: `{"id": "hero", "amount": 5}`,
+			},
+			expected: []string{"heal", "hero", "5"},
+		},
+		{
+			name: "vd_condition_add with flags",
+			call: ToolCall{
+				Name:      "vd_condition_add",
+				Arguments: `{"id": "hero", "condition": "frightened", "value": 1, "duration": 2, "source": "scary monster"}`,
+			},
+			expected: []string{"condition", "add", "hero", "frightened", "1", "--duration", "2", "--source", "scary monster"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := o.mapToolToArgs(tt.call)
+			if len(got) != len(tt.expected) {
+				t.Fatalf("mapToolToArgs() returned %v, want %v", got, tt.expected)
+			}
+			for i := range got {
+				if got[i] != tt.expected[i] {
+					t.Errorf("mapToolToArgs()[%d] = %s, want %s", i, got[i], tt.expected[i])
+				}
+			}
+		})
+	}
+}
+
 func TestOrchestrator_TruncateHistory(t *testing.T) {
 	o := &Orchestrator{}
 	initialMessage := "I am ready."

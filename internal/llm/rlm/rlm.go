@@ -7,6 +7,7 @@ import (
 	"log/slog"
 
 	"uaa/vdnd/internal/llm"
+	"uaa/vdnd/internal/llm/ripgrep"
 )
 
 // SystemPromptBuilder is a function that constructs the system prompt.
@@ -25,6 +26,19 @@ var RLMTools = []llm.Tool{
 				},
 			},
 			"required": []string{"code"},
+		},
+	},
+	// NEW: ripgrep for fast rule lookup
+	{
+		Name:        "ripgrep",
+		Description: "Search for text in rule files using ripgrep (fast). If rg is not installed, a loud warning will be printed.",
+		Parameters: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"pattern": map[string]any{"type": "string", "description": "Search pattern (regex)"},
+				"path":    map[string]any{"type": "string", "description": "Directory to search (default: 'rules/')"},
+			},
+			"required": []any{"pattern"},
 		},
 	},
 }
@@ -141,56 +155,82 @@ func (r *RLM) Complete(ctx context.Context, query string, contextData string, hi
 			messages = append(messages, llm.Message{Role: "model", ToolCalls: response.ToolCalls, Thinking: response.Thinking})
 
 			for _, call := range response.ToolCalls {
-				if call.Name != "execute_python" {
+				if call.Name == "execute_python" {
+					var args struct {
+						Code string `json:"code"`
+					}
+					if err := json.Unmarshal([]byte(call.Arguments), &args); err != nil {
+						messages = append(messages, llm.Message{
+							Role:       "tool",
+							Name:       call.Name,
+							ToolCallID: call.ID,
+							Content:    fmt.Sprintf("Error parsing arguments: %v", err),
+						})
+						continue
+					}
+
+					slog.Debug("REPL_EXECUTE", "code", args.Code)
+					replResult, err := repl.Execute(args.Code)
+					observation := ""
+					if err != nil {
+						observation = fmt.Sprintf("Error executing code: %v", err)
+					} else {
+						observation = replResult.Stdout
+						if replResult.Error != "" {
+							if observation != "" {
+								observation += "\n"
+							}
+							observation += "Traceback:\n" + replResult.Error
+						}
+					}
+
+					if observation == "" {
+						observation = "(Success: no output)"
+					}
+
+					slog.Info("REPL_EXECUTE", "output", observation)
+
+					messages = append(messages, llm.Message{
+						Role:       "tool",
+						Name:       call.Name,
+						ToolCallID: call.ID,
+						Content:    observation,
+					})
+				} else if call.Name == "ripgrep" {
+					var args struct {
+						Pattern string `json:"pattern"`
+						Path    string `json:"path"`
+					}
+					if err := json.Unmarshal([]byte(call.Arguments), &args); err != nil {
+						messages = append(messages, llm.Message{
+							Role:       "tool",
+							Name:       call.Name,
+							ToolCallID: call.ID,
+							Content:    fmt.Sprintf("Error parsing arguments: %v", err),
+						})
+						continue
+					}
+					result, err := ripgrep.Search(args.Pattern, args.Path)
+					observation := ""
+					if err != nil {
+						observation = fmt.Sprintf("Ripgrep error: %v", err)
+					} else {
+						observation = result.ToJSON()
+					}
+					messages = append(messages, llm.Message{
+						Role:       "tool",
+						Name:       call.Name,
+						ToolCallID: call.ID,
+						Content:    observation,
+					})
+				} else {
 					messages = append(messages, llm.Message{
 						Role:       "tool",
 						Name:       call.Name,
 						ToolCallID: call.ID,
 						Content:    fmt.Sprintf("Error: Unknown tool %s", call.Name),
 					})
-					continue
 				}
-
-				var args struct {
-					Code string `json:"code"`
-				}
-				if err := json.Unmarshal([]byte(call.Arguments), &args); err != nil {
-					messages = append(messages, llm.Message{
-						Role:       "tool",
-						Name:       call.Name,
-						ToolCallID: call.ID,
-						Content:    fmt.Sprintf("Error parsing arguments: %v", err),
-					})
-					continue
-				}
-
-				slog.Debug("REPL_EXECUTE", "code", args.Code)
-				replResult, err := repl.Execute(args.Code)
-				observation := ""
-				if err != nil {
-					observation = fmt.Sprintf("Error executing code: %v", err)
-				} else {
-					observation = replResult.Stdout
-					if replResult.Error != "" {
-						if observation != "" {
-							observation += "\n"
-						}
-						observation += "Traceback:\n" + replResult.Error
-					}
-				}
-
-				if observation == "" {
-					observation = "(Success: no output)"
-				}
-
-				slog.Info("REPL_EXECUTE", "output", observation)
-
-				messages = append(messages, llm.Message{
-					Role:       "tool",
-					Name:       call.Name,
-					ToolCallID: call.ID,
-					Content:    observation,
-				})
 			}
 			continue
 		}
