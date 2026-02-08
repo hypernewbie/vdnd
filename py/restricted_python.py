@@ -57,6 +57,33 @@ class UniversalPrint:
     def write(self, s):
         print(s, end="")
 
+def _inplacevar_(op, var, expr):
+    if op == '+=':
+        return var + expr
+    if op == '-=':
+        return var - expr
+    if op == '*=':
+        return var * expr
+    if op == '/=':
+        return var / expr
+    if op == '//=':
+        return var // expr
+    if op == '%=':
+        return var % expr
+    if op == '**=':
+        return var ** expr
+    if op == '<<=':
+        return var << expr
+    if op == '>>=':
+        return var >> expr
+    if op == '&=':
+        return var & expr
+    if op == '^=':
+        return var ^ expr
+    if op == '|=':
+        return var | expr
+    raise ValueError(f"Unknown in-place operator: {op}")
+
 class SandboxREPL:
     def __init__(self):
         # Save original stdout for communication with Go
@@ -70,6 +97,10 @@ class SandboxREPL:
         self.globals_dict["re"] = re
         self.globals_dict["random"] = random
         self.globals_dict["math"] = math
+        self.globals_dict["min"] = min
+        self.globals_dict["max"] = max
+        self.globals_dict["sum"] = sum
+        self.globals_dict["dir"] = dir
         
         def guarded_import(name, globals=None, locals=None, fromlist=(), level=0):
             if name in ("re", "json", "random", "math"):
@@ -85,6 +116,8 @@ class SandboxREPL:
         self.globals_dict["_setitem_"] = lambda obj, key, val: obj.__setitem__(key, val)
         self.globals_dict["_delitem_"] = lambda obj, key: obj.__delitem__(key)
         self.globals_dict["_unpack_sequence_"] = guarded_iter_unpack_sequence
+        self.globals_dict["_iter_unpack_sequence_"] = guarded_iter_unpack_sequence
+        self.globals_dict["_inplacevar_"] = _inplacevar_
         
         # In RestrictedPython, 'print' is transformed to a call to '_print_'.
         # UniversalPrint handles both factory style and direct call style.

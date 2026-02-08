@@ -32,9 +32,12 @@ type GeminiFunctionResponse struct {
 }
 
 type GeminiPart struct {
-	Text             string                  `json:"text,omitempty"`
-	FunctionCall     *GeminiFunctionCall     `json:"functionCall,omitempty"`
-	FunctionResponse *GeminiFunctionResponse `json:"functionResponse,omitempty"`
+	Text                  string                  `json:"text,omitempty"`
+	Thought               bool                    `json:"thought,omitempty"`
+	ThoughtSignature      string                  `json:"thought_signature,omitempty"`
+	ThoughtSignatureCamel string                  `json:"thoughtSignature,omitempty"`
+	FunctionCall          *GeminiFunctionCall     `json:"functionCall,omitempty"`
+	FunctionResponse      *GeminiFunctionResponse `json:"functionResponse,omitempty"`
 }
 
 type GeminiContent struct {
@@ -98,8 +101,20 @@ func (p *GeminiProvider) Generate(ctx context.Context, messages []Message) (stri
 		return "", fmt.Errorf("empty response from Gemini")
 	}
 
-	content := geminiResp.Candidates[0].Content.Parts[0].Text
-	return StripThinking(content), nil
+	var content string
+	var thinking string
+	for _, part := range geminiResp.Candidates[0].Content.Parts {
+		if part.Thought {
+			thinking += part.Text
+		} else if part.Text != "" {
+			content += part.Text
+		}
+	}
+
+	if thinking != "" {
+		return fmt.Sprintf("<thought>\n%s\n</thought>\n%s", thinking, content), nil
+	}
+	return content, nil
 }
 
 func (p *GeminiProvider) GenerateWithTools(ctx context.Context, messages []Message, tools []Tool) (GenerationResponse, error) {
@@ -136,21 +151,35 @@ func (p *GeminiProvider) GenerateWithTools(ctx context.Context, messages []Messa
 	}
 
 	for _, part := range candidate.Content.Parts {
-		if part.Text != "" {
+		if part.Thought {
+			result.Thinking += part.Text
+		} else if part.Text != "" {
 			result.Content += part.Text
 		}
+
 		if part.FunctionCall != nil {
 			args, _ := json.Marshal(part.FunctionCall.Args)
+			sig := part.ThoughtSignature
+			if sig == "" {
+				sig = part.ThoughtSignatureCamel
+			}
+
 			result.ToolCalls = append(result.ToolCalls, ToolCall{
-				Name:      part.FunctionCall.Name,
-				Arguments: string(args),
+				ID:               "", // Gemini doesn't use IDs in the same way as OpenAI
+				Name:             part.FunctionCall.Name,
+				Arguments:        string(args),
+				ThoughtSignature: sig,
 			})
 			result.FinishReason = "tool_calls"
 		}
 	}
 
-	result.Thinking = ExtractThinking(result.Content)
-	result.Content = StripThinking(result.Content)
+	// Internal logic uses tags for thinking if it's mixed in content,
+	// but here we have explicit thinking parts.
+	if result.Thinking == "" {
+		result.Thinking = ExtractThinking(result.Content)
+		result.Content = StripThinking(result.Content)
+	}
 
 	return result, nil
 }
@@ -200,6 +229,13 @@ func (p *GeminiProvider) convertMessagesToGeminiContents(messages []Message) []G
 		}
 
 		var parts []GeminiPart
+		if m.Thinking != "" {
+			parts = append(parts, GeminiPart{
+				Text:    m.Thinking,
+				Thought: true,
+			})
+		}
+
 		if m.Content != "" {
 			parts = append(parts, GeminiPart{Text: m.Content})
 		}
@@ -210,6 +246,8 @@ func (p *GeminiProvider) convertMessagesToGeminiContents(messages []Message) []G
 				var args map[string]interface{}
 				json.Unmarshal([]byte(tc.Arguments), &args)
 				parts = append(parts, GeminiPart{
+					ThoughtSignature:      tc.ThoughtSignature,
+					ThoughtSignatureCamel: tc.ThoughtSignature,
 					FunctionCall: &GeminiFunctionCall{
 						Name: tc.Name,
 						Args: args,

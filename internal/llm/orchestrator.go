@@ -185,7 +185,7 @@ func (o *Orchestrator) Interrupt() bool {
 }
 
 func (o *Orchestrator) generationLoop(ctx context.Context) (string, error) {
-	for i := 0; i < 5; i++ { // Guard against infinite loops
+	for i := 0; i < 50; i++ { // Guard against infinite loops
 		var resp GenerationResponse
 		var err error
 
@@ -218,6 +218,7 @@ func (o *Orchestrator) generationLoop(ctx context.Context) (string, error) {
 
 		if resp.FinishReason == "stop" {
 			resp.Content = o.handleTextMarkers(resp.Content)
+			slog.Info("GENERATION_COMPLETE", "iterations", i+1)
 
 			o.history = append(o.history, Message{Role: "model", Content: resp.Content, Thinking: resp.Thinking})
 			return resp.Content, nil
@@ -244,6 +245,7 @@ func (o *Orchestrator) generationLoop(ctx context.Context) (string, error) {
 		}
 	}
 
+	slog.Warn("GENERATION_FAILED", "iterations", 50)
 	return "", fmt.Errorf("exceeded maximum tool calling iterations")
 }
 

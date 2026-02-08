@@ -46,7 +46,6 @@ AVAILABLE TOOLS (Inside 'execute_python'):
 - query: str (the user's request)
 - context: str (additional context about the current game state)
 - message_history: list[dict] (previous chat messages)
-- recursive_llm(sub_query, sub_context) -> str: Recursively process a sub-task.
 - imports: these are already imported for you: re, json, random, math. Nothing else is allowed.
 
 FILES:
