@@ -51,8 +51,9 @@ cp .env.example .env
 | `GROQ_API_KEY` | Groq Cloud API Key |
 | `DEEPSEEK_API_KEY` | DeepSeek API Key |
 | `GLM_API_KEY` | Zhipu AI GLM API Key |
+| `ANTHROPIC_API_KEY` | Anthropic API Key |
 | `OLLAMA_URL` | Custom Ollama server URL (defaults to `http://127.0.0.1:11434`) |
-| `LLM_PROVIDER` | Default provider (`gemini`, `groq`, `ollama`, `deepseek`, `glm`) |
+| `LLM_PROVIDER` | Default provider (`gemini`, `groq`, `ollama`, `deepseek`, `glm`, `anthropic`) |
 | `LLM_MODEL` | Default model name for the chosen provider |
 
 ### Running

@@ -20,7 +20,7 @@ func TestNewGLMProvider(t *testing.T) {
 		t.Errorf("Expected model name '%s', got '%s'", model, p.ModelName())
 	}
 
-	if p.config.BaseURL != "https://api.z.ai/api/paas/v4/chat/completions" {
+	if p.config.BaseURL != "https://api.z.ai/api/coding/paas/v4/chat/completions" {
 		t.Errorf("Unexpected BaseURL: %s", p.config.BaseURL)
 	}
 

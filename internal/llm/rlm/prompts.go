@@ -55,8 +55,8 @@ FILES:
 - sandbox/: Contains character sheets and DM's notes. You have write access here.
 
 PROCEDURE:
-1. Search: Use 'search_files()' or 'list_dir()' to find relevant Pathfinder 2e rule files.
-2. Read: You should 'open(file).read()' relevant files to verify rules.
+1. Search: Use 'print(search_files(query))' or 'print(list_dir(path))' to find relevant Pathfinder 2e rule files.
+2. Read: You should 'print(open(file).read())' relevant files to verify rules.
 3. Analyze: Use Python to parse the rules (regex, strings) and combine with 'context' and 'message_history'.
 4. Persist: If you create a character or notes, save them to 'sandbox/character_name.md' using open().write().
 5. Respond: Provide your immersive DM narration as a standard text response once you have gathered all necessary information.

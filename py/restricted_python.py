@@ -16,9 +16,6 @@ SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
 PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
 
 # Security Configuration
-ALLOWED_FILES = {
-}
-
 ALLOWED_DIRS = {
     os.path.join(PROJECT_ROOT, "rules"),
     os.path.join(PROJECT_ROOT, "rules_derived"),
@@ -35,13 +32,10 @@ def safe_open(filename, mode="r", *args, **kwargs):
     is_sandbox = filename.startswith(sandbox_dir + os.sep)
     
     # Check whitelist
-    if filename in ALLOWED_FILES:
-        allowed = True
-    else:
-        for allowed_dir in ALLOWED_DIRS:
-            if filename.startswith(allowed_dir + os.sep) and filename.endswith(".md"):
-                allowed = True
-                break
+    for allowed_dir in ALLOWED_DIRS:
+        if filename.startswith(allowed_dir + os.sep) and filename.endswith(".md"):
+            allowed = True
+            break
 
     if not allowed:
         raise PermissionError(f"Access to '{filename}' is not allowed")
@@ -99,8 +93,8 @@ class SandboxREPL:
         # Recursive LLM callback
         self.globals_dict["recursive_llm"] = self.recursive_llm
         
+        
         # Files inspection helper
-        self.globals_dict["allowed_files"] = self.allowed_files
         self.globals_dict["list_dir"] = self.list_dir
         self.globals_dict["search_files"] = self.search_files
         
@@ -108,23 +102,6 @@ class SandboxREPL:
         self.globals_dict["__builtins__"] = self.globals_dict.copy()
         
         self.locals_dict = {}
-
-    def allowed_files(self):
-        """
-        Returns a list of all files the sandbox is allowed to open.
-        """
-        files = list(ALLOWED_FILES)
-        for allowed_dir in ALLOWED_DIRS:
-            if not os.path.exists(allowed_dir):
-                continue
-            for root, _, filenames in os.walk(allowed_dir):
-                for filename in filenames:
-                    if filename.endswith(".md"):
-                        files.append(os.path.join(root, filename))
-        res = sorted(list(set(files)))
-        if len(res) > 2000:
-            return f"Too many files ({len(res)}). Use list_dir() or search_files() instead."
-        return res
 
     def list_dir(self, path="."):
         """

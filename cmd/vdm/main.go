@@ -48,6 +48,7 @@ type Config struct {
 	GroqKey        string `env:"GROQ_API_KEY"`
 	DeepSeekKey    string `env:"DEEPSEEK_API_KEY"`
 	GLMKey         string `env:"GLM_API_KEY"`
+	AnthropicKey   string `env:"ANTHROPIC_API_KEY"`
 	OllamaURL      string `env:"OLLAMA_URL"`
 	LLMProvider    string `env:"LLM_PROVIDER" envDefault:"groq"`
 	LLMModel       string `env:"LLM_MODEL" envDefault:"qwen/qwen3-32b"`
@@ -95,6 +96,7 @@ func main() {
 		fmt.Printf("GROQ_API_KEY: %s\n", cfg.GroqKey)
 		fmt.Printf("DEEPSEEK_API_KEY: %s\n", cfg.DeepSeekKey)
 		fmt.Printf("GLM_API_KEY: %s\n", cfg.GLMKey)
+		fmt.Printf("ANTHROPIC_API_KEY: %s\n", cfg.AnthropicKey)
 		fmt.Printf("LLM_PROVIDER: %s\n", cfg.LLMProvider)
 		fmt.Printf("LLM_MODEL: %s\n", cfg.LLMModel)
 		fmt.Printf("------------------------\n")
@@ -170,6 +172,10 @@ func initProvider(ctx context.Context, cfg *Config) (llm.Provider, error) {
 		if cfg.GLMKey != "" {
 			p, err = llm.NewGLMProvider(cfg.GLMKey, cfg.LLMModel)
 		}
+	case "anthropic":
+		if cfg.AnthropicKey != "" {
+			p, err = llm.NewAnthropicProvider(cfg.AnthropicKey, cfg.LLMModel)
+		}
 	}
 	return p, err
 }
@@ -177,7 +183,7 @@ func initProvider(ctx context.Context, cfg *Config) (llm.Provider, error) {
 func parseConfig(args []string) (cfg *Config, useDiscord bool, verbose bool, promptMode bool, err error) {
 	fs := flag.NewFlagSet("vdm", flag.ContinueOnError)
 	useDiscordPtr := fs.Bool("discord", false, "Run in Discord bot mode")
-	providerFlag := fs.String("provider", "", "LLM provider (gemini, ollama, groq)")
+	providerFlag := fs.String("provider", "", "LLM provider (gemini, ollama, groq, anthropic)")
 	modelFlag := fs.String("model", "", "LLM model name")
 	promptModeFlag := fs.Bool("prompt-mode", false, "Force schema-constrained prompting (JSON)")
 	dryRunFlag := fs.Bool("dry-run", false, "Enable dry run mode (echo prompts)")
@@ -514,6 +520,9 @@ func handleInteraction(s DiscordSession, orch *llm.Orchestrator, dryRun bool, ca
 				}
 			}
 
+			if strings.TrimSpace(resp) == "" {
+				resp = "*(The DM is silent)*"
+			}
 			// Prepend user input as a quote
 			resp = fmt.Sprintf("> %s\n\n%s", content, resp)
 

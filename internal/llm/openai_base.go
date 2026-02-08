@@ -190,9 +190,11 @@ func (p *OpenAIProvider) convertToOpenAIMessages(messages []Message) []OpenAIInt
 		}
 
 		om := OpenAIInternalMessage{
-			Role:    role,
-			Content: m.Content,
-			Name:    m.Name,
+			Role:             role,
+			Content:          m.Content,
+			Name:             m.Name,
+			ReasoningContent: m.Thinking, // For DeepSeek
+			Reasoning:        m.Thinking, // For Groq
 		}
 
 		if m.ToolCallID != "" {

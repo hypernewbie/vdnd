@@ -3,7 +3,6 @@ package rlm
 import (
 	"fmt"
 	"path/filepath"
-	"strings"
 	"testing"
 )
 
@@ -62,20 +61,6 @@ func TestREPLExecutor(t *testing.T) {
 		}
 		if result.Stdout == "" {
 			t.Error("Expected some stdout content, got empty string")
-		}
-	})
-
-	t.Run("Allowed Files List", func(t *testing.T) {
-		result, err := executor.Execute("print(allowed_files())")
-		if err != nil {
-			t.Errorf("Execute failed: %v", err)
-		}
-		if result.Error != "" {
-			t.Errorf("Expected no error, got %q", result.Error)
-		}
-		// Should contain at least character_creation.md
-		if !strings.Contains(result.Stdout, "character_creation.md") {
-			t.Errorf("Expected allowed_files to contain 'character_creation.md', got %q", result.Stdout)
 		}
 	})
 }

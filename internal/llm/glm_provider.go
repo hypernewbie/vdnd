@@ -9,7 +9,7 @@ type GLMProvider struct {
 }
 
 // NewGLMProvider creates a new GLM provider.
-// Base URL: https://api.z.ai/api/paas/v4/chat/completions
+// Base URL: https://api.z.ai/api/coding/paas/v4/chat/completions
 func NewGLMProvider(apiKey string, model string) (*GLMProvider, error) {
 	if model == "" {
 		model = "glm-4.7"

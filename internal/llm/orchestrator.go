@@ -16,9 +16,8 @@ var ErrOrchestratorBusy = fmt.Errorf("the DM is currently busy thinking... pleas
 
 const defaultModel = "gemini-2.0-flash-exp"
 
-// RLMCompleter interface for recursive learning models.
 type RLMCompleter interface {
-	Complete(ctx context.Context, query string, contextData string, history []Message) (string, error)
+	Complete(ctx context.Context, query string, contextData string, history []Message) (string, string, error)
 }
 
 // Orchestrator coordinates communication between the user, the LLM, and the rules engine.
@@ -45,7 +44,6 @@ func NewOrchestrator(context context.Context, provider Provider, deps cli.Deps) 
 	}
 
 	o.history = []Message{
-		{Role: "system", Content: o.getSystemPrompt()},
 		{Role: "model", Content: "I am ready to be your Dungeon Master. What happens next?"},
 	}
 
@@ -137,6 +135,7 @@ func (o *Orchestrator) ProcessInput(ctx context.Context, input string) (string, 
 		cancel()
 		o.activeCancel = nil
 	}()
+	defer o.truncateHistory()
 
 	// Include status context in the message content as seen in previous implementation
 	stdout, exitCode := cli.Run([]string{"status"}, o.deps)
@@ -145,8 +144,7 @@ func (o *Orchestrator) ProcessInput(ctx context.Context, input string) (string, 
 	}
 
 	if o.rlm != nil {
-		slog.Debug("RLM_START", "query", input)
-		resp, err := o.rlm.Complete(runCtx, input, stdout, o.history)
+		resp, thinking, err := o.rlm.Complete(runCtx, input, stdout, o.history)
 		if err != nil {
 			return "", err
 		}
@@ -155,19 +153,13 @@ func (o *Orchestrator) ProcessInput(ctx context.Context, input string) (string, 
 		// Process markers and tools
 		processedResp := o.handleTextMarkers(resp)
 
-		// If it's a JSON response (for tool calling models), parse it
-		genResp := o.parseJSONResponse(processedResp)
-		if genResp.FinishReason == "tool_calls" {
-			// If the RLM output a tool call, we handle it through the standard loop
-			// This is a bit complex since RLM is one-shot Complete.
-			// For now, let's just use handleTextMarkers which covers VD_SUGGEST_CMD.
-		}
-
-		finalResp := genResp.Content
+		// Include user input as a quote if desired (though orchestrator handles this in Loop,
+		// for RLM we should check if we want it here too. For now let's just use finalResp)
+		finalResp := processedResp
 
 		// We still append to history for the simple state tracking
 		o.history = append(o.history, Message{Role: "user", Content: input})
-		o.history = append(o.history, Message{Role: "model", Content: finalResp})
+		o.history = append(o.history, Message{Role: "model", Content: finalResp, Thinking: thinking})
 
 		return finalResp, nil
 	}
@@ -227,13 +219,13 @@ func (o *Orchestrator) generationLoop(ctx context.Context) (string, error) {
 		if resp.FinishReason == "stop" {
 			resp.Content = o.handleTextMarkers(resp.Content)
 
-			o.history = append(o.history, Message{Role: "model", Content: resp.Content})
+			o.history = append(o.history, Message{Role: "model", Content: resp.Content, Thinking: resp.Thinking})
 			return resp.Content, nil
 		}
 
 		if resp.FinishReason == "tool_calls" {
 			// Add assistant tool calls to history
-			o.history = append(o.history, Message{Role: "model", ToolCalls: resp.ToolCalls})
+			o.history = append(o.history, Message{Role: "model", ToolCalls: resp.ToolCalls, Thinking: resp.Thinking})
 
 			for _, call := range resp.ToolCalls {
 				// Execute tool
@@ -396,8 +388,27 @@ func (o *Orchestrator) Close() {
 
 func (o *Orchestrator) EnablePromptMode(enabled bool) {
 	o.promptMode = enabled
-	// Update system prompt in history
-	if len(o.history) > 0 {
-		o.history[0].Content = o.getSystemPrompt()
+	// System prompt is no longer stored in history at index 0.
+}
+
+func (o *Orchestrator) truncateHistory() {
+	const maxSizeBytes = 10 * 1024
+	if len(o.history) == 0 {
+		return
+	}
+
+	totalSize := 0
+	keepIdx := 0
+	for i := len(o.history) - 1; i >= 0; i-- {
+		b, _ := json.Marshal(o.history[i])
+		if totalSize+len(b) > maxSizeBytes {
+			keepIdx = i + 1
+			break
+		}
+		totalSize += len(b)
+	}
+
+	if keepIdx > 0 {
+		o.history = o.history[keepIdx:]
 	}
 }

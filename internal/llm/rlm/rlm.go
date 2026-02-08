@@ -71,14 +71,14 @@ func NewRLM(provider llm.Provider, cfg Config) *RLM {
 }
 
 // Complete processes the query against the context using iterative REPL exploration.
-func (r *RLM) Complete(ctx context.Context, query string, contextData string, history []llm.Message) (string, error) {
+func (r *RLM) Complete(ctx context.Context, query string, contextData string, history []llm.Message) (string, string, error) {
 	if r.currentDepth >= r.maxDepth {
-		return "", fmt.Errorf("max recursion depth (%d) exceeded", r.maxDepth)
+		return "", "", fmt.Errorf("max recursion depth (%d) exceeded", r.maxDepth)
 	}
 
 	repl, err := NewREPLExecutor(r.pythonPath, r.scriptPath)
 	if err != nil {
-		return "", fmt.Errorf("failed to start REPL: %w", err)
+		return "", "", fmt.Errorf("failed to start REPL: %w", err)
 	}
 	defer repl.Close()
 
@@ -94,7 +94,8 @@ func (r *RLM) Complete(ctx context.Context, query string, contextData string, hi
 			promptBuilder: r.promptBuilder,
 		}
 		// Pass same history to sub-calls for now
-		return subRLM.Complete(ctx, q, c, history)
+		resp, _, err := subRLM.Complete(ctx, q, c, history)
+		return resp, err
 	}
 
 	// Serialize history
@@ -107,9 +108,9 @@ func (r *RLM) Complete(ctx context.Context, query string, contextData string, hi
 	setupCode := fmt.Sprintf("context = %q\nquery = %q\nmessage_history = json.loads(%q)\ndef FINAL(ans): print(f'FINAL_ANSWER: {ans}')", contextData, query, string(historyJSON))
 	slog.Debug("REPL_SETUP", "code", setupCode)
 	if result, err := repl.Execute(setupCode); err != nil {
-		return "", fmt.Errorf("failed to setup REPL environment: %w", err)
+		return "", "", fmt.Errorf("failed to setup REPL environment: %w", err)
 	} else if result.Error != "" {
-		return "", fmt.Errorf("Python error in setup: %s", result.Error)
+		return "", "", fmt.Errorf("Python error in setup: %s", result.Error)
 	}
 
 	systemPrompt := r.promptBuilder(len(contextData), r.currentDepth)
@@ -120,7 +121,7 @@ func (r *RLM) Complete(ctx context.Context, query string, contextData string, hi
 	for i := 0; i < r.maxIterations; i++ {
 		response, err := r.provider.GenerateWithTools(ctx, messages, RLMTools)
 		if err != nil {
-			return "", fmt.Errorf("LLM generation failed: %w", err)
+			return "", "", fmt.Errorf("LLM generation failed: %w", err)
 		}
 
 		if response.Thinking != "" {
@@ -131,13 +132,13 @@ func (r *RLM) Complete(ctx context.Context, query string, contextData string, hi
 			// When the model stops without calling a tool, we treat its content as the final answer.
 			// This matches Orchestrator's behavior.
 			if response.Content != "" {
-				return response.Content, nil
+				return response.Content, response.Thinking, nil
 			}
 			continue
 		}
 
 		if response.FinishReason == "tool_calls" {
-			messages = append(messages, llm.Message{Role: "model", ToolCalls: response.ToolCalls})
+			messages = append(messages, llm.Message{Role: "model", ToolCalls: response.ToolCalls, Thinking: response.Thinking})
 
 			for _, call := range response.ToolCalls {
 				if call.Name != "execute_python" {
@@ -195,5 +196,5 @@ func (r *RLM) Complete(ctx context.Context, query string, contextData string, hi
 		}
 	}
 
-	return "", fmt.Errorf("max iterations (%d) exceeded without final answer", r.maxIterations)
+	return "", "", fmt.Errorf("max iterations (%d) exceeded without final answer", r.maxIterations)
 }

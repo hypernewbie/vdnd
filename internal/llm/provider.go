@@ -17,6 +17,7 @@ type ToolCall struct {
 type Message struct {
 	Role       string // "user", "model", "tool", "system"
 	Content    string
+	Thinking   string     // Internal model reasoning (e.g., DeepSeek reasoning_content)
 	ToolCalls  []ToolCall // If model is calling tools
 	ToolCallID string     // If role is "tool", which call is being answered
 	Name       string     // Tool name (for tool role)

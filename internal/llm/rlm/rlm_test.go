@@ -70,7 +70,7 @@ func TestRLMStepByStep(t *testing.T) {
 		ScriptPath:    scriptPath,
 	})
 
-	answer, err := rlm.Complete(context.Background(), "What is the start?", "Hello World", nil)
+	answer, _, err := rlm.Complete(context.Background(), "What is the start?", "Hello World", nil)
 	if err != nil {
 		t.Fatalf("RLM Complete failed: %v", err)
 	}
@@ -122,7 +122,7 @@ func TestRLMRecursion(t *testing.T) {
 		ScriptPath:    scriptPath,
 	})
 
-	answer, err := rlm.Complete(context.Background(), "Get sub answer", "Ignored", nil)
+	answer, _, err := rlm.Complete(context.Background(), "Get sub answer", "Ignored", nil)
 	if err != nil {
 		t.Fatalf("RLM Complete failed: %v", err)
 	}
