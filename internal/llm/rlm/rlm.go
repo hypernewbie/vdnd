@@ -72,7 +72,7 @@ func NewRLM(provider llm.Provider, cfg Config) *RLM {
 		cfg.MaxDepth = 1
 	}
 	if cfg.SystemPromptBuilder == nil {
-		cfg.SystemPromptBuilder = BuildSystemPrompt
+		panic("SystemPromptBuilder must be provided")
 	}
 	return &RLM{
 		provider:      provider,
@@ -210,7 +210,7 @@ func (r *RLM) Complete(ctx context.Context, query string, contextData string, hi
 						})
 						continue
 					}
-					
+
 					slog.Info("TOOL_CALL",
 						"tool", "ripgrep",
 						"arguments", call.Arguments,

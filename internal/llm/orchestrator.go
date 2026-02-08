@@ -531,6 +531,7 @@ func (o *Orchestrator) executeTool(call ToolCall) string {
 		res := result.ToJSON()
 		var resMap map[string]any
 		json.Unmarshal([]byte(res), &resMap)
+		slog.Info("RIPGREP_RESULTS", "count", len(res))
 		stdout = res // For logging
 		exitCode = 0
 		goto LOG
@@ -546,7 +547,7 @@ func (o *Orchestrator) executeTool(call ToolCall) string {
 
 LOG:
 	duration := time.Since(start)
-	
+
 	// Create a summary of the result (first 100 chars)
 	resultSummary := stdout
 	if len(resultSummary) > 100 {

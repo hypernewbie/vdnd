@@ -71,11 +71,13 @@ type Config struct {
 	DeepSeekKey    string `env:"DEEPSEEK_API_KEY"`
 	GLMKey         string `env:"GLM_API_KEY"`
 	AnthropicKey   string `env:"ANTHROPIC_API_KEY"`
+	OpenAIKey      string `env:"OPENAI_API_KEY"`
 	OllamaURL      string `env:"OLLAMA_URL"`
 	LLMProvider    string `env:"LLM_PROVIDER" envDefault:"groq"`
 	LLMModel       string `env:"LLM_MODEL" envDefault:"qwen/qwen3-32b"`
 	DryRun         bool   `env:"DRY_RUN" envDefault:"false"`
 	Feedback       bool   `env:"FEEDBACK" envDefault:"false"`
+	PromptFile     string `env:"VDM_PROMPT_FILE" envDefault:"vdm_prompt.txt"`
 }
 
 // loadConfig reads configuration from environment variables
@@ -120,6 +122,7 @@ func main() {
 		fmt.Printf("DEEPSEEK_API_KEY: %s\n", cfg.DeepSeekKey)
 		fmt.Printf("GLM_API_KEY: %s\n", cfg.GLMKey)
 		fmt.Printf("ANTHROPIC_API_KEY: %s\n", cfg.AnthropicKey)
+		fmt.Printf("OPENAI_API_KEY: %s\n", cfg.OpenAIKey)
 		fmt.Printf("LLM_PROVIDER: %s\n", cfg.LLMProvider)
 		fmt.Printf("LLM_MODEL: %s\n", cfg.LLMModel)
 		fmt.Printf("------------------------\n")
@@ -138,13 +141,20 @@ func main() {
 		python := rlm.FindPythonPath(wd)
 		script := filepath.Join(wd, "py", "restricted_python.py")
 
+		// Initialize DM system prompt builder
+		dmBuilder, err := rlm.NewDMSystemPromptBuilder(cfg.PromptFile)
+		if err != nil {
+			slog.Error("failed to initialize DM system prompt builder", "error", err)
+			os.Exit(1)
+		}
+
 		// Initialize RLM with DM prompt
 		rlmModel = rlm.NewRLM(p, rlm.Config{
 			MaxIterations:       100,
 			MaxDepth:            1,
 			PythonPath:          python,
 			ScriptPath:          script,
-			SystemPromptBuilder: rlm.BuildDMSystemPrompt,
+			SystemPromptBuilder: dmBuilder,
 		})
 	}
 
@@ -198,6 +208,10 @@ func initProvider(ctx context.Context, cfg *Config) (llm.Provider, error) {
 	case "anthropic":
 		if cfg.AnthropicKey != "" {
 			p, err = llm.NewAnthropicProvider(cfg.AnthropicKey, cfg.LLMModel)
+		}
+	case "chatgpt":
+		if cfg.OpenAIKey != "" {
+			p, err = llm.NewChatGPTProvider(cfg.OpenAIKey, cfg.LLMModel)
 		}
 	}
 	return p, err
@@ -316,12 +330,12 @@ func runCLI(ctx context.Context, in io.Reader, out io.Writer, cfg *Config, p llm
 func collectCLIFeedback(in io.Reader, out io.Writer, cfg *Config, p llm.Provider) {
 	fmt.Fprintln(out, "\n--- FEEDBACK ---")
 	fmt.Fprint(out, "How would you rate the DM's performance? (1-5 stars): ")
-	
+
 	scanner := bufio.NewScanner(in)
 	if !scanner.Scan() {
 		return
 	}
-	
+
 	rating, _ := strconv.Atoi(strings.TrimSpace(scanner.Text()))
 	if rating < 1 || rating > 5 {
 		fmt.Fprintln(out, "Invalid rating. Skipping feedback.")

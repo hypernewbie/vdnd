@@ -64,10 +64,15 @@ func TestRLMStepByStep(t *testing.T) {
 		},
 	}
 
+	mockPromptBuilder := func(size, depth int) string {
+		return "Mock Prompt"
+	}
+
 	rlm := NewRLM(mock, Config{
-		MaxIterations: 5,
-		PythonPath:    pythonPath,
-		ScriptPath:    scriptPath,
+		MaxIterations:       5,
+		PythonPath:          pythonPath,
+		ScriptPath:          scriptPath,
+		SystemPromptBuilder: mockPromptBuilder,
 	})
 
 	answer, _, err := rlm.Complete(context.Background(), "What is the start?", "Hello World", nil)
@@ -115,11 +120,16 @@ func TestRLMRecursion(t *testing.T) {
 		},
 	}
 
+	mockPromptBuilder := func(size, depth int) string {
+		return "Mock Prompt"
+	}
+
 	rlm := NewRLM(mock, Config{
-		MaxIterations: 5,
-		MaxDepth:      2,
-		PythonPath:    pythonPath,
-		ScriptPath:    scriptPath,
+		MaxIterations:       5,
+		MaxDepth:            2,
+		PythonPath:          pythonPath,
+		ScriptPath:          scriptPath,
+		SystemPromptBuilder: mockPromptBuilder,
 	})
 
 	answer, _, err := rlm.Complete(context.Background(), "Get sub answer", "Ignored", nil)
