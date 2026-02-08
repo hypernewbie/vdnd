@@ -52,10 +52,10 @@ type Config struct {
 // NewRLM creates a new RLM instance.
 func NewRLM(provider llm.Provider, cfg Config) *RLM {
 	if cfg.MaxIterations == 0 {
-		cfg.MaxIterations = 30
+		cfg.MaxIterations = 100
 	}
 	if cfg.MaxDepth == 0 {
-		cfg.MaxDepth = 5
+		cfg.MaxDepth = 1
 	}
 	if cfg.SystemPromptBuilder == nil {
 		cfg.SystemPromptBuilder = BuildSystemPrompt

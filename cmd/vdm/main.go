@@ -117,8 +117,8 @@ func main() {
 
 		// Initialize RLM with DM prompt
 		rlmModel = rlm.NewRLM(p, rlm.Config{
-			MaxIterations:       50,
-			MaxDepth:            2,
+			MaxIterations:       100,
+			MaxDepth:            1,
 			PythonPath:          python,
 			ScriptPath:          script,
 			SystemPromptBuilder: rlm.BuildDMSystemPrompt,
