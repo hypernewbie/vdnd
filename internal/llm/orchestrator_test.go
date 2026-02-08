@@ -1,9 +1,12 @@
 package llm
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"testing"
+
+	"uaa/vdnd/internal/cli"
 )
 
 func TestOrchestrator_MapToolToArgs(t *testing.T) {
@@ -118,4 +121,50 @@ func TestOrchestrator_TruncateHistory(t *testing.T) {
 	if totalSize > 10*1024 {
 		t.Errorf("Total size %d exceeds 10KB limit", totalSize)
 	}
+}
+
+func TestOrchestrator_PromptContainsVDTools(t *testing.T) {
+
+	deps := cli.DefaultDeps()
+
+	ctx := context.Background()
+
+	p := NewDummyProvider("test")
+
+	o := NewOrchestrator(ctx, p, deps)
+
+
+
+	// Force non-prompt mode to test the standard system prompt
+
+	o.EnablePromptMode(false)
+
+	prompt := o.getSystemPrompt()
+
+	if !strings.Contains(prompt, "vd_action_strike") {
+
+		t.Errorf("System prompt should mention vd_action_strike")
+
+	}
+
+	if !strings.Contains(prompt, "NEVER write Python code to simulate combat") {
+
+		t.Errorf("System prompt must forbid Python simulation")
+
+	}
+
+
+
+	// Test schema mode
+
+	o.EnablePromptMode(true)
+
+	schemaPrompt := o.getSchemaPrompt()
+
+	if !strings.Contains(schemaPrompt, "Do NOT write Python code to simulate combat") {
+
+		t.Errorf("Schema prompt must forbid Python simulation")
+
+	}
+
 }
