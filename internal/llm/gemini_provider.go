@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"time"
+	"uaa/vdnd/internal/llm/llmtypes"
 )
 
 // Gemini API structures
@@ -78,7 +79,7 @@ func NewGeminiProvider(ctx context.Context, apiKey string, modelName string) (*G
 func (p *GeminiProvider) Name() string      { return "gemini" }
 func (p *GeminiProvider) ModelName() string { return p.model }
 
-func (p *GeminiProvider) Generate(ctx context.Context, messages []Message) (string, error) {
+func (p *GeminiProvider) Generate(ctx context.Context, messages []llmtypes.Message) (string, error) {
 	contents := p.convertMessagesToGeminiContents(messages)
 	request := GeminiRequest{Contents: contents}
 
@@ -117,7 +118,7 @@ func (p *GeminiProvider) Generate(ctx context.Context, messages []Message) (stri
 	return content, nil
 }
 
-func (p *GeminiProvider) GenerateWithTools(ctx context.Context, messages []Message, tools []Tool) (GenerationResponse, error) {
+func (p *GeminiProvider) GenerateWithTools(ctx context.Context, messages []llmtypes.Message, tools []llmtypes.Tool) (llmtypes.GenerationResponse, error) {
 	contents := p.convertMessagesToGeminiContents(messages)
 	geminiTools := p.convertToGeminiTools(tools)
 
@@ -128,25 +129,25 @@ func (p *GeminiProvider) GenerateWithTools(ctx context.Context, messages []Messa
 
 	jsonBytes, err := json.Marshal(request)
 	if err != nil {
-		return GenerationResponse{}, err
+		return llmtypes.GenerationResponse{}, err
 	}
 
 	respBody, err := p.callAPI(ctx, jsonBytes)
 	if err != nil {
-		return GenerationResponse{}, err
+		return llmtypes.GenerationResponse{}, err
 	}
 
 	var geminiResp GeminiResponse
 	if err := json.Unmarshal(respBody, &geminiResp); err != nil {
-		return GenerationResponse{}, err
+		return llmtypes.GenerationResponse{}, err
 	}
 
 	if len(geminiResp.Candidates) == 0 {
-		return GenerationResponse{}, fmt.Errorf("empty response from Gemini")
+		return llmtypes.GenerationResponse{}, fmt.Errorf("empty response from Gemini")
 	}
 
 	candidate := geminiResp.Candidates[0]
-	result := GenerationResponse{
+	result := llmtypes.GenerationResponse{
 		FinishReason: "stop",
 	}
 
@@ -164,7 +165,7 @@ func (p *GeminiProvider) GenerateWithTools(ctx context.Context, messages []Messa
 				sig = part.ThoughtSignatureCamel
 			}
 
-			result.ToolCalls = append(result.ToolCalls, ToolCall{
+			result.ToolCalls = append(result.ToolCalls, llmtypes.ToolCall{
 				ID:               "", // Gemini doesn't use IDs in the same way as OpenAI
 				Name:             part.FunctionCall.Name,
 				Arguments:        string(args),
@@ -217,7 +218,7 @@ func (p *GeminiProvider) callAPI(ctx context.Context, jsonData []byte) ([]byte, 
 	return body, nil
 }
 
-func (p *GeminiProvider) convertMessagesToGeminiContents(messages []Message) []GeminiContent {
+func (p *GeminiProvider) convertMessagesToGeminiContents(messages []llmtypes.Message) []GeminiContent {
 	var contents []GeminiContent
 	for _, m := range messages {
 		role := m.Role
@@ -278,7 +279,7 @@ func (p *GeminiProvider) convertMessagesToGeminiContents(messages []Message) []G
 	return contents
 }
 
-func (p *GeminiProvider) convertToGeminiTools(tools []Tool) []GeminiTool {
+func (p *GeminiProvider) convertToGeminiTools(tools []llmtypes.Tool) []GeminiTool {
 	if len(tools) == 0 {
 		return nil
 	}

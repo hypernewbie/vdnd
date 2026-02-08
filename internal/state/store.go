@@ -12,10 +12,19 @@ type Store interface {
 	Load() (*GameState, error)
 	Save(state *GameState) error
 	Exists() bool
+	GetManual() (string, error)
 }
 
 type FileStore struct {
 	Root string
+}
+
+func (s *FileStore) GetManual() (string, error) {
+	content, err := os.ReadFile(filepath.Join(s.Root, "vd_manual.md"))
+	if err != nil {
+		content, err = os.ReadFile("vd_manual.md")
+	}
+	return string(content), err
 }
 
 func (s *FileStore) path() string {
@@ -77,4 +86,8 @@ func (s *MemoryStore) Save(state *GameState) error {
 
 func (s *MemoryStore) Exists() bool {
 	return s.State != nil
+}
+
+func (s *MemoryStore) GetManual() (string, error) {
+	return "# Mock Manual", nil
 }

@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 	"uaa/vdnd/internal/cli"
-	"uaa/vdnd/internal/llm"
+	"uaa/vdnd/internal/llm/llmtypes"
 	"uaa/vdnd/internal/state"
 
 	"github.com/bwmarrin/discordgo"
@@ -79,17 +79,17 @@ type mockProvider struct {
 	supportsToolCalling bool
 	generateResponse    string
 	generateError       error
-	toolCallResponse    llm.GenerationResponse
+	toolCallResponse    llmtypes.GenerationResponse
 }
 
 func (m *mockProvider) Name() string              { return "mock" }
 func (m *mockProvider) ModelName() string         { return "mock-model" }
 func (m *mockProvider) SupportsToolCalling() bool { return m.supportsToolCalling }
 func (m *mockProvider) Close() error              { return nil }
-func (m *mockProvider) Generate(ctx context.Context, messages []llm.Message) (string, error) {
+func (m *mockProvider) Generate(ctx context.Context, messages []llmtypes.Message) (string, error) {
 	return m.generateResponse, m.generateError
 }
-func (m *mockProvider) GenerateWithTools(ctx context.Context, messages []llm.Message, tools []llm.Tool) (llm.GenerationResponse, error) {
+func (m *mockProvider) GenerateWithTools(ctx context.Context, messages []llmtypes.Message, tools []llmtypes.Tool) (llmtypes.GenerationResponse, error) {
 	return m.toolCallResponse, m.generateError
 }
 
@@ -99,7 +99,7 @@ func TestRunCLI_EchoLoop(t *testing.T) {
 	out := new(bytes.Buffer)
 	cfg := &Config{LLMProvider: "none"}
 
-	runCLI(context.Background(), in, out, cfg, nil, nil, mockDeps(), false)
+	runCLI(context.Background(), in, out, cfg, nil, nil, nil, mockDeps(), false)
 
 	outputStr := out.String()
 	if !strings.Contains(outputStr, "Standard CLI mode enabled") {
@@ -144,7 +144,7 @@ func TestRunCLI_EdgeCases(t *testing.T) {
 			out := new(bytes.Buffer)
 			cfg := &Config{LLMProvider: "none"}
 
-			runCLI(context.Background(), in, out, cfg, nil, nil, mockDeps(), false)
+			runCLI(context.Background(), in, out, cfg, nil, nil, nil, mockDeps(), false)
 
 			output := out.String()
 			for _, exp := range tt.expected {
@@ -169,7 +169,7 @@ func TestRunCLI_LLMMode(t *testing.T) {
 		mockProv := &mockProvider{
 			generateResponse: "Welcome adventurer!",
 		}
-		runCLI(context.Background(), in, out, cfg, mockProv, nil, mockDeps(), false)
+		runCLI(context.Background(), in, out, cfg, mockProv, nil, nil, mockDeps(), false)
 
 		output := out.String()
 		if !strings.Contains(output, "LLM mode enabled") {
@@ -190,7 +190,7 @@ func TestRunCLI_LLMMode(t *testing.T) {
 			generateError: fmt.Errorf("api failure"),
 		}
 
-		runCLI(context.Background(), in, out, cfg, mockProv, nil, mockDeps(), false)
+		runCLI(context.Background(), in, out, cfg, mockProv, nil, nil, mockDeps(), false)
 
 		output := out.String()
 		if !strings.Contains(output, "Error: api failure") {
@@ -277,7 +277,7 @@ func TestRunDiscord(t *testing.T) {
 		cancel()
 	}()
 
-	runDiscord(ctx, cfg, m, nil, nil, mockDeps(), false)
+	runDiscord(ctx, cfg, m, nil, nil, nil, mockDeps(), false)
 
 	if len(m.commandsCreated) == 0 {
 		t.Errorf("Expected commands to be created")

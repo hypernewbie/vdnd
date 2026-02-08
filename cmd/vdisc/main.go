@@ -13,6 +13,7 @@ import (
 	"regexp"
 	"strings"
 	"uaa/vdnd/internal/llm"
+	"uaa/vdnd/internal/llm/llmtypes"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/caarlos0/env/v11"
@@ -62,7 +63,7 @@ func main() {
 	}
 
 	// Initialize LLM Provider
-	var p llm.Provider
+	var p llmtypes.Provider
 	switch cfg.LLMProvider {
 	case "gemini":
 		if cfg.GeminiKey != "" {
@@ -132,7 +133,7 @@ func main() {
 	if p != nil {
 		fmt.Println("\nSummarizing chat history...")
 		prompt := fmt.Sprintf("Please provide a concise summary, maximum 1800 characters, of the following chat history:\n\n%s", sb.String())
-		resp, err := p.GenerateWithTools(context.Background(), []llm.Message{
+		resp, err := p.GenerateWithTools(context.Background(), []llmtypes.Message{
 			{Role: "user", Content: prompt},
 		}, nil)
 		if err != nil {

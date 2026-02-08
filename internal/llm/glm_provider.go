@@ -2,6 +2,7 @@ package llm
 
 import (
 	"context"
+	"uaa/vdnd/internal/llm/llmtypes"
 )
 
 type GLMProvider struct {
@@ -26,10 +27,10 @@ func NewGLMProvider(apiKey string, model string) (*GLMProvider, error) {
 	}, nil
 }
 
-func (p *GLMProvider) Generate(ctx context.Context, messages []Message) (string, error) {
+func (p *GLMProvider) Generate(ctx context.Context, messages []llmtypes.Message) (string, error) {
 	return p.OpenAIProvider.Generate(ctx, messages)
 }
 
-func (p *GLMProvider) GenerateWithTools(ctx context.Context, messages []Message, tools []Tool) (GenerationResponse, error) {
+func (p *GLMProvider) GenerateWithTools(ctx context.Context, messages []llmtypes.Message, tools []llmtypes.Tool) (llmtypes.GenerationResponse, error) {
 	return p.OpenAIProvider.GenerateWithTools(ctx, messages, tools)
 }

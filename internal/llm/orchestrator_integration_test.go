@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"uaa/vdnd/internal/cli"
+	"uaa/vdnd/internal/llm/llmtypes"
 	"uaa/vdnd/internal/llm/vdhelpers"
 	"uaa/vdnd/internal/state"
 )
@@ -63,15 +64,14 @@ func TestOrchestrator_CombatFlow(t *testing.T) {
 	p := NewDummyProvider("test")
 	o := NewOrchestrator(ctx, p, deps)
 
-	execute := func(name, args string) string {
-		call := ToolCall{
-			Name:      name,
-			Arguments: args,
+		execute := func(name, args string) string {
+			call := llmtypes.ToolCall{
+				Name:      name,
+				Arguments: args,
+			}
+			return o.executeTool(call)
 		}
-		return o.executeTool(call)
-	}
-
-	// 1. Create scene
+		// 1. Create scene
 	execute("vd_scene_new", `{"name": "test_scene"}`)
 
 	// 2. Add entities

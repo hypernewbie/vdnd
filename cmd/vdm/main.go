@@ -17,6 +17,7 @@ import (
 
 	"uaa/vdnd/internal/cli"
 	"uaa/vdnd/internal/llm"
+	"uaa/vdnd/internal/llm/llmtypes"
 	"uaa/vdnd/internal/llm/rlm"
 
 	"github.com/bwmarrin/discordgo"
@@ -134,28 +135,16 @@ func main() {
 		os.Exit(1)
 	}
 
-	var rlmModel *rlm.RLM
+	deps := cli.DefaultDeps()
+	var researchRLM, vdRLM *rlm.RLM
 	if p != nil {
 		// Detect project root and setup RLM paths
 		wd, _ := os.Getwd()
 		python := rlm.FindPythonPath(wd)
 		script := filepath.Join(wd, "py", "restricted_python.py")
 
-		// Initialize DM system prompt builder
-		dmBuilder, err := rlm.NewDMSystemPromptBuilder(cfg.PromptFile)
-		if err != nil {
-			slog.Error("failed to initialize DM system prompt builder", "error", err)
-			os.Exit(1)
-		}
-
-		// Initialize RLM with DM prompt
-		rlmModel = rlm.NewRLM(p, rlm.Config{
-			MaxIterations:       100,
-			MaxDepth:            1,
-			PythonPath:          python,
-			ScriptPath:          script,
-			SystemPromptBuilder: dmBuilder,
-		})
+		researchRLM = rlm.NewResearchRLM(p, python, script)
+		vdRLM = rlm.NewVDLM(p, deps)
 	}
 
 	if useDiscord {
@@ -169,21 +158,21 @@ func main() {
 			os.Exit(1)
 		}
 		s.Identify.Intents = discordgo.IntentGuildMessages | discordgo.IntentMessageContent
-		runDiscord(context.Background(), cfg, &discordSessionWrapper{s}, p, rlmModel, cli.DefaultDeps(), promptMode)
+		runDiscord(context.Background(), cfg, &discordSessionWrapper{s}, p, researchRLM, vdRLM, deps, promptMode)
 	} else {
 		if cfg.DryRun {
 			slog.Info("DRY RUN MODE ENABLED. Prompts will be echoed back.")
 		}
-		runCLI(context.Background(), os.Stdin, os.Stdout, cfg, p, rlmModel, cli.DefaultDeps(), promptMode)
+		runCLI(context.Background(), os.Stdin, os.Stdout, cfg, p, researchRLM, vdRLM, deps, promptMode)
 	}
 }
 
-func initProvider(ctx context.Context, cfg *Config) (llm.Provider, error) {
+func initProvider(ctx context.Context, cfg *Config) (llmtypes.Provider, error) {
 	if cfg.DryRun {
 		return llm.NewDummyProvider(cfg.LLMModel), nil
 	}
 
-	var p llm.Provider
+	var p llmtypes.Provider
 	var err error
 
 	switch cfg.LLMProvider {
@@ -259,21 +248,21 @@ func parseConfig(args []string) (cfg *Config, useDiscord bool, verbose bool, pro
 	return cfg, *useDiscordPtr, *verbosePtr, *promptModeFlag, nil
 }
 
-func runCLI(ctx context.Context, in io.Reader, out io.Writer, cfg *Config, p llm.Provider, rlmModel *rlm.RLM, deps cli.Deps, forcePromptMode bool) {
+func runCLI(ctx context.Context, in io.Reader, out io.Writer, cfg *Config, p llmtypes.Provider, researchRLM, vdRLM *rlm.RLM, deps cli.Deps, forcePromptMode bool) {
 	slog.Info("Starting CLI mode...")
 
 	var orch *llm.Orchestrator
 
 	if p != nil {
 		orch = llm.NewOrchestrator(ctx, p, deps)
-		if rlmModel != nil {
-			orch.SetRLM(rlmModel)
+		if researchRLM != nil && vdRLM != nil {
+			orch.SetRLMs(researchRLM, vdRLM)
 		}
 		if forcePromptMode {
 			orch.EnablePromptMode(true)
 		}
 		defer orch.Close()
-		fmt.Fprintf(out, "LLM mode enabled (Generative DM using %s/%s with RLM). Type 'exit' to quit.\n", cfg.LLMProvider, cfg.LLMModel)
+		fmt.Fprintf(out, "LLM mode enabled (Generative DM using %s/%s with two-stage RLM). Type 'exit' to quit.\n", cfg.LLMProvider, cfg.LLMModel)
 	} else {
 		fmt.Fprintln(out, "Standard CLI mode enabled. Type 'exit' to quit.")
 	}
@@ -327,7 +316,7 @@ func runCLI(ctx context.Context, in io.Reader, out io.Writer, cfg *Config, p llm
 	}
 }
 
-func collectCLIFeedback(in io.Reader, out io.Writer, cfg *Config, p llm.Provider) {
+func collectCLIFeedback(in io.Reader, out io.Writer, cfg *Config, p llmtypes.Provider) {
 	fmt.Fprintln(out, "\n--- FEEDBACK ---")
 	fmt.Fprint(out, "How would you rate the DM's performance? (1-5 stars): ")
 
@@ -370,7 +359,7 @@ func collectCLIFeedback(in io.Reader, out io.Writer, cfg *Config, p llm.Provider
 	}
 }
 
-func runDiscord(ctx context.Context, cfg *Config, s DiscordSession, p llm.Provider, rlmModel *rlm.RLM, deps cli.Deps, forcePromptMode bool) {
+func runDiscord(ctx context.Context, cfg *Config, s DiscordSession, p llmtypes.Provider, researchRLM, vdRLM *rlm.RLM, deps cli.Deps, forcePromptMode bool) {
 	cache := NewMessageCache(100)
 	// Define commands
 	commands := []*discordgo.ApplicationCommand{
@@ -436,8 +425,8 @@ func runDiscord(ctx context.Context, cfg *Config, s DiscordSession, p llm.Provid
 	var orch *llm.Orchestrator
 	if p != nil {
 		orch = llm.NewOrchestrator(ctx, p, deps)
-		if rlmModel != nil {
-			orch.SetRLM(rlmModel)
+		if researchRLM != nil && vdRLM != nil {
+			orch.SetRLMs(researchRLM, vdRLM)
 		}
 		if forcePromptMode {
 			orch.EnablePromptMode(true)

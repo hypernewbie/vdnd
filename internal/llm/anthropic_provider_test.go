@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"uaa/vdnd/internal/llm/llmtypes"
 )
 
 func TestAnthropicProvider_GenerateWithTools(t *testing.T) {
@@ -77,10 +78,10 @@ func TestAnthropicProvider_GenerateWithTools(t *testing.T) {
 	p.client = server.Client()
 	p.baseURL = server.URL
 
-	resp, err := p.GenerateWithTools(context.Background(), []Message{
+	resp, err := p.GenerateWithTools(context.Background(), []llmtypes.Message{
 		{Role: "system", Content: "System prompt"},
 		{Role: "user", Content: "Hello"},
-	}, []Tool{
+	}, []llmtypes.Tool{
 		{Name: "test_tool", Description: "desc", Parameters: map[string]any{"type": "object"}},
 	})
 
@@ -100,7 +101,7 @@ func TestAnthropicProvider_GenerateWithTools(t *testing.T) {
 func TestAnthropicProvider_MessageConversion(t *testing.T) {
 	p, _ := NewAnthropicProvider("test-key", "claude-3")
 
-	messages := []Message{
+	messages := []llmtypes.Message{
 		{Role: "user", Content: "Hello"},
 		{Role: "model", Content: "Hi there"},
 		{Role: "user", Content: "How are you?"},
@@ -124,7 +125,7 @@ func TestAnthropicProvider_MessageConversion(t *testing.T) {
 func TestAnthropicProvider_MergingConsecutiveMessages(t *testing.T) {
 	p, _ := NewAnthropicProvider("test-key", "claude-3")
 
-	messages := []Message{
+	messages := []llmtypes.Message{
 		{Role: "user", Content: "Hello"},
 		{Role: "user", Content: "World"},
 	}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"uaa/vdnd/internal/llm/llmtypes"
 )
 
 // DummyProvider is a provider that echoes back the prompt instead of calling an LLM.
@@ -26,7 +27,7 @@ func (p *DummyProvider) ModelName() string {
 	return p.model
 }
 
-func (p *DummyProvider) Generate(ctx context.Context, messages []Message) (string, error) {
+func (p *DummyProvider) Generate(ctx context.Context, messages []llmtypes.Message) (string, error) {
 	var sb strings.Builder
 	sb.WriteString("=== DUMMY PROVIDER ECHO ===\n")
 	for _, m := range messages {
@@ -41,9 +42,9 @@ func (p *DummyProvider) Generate(ctx context.Context, messages []Message) (strin
 	return sb.String(), nil
 }
 
-func (p *DummyProvider) GenerateWithTools(ctx context.Context, messages []Message, tools []Tool) (GenerationResponse, error) {
+func (p *DummyProvider) GenerateWithTools(ctx context.Context, messages []llmtypes.Message, tools []llmtypes.Tool) (llmtypes.GenerationResponse, error) {
 	content, _ := p.Generate(ctx, messages)
-	return GenerationResponse{
+	return llmtypes.GenerationResponse{
 		Content:      content,
 		FinishReason: "stop",
 	}, nil

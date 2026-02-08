@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"time"
+	"uaa/vdnd/internal/llm/llmtypes"
 )
 
 type AnthropicCacheControl struct {
@@ -87,7 +88,7 @@ func NewAnthropicProvider(apiKey string, model string) (*AnthropicProvider, erro
 func (p *AnthropicProvider) Name() string      { return "anthropic" }
 func (p *AnthropicProvider) ModelName() string { return p.model }
 
-func (p *AnthropicProvider) Generate(ctx context.Context, messages []Message) (string, error) {
+func (p *AnthropicProvider) Generate(ctx context.Context, messages []llmtypes.Message) (string, error) {
 	resp, err := p.GenerateWithTools(ctx, messages, nil)
 	if err != nil {
 		return "", err
@@ -95,7 +96,7 @@ func (p *AnthropicProvider) Generate(ctx context.Context, messages []Message) (s
 	return resp.Content, nil
 }
 
-func (p *AnthropicProvider) GenerateWithTools(ctx context.Context, messages []Message, tools []Tool) (GenerationResponse, error) {
+func (p *AnthropicProvider) GenerateWithTools(ctx context.Context, messages []llmtypes.Message, tools []llmtypes.Tool) (llmtypes.GenerationResponse, error) {
 	anthropicMessages, systemPrompt := p.convertMessages(messages)
 	anthropicTools := p.convertTools(tools)
 
@@ -122,12 +123,12 @@ func (p *AnthropicProvider) GenerateWithTools(ctx context.Context, messages []Me
 
 	jsonData, err := json.Marshal(reqBody)
 	if err != nil {
-		return GenerationResponse{}, err
+		return llmtypes.GenerationResponse{}, err
 	}
 
 	req, err := http.NewRequestWithContext(ctx, "POST", p.baseURL, bytes.NewBuffer(jsonData))
 	if err != nil {
-		return GenerationResponse{}, err
+		return llmtypes.GenerationResponse{}, err
 	}
 
 	req.Header.Set("x-api-key", p.apiKey)
@@ -137,7 +138,7 @@ func (p *AnthropicProvider) GenerateWithTools(ctx context.Context, messages []Me
 
 	resp, err := p.client.Do(req)
 	if err != nil {
-		return GenerationResponse{}, err
+		return llmtypes.GenerationResponse{}, err
 	}
 	defer resp.Body.Close()
 
@@ -146,17 +147,17 @@ func (p *AnthropicProvider) GenerateWithTools(ctx context.Context, messages []Me
 		var errResp AnthropicResponse
 		json.Unmarshal(body, &errResp)
 		if errResp.Error.Message != "" {
-			return GenerationResponse{}, fmt.Errorf("anthropic api error: %s", errResp.Error.Message)
+			return llmtypes.GenerationResponse{}, fmt.Errorf("anthropic api error: %s", errResp.Error.Message)
 		}
-		return GenerationResponse{}, fmt.Errorf("anthropic api error (status %d): %s", resp.StatusCode, string(body))
+		return llmtypes.GenerationResponse{}, fmt.Errorf("anthropic api error (status %d): %s", resp.StatusCode, string(body))
 	}
 
 	var anthropicResp AnthropicResponse
 	if err := json.Unmarshal(body, &anthropicResp); err != nil {
-		return GenerationResponse{}, err
+		return llmtypes.GenerationResponse{}, err
 	}
 
-	result := GenerationResponse{
+	result := llmtypes.GenerationResponse{
 		FinishReason: "stop",
 	}
 
@@ -165,7 +166,7 @@ func (p *AnthropicProvider) GenerateWithTools(ctx context.Context, messages []Me
 			result.Content += block.Text
 		} else if block.Type == "tool_use" {
 			args, _ := json.Marshal(block.Input)
-			result.ToolCalls = append(result.ToolCalls, ToolCall{
+			result.ToolCalls = append(result.ToolCalls, llmtypes.ToolCall{
 				ID:        block.ID,
 				Name:      block.Name,
 				Arguments: string(args),
@@ -185,7 +186,7 @@ func (p *AnthropicProvider) SupportsToolCalling() bool {
 	return true
 }
 
-func (p *AnthropicProvider) convertMessages(messages []Message) ([]AnthropicMessage, string) {
+func (p *AnthropicProvider) convertMessages(messages []llmtypes.Message) ([]AnthropicMessage, string) {
 	var systemPrompt string
 	var anthropicMsgs []AnthropicMessage
 
@@ -245,7 +246,7 @@ func (p *AnthropicProvider) convertMessages(messages []Message) ([]AnthropicMess
 	return anthropicMsgs, systemPrompt
 }
 
-func (p *AnthropicProvider) convertTools(tools []Tool) []AnthropicTool {
+func (p *AnthropicProvider) convertTools(tools []llmtypes.Tool) []AnthropicTool {
 	if len(tools) == 0 {
 		return nil
 	}

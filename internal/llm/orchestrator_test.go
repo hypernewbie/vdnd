@@ -3,23 +3,33 @@ package llm
 import (
 	"context"
 	"fmt"
+	"io"
 	"strings"
 	"testing"
 
 	"uaa/vdnd/internal/cli"
+	"uaa/vdnd/internal/llm/llmtypes"
+	"uaa/vdnd/internal/llm/vdengine"
+	"uaa/vdnd/internal/state"
 )
 
 func TestOrchestrator_MapToolToArgs(t *testing.T) {
-	o := &Orchestrator{}
+	engine := vdengine.New(cli.Deps{
+		Store: &state.MemoryStore{State: &state.GameState{
+			Entities:      make(map[string]*state.EntityState),
+			ReactionsUsed: make(map[string]bool),
+		}},
+		Stderr: io.Discard,
+	})
 
 	tests := []struct {
 		name     string
-		call     ToolCall
+		call     llmtypes.ToolCall
 		expected []string
 	}{
 		{
 			name: "vd_action_strike basic",
-			call: ToolCall{
+			call: llmtypes.ToolCall{
 				Name:      "vd_action_strike",
 				Arguments: `{"actor": "hero", "target": "goblin"}`,
 			},
@@ -27,7 +37,7 @@ func TestOrchestrator_MapToolToArgs(t *testing.T) {
 		},
 		{
 			name: "vd_action_strike with weapon and map",
-			call: ToolCall{
+			call: llmtypes.ToolCall{
 				Name:      "vd_action_strike",
 				Arguments: `{"actor": "hero", "target": "goblin", "weapon": "longsword", "map": 1}`,
 			},
@@ -35,7 +45,7 @@ func TestOrchestrator_MapToolToArgs(t *testing.T) {
 		},
 		{
 			name: "vd_damage",
-			call: ToolCall{
+			call: llmtypes.ToolCall{
 				Name:      "vd_damage",
 				Arguments: `{"id": "goblin", "amount": 10, "type": "fire"}`,
 			},
@@ -43,7 +53,7 @@ func TestOrchestrator_MapToolToArgs(t *testing.T) {
 		},
 		{
 			name: "vd_heal",
-			call: ToolCall{
+			call: llmtypes.ToolCall{
 				Name:      "vd_heal",
 				Arguments: `{"id": "hero", "amount": 5}`,
 			},
@@ -51,7 +61,7 @@ func TestOrchestrator_MapToolToArgs(t *testing.T) {
 		},
 		{
 			name: "vd_condition_add with flags",
-			call: ToolCall{
+			call: llmtypes.ToolCall{
 				Name:      "vd_condition_add",
 				Arguments: `{"id": "hero", "condition": "frightened", "value": 1, "duration": 2, "source": "scary monster"}`,
 			},
@@ -61,7 +71,7 @@ func TestOrchestrator_MapToolToArgs(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := o.mapToolToArgs(tt.call)
+			_, _, got, _ := engine.ExecuteTool(tt.call)
 			if len(got) != len(tt.expected) {
 				t.Fatalf("mapToolToArgs() returned %v, want %v", got, tt.expected)
 			}
@@ -77,7 +87,7 @@ func TestOrchestrator_MapToolToArgs(t *testing.T) {
 func TestOrchestrator_TruncateHistory(t *testing.T) {
 	o := &Orchestrator{}
 	initialMessage := "I am ready."
-	o.history = []Message{
+	o.history = []llmtypes.Message{
 		{Role: "model", Content: initialMessage},
 	}
 
@@ -85,7 +95,7 @@ func TestOrchestrator_TruncateHistory(t *testing.T) {
 	// 10KB is 10240 bytes. Let's add 15 messages of 1KB each.
 	for i := 0; i < 15; i++ {
 		content := fmt.Sprintf("Message %d: %s", i, strings.Repeat("a", 1024))
-		o.history = append(o.history, Message{Role: "user", Content: content})
+		o.history = append(o.history, llmtypes.Message{Role: "user", Content: content})
 	}
 
 	// Verify history size before truncation (should be 16 messages total)

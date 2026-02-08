@@ -5,27 +5,27 @@ import (
 	"path/filepath"
 	"testing"
 
-	"uaa/vdnd/internal/llm"
+	"uaa/vdnd/internal/llm/llmtypes"
 )
 
 type MockProvider struct {
-	responses []llm.GenerationResponse
+	responses []llmtypes.GenerationResponse
 	calls     int
 }
 
 func (m *MockProvider) Name() string      { return "mock" }
 func (m *MockProvider) ModelName() string { return "mock-model" }
-func (m *MockProvider) Generate(ctx context.Context, messages []llm.Message) (string, error) {
+func (m *MockProvider) Generate(ctx context.Context, messages []llmtypes.Message) (string, error) {
 	return "", nil
 }
 
-func (m *MockProvider) GenerateWithTools(ctx context.Context, messages []llm.Message, tools []llm.Tool) (llm.GenerationResponse, error) {
+func (m *MockProvider) GenerateWithTools(ctx context.Context, messages []llmtypes.Message, tools []llmtypes.Tool) (llmtypes.GenerationResponse, error) {
 	if m.calls < len(m.responses) {
 		res := m.responses[m.calls]
 		m.calls++
 		return res, nil
 	}
-	return llm.GenerationResponse{Content: "FINAL_ANSWER: I don't know", FinishReason: "stop"}, nil
+	return llmtypes.GenerationResponse{Content: "FINAL_ANSWER: I don't know", FinishReason: "stop"}, nil
 }
 
 func (m *MockProvider) SupportsToolCalling() bool { return true }
@@ -36,10 +36,10 @@ func TestRLMStepByStep(t *testing.T) {
 	scriptPath := filepath.Join(absRoot, "py", "restricted_python.py")
 
 	mock := &MockProvider{
-		responses: []llm.GenerationResponse{
+		responses: []llmtypes.GenerationResponse{
 			{
 				FinishReason: "tool_calls",
-				ToolCalls: []llm.ToolCall{
+				ToolCalls: []llmtypes.ToolCall{
 					{
 						ID:        "call_1",
 						Name:      "execute_python",
@@ -49,7 +49,7 @@ func TestRLMStepByStep(t *testing.T) {
 			},
 			{
 				FinishReason: "tool_calls",
-				ToolCalls: []llm.ToolCall{
+				ToolCalls: []llmtypes.ToolCall{
 					{
 						ID:        "call_2",
 						Name:      "execute_python",
@@ -64,15 +64,14 @@ func TestRLMStepByStep(t *testing.T) {
 		},
 	}
 
-	mockPromptBuilder := func(size, depth int) string {
-		return "Mock Prompt"
-	}
-
-	rlm := NewRLM(mock, Config{
-		MaxIterations:       5,
-		PythonPath:          pythonPath,
-		ScriptPath:          scriptPath,
-		SystemPromptBuilder: mockPromptBuilder,
+	rlm := NewRLMWithConfig(mock, Config{
+		MaxIterations:  5,
+		Tools:          ResearchTools(),
+		ToolHandlers:   ResearchHandlers(),
+		SessionFactory: NewREPLSessionFactory(pythonPath, scriptPath),
+		SystemPromptBuilder: func(size, depth int) string {
+			return "Mock Prompt"
+		},
 	})
 
 	answer, _, err := rlm.Complete(context.Background(), "What is the start?", "Hello World", nil)
@@ -96,10 +95,10 @@ func TestRLMRecursion(t *testing.T) {
 
 	// This mock will handle both the top-level call and the recursive call
 	mock := &MockProvider{
-		responses: []llm.GenerationResponse{
+		responses: []llmtypes.GenerationResponse{
 			{
 				FinishReason: "tool_calls",
-				ToolCalls: []llm.ToolCall{
+				ToolCalls: []llmtypes.ToolCall{
 					{
 						ID:        "call_1",
 						Name:      "execute_python",
@@ -120,16 +119,15 @@ func TestRLMRecursion(t *testing.T) {
 		},
 	}
 
-	mockPromptBuilder := func(size, depth int) string {
-		return "Mock Prompt"
-	}
-
-	rlm := NewRLM(mock, Config{
-		MaxIterations:       5,
-		MaxDepth:            2,
-		PythonPath:          pythonPath,
-		ScriptPath:          scriptPath,
-		SystemPromptBuilder: mockPromptBuilder,
+	rlm := NewRLMWithConfig(mock, Config{
+		MaxIterations:  5,
+		MaxDepth:       2,
+		Tools:          ResearchTools(),
+		ToolHandlers:   ResearchHandlers(),
+		SessionFactory: NewREPLSessionFactory(pythonPath, scriptPath),
+		SystemPromptBuilder: func(size, depth int) string {
+			return "Mock Prompt"
+		},
 	})
 
 	answer, _, err := rlm.Complete(context.Background(), "Get sub answer", "Ignored", nil)

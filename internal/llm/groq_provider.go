@@ -2,6 +2,7 @@ package llm
 
 import (
 	"context"
+	"uaa/vdnd/internal/llm/llmtypes"
 )
 
 type GroqProvider struct {
@@ -24,11 +25,11 @@ func NewGroqProvider(apiKey string, model string) (*GroqProvider, error) {
 	}, nil
 }
 
-func (p *GroqProvider) Generate(ctx context.Context, messages []Message) (string, error) {
+func (p *GroqProvider) Generate(ctx context.Context, messages []llmtypes.Message) (string, error) {
 	return p.OpenAIProvider.Generate(ctx, messages)
 }
 
-func (p *GroqProvider) GenerateWithTools(ctx context.Context, messages []Message, tools []Tool) (GenerationResponse, error) {
+func (p *GroqProvider) GenerateWithTools(ctx context.Context, messages []llmtypes.Message, tools []llmtypes.Tool) (llmtypes.GenerationResponse, error) {
 	return p.OpenAIProvider.GenerateWithTools(ctx, messages, tools)
 }
 

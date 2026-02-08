@@ -5,14 +5,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"os"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	"uaa/vdnd/internal/cli"
-	"uaa/vdnd/internal/llm/ripgrep"
+	"uaa/vdnd/internal/llm/llmtypes"
+	"uaa/vdnd/internal/llm/vdengine"
 	"uaa/vdnd/internal/llm/vdhelpers"
 )
 
@@ -22,41 +21,46 @@ var ErrOrchestratorBusy = fmt.Errorf("the DM is currently busy thinking... pleas
 const defaultModel = "gemini-2.0-flash-exp"
 
 type RLMCompleter interface {
-	Complete(ctx context.Context, query string, contextData string, history []Message) (string, string, error)
+	Complete(ctx context.Context, query string, contextData string, history []llmtypes.Message) (string, string, error)
 }
 
 // Orchestrator coordinates communication between the user, the LLM, and the rules engine.
 type Orchestrator struct {
 	mu           sync.Mutex
 	activeCancel context.CancelFunc
-	provider     Provider
-	rlm          RLMCompleter
+	provider     llmtypes.Provider
+	researchRLM  RLMCompleter
+	vdRLM        RLMCompleter
 	deps         cli.Deps
-	tools        []Tool
-	history      []Message
+	engine       *vdengine.VDEngine
+	tools        []llmtypes.Tool
+	history      []llmtypes.Message
 	promptMode   bool
 }
 
 // NewOrchestrator creates a new LLM orchestrator.
-func NewOrchestrator(context context.Context, provider Provider, deps cli.Deps) *Orchestrator {
+func NewOrchestrator(context context.Context, provider llmtypes.Provider, deps cli.Deps) *Orchestrator {
 	promptMode := !provider.SupportsToolCalling()
+	engine := vdengine.New(deps)
 
 	o := &Orchestrator{
 		provider:   provider,
 		deps:       deps,
-		tools:      defineTools(),
+		engine:     engine,
+		tools:      engine.Tools(),
 		promptMode: promptMode,
 	}
 
-	o.history = []Message{
+	o.history = []llmtypes.Message{
 		{Role: "model", Content: "I am ready to be your Dungeon Master. What happens next?"},
 	}
 
 	return o
 }
 
-func (o *Orchestrator) SetRLM(rlm RLMCompleter) {
-	o.rlm = rlm
+func (o *Orchestrator) SetRLMs(research, vd RLMCompleter) {
+	o.researchRLM = research
+	o.vdRLM = vd
 }
 
 // ProviderInfo returns the provider name and model name.
@@ -120,146 +124,6 @@ After each tool call, incorporate the tool's output into your immersive, storyte
 `
 }
 
-func defineTools() []Tool {
-	return []Tool{
-		{
-			Name:        "vd_scene_new",
-			Description: "Create a new combat scene",
-			Parameters: map[string]any{
-				"type": "object",
-				"properties": map[string]any{
-					"name": map[string]any{"type": "string", "description": "Name of the scene"},
-				},
-				"required": []any{"name"},
-			},
-		},
-		{
-			Name:        "vd_scene_save",
-			Description: "Save the current scene state",
-		},
-		{
-			Name:        "vd_scene_load",
-			Description: "Load an existing scene",
-			Parameters: map[string]any{
-				"type": "object",
-				"properties": map[string]any{
-					"name": map[string]any{"type": "string", "description": "Name of the scene to load"},
-				},
-				"required": []any{"name"},
-			},
-		},
-		{
-			Name:        "vd_status",
-			Description: "Get the current scene status and entity list",
-		},
-		// ----- NEW TOOLS -----
-		// A) Generic vd tool
-		{
-			Name:        "vd",
-			Description: "Execute any VD CLI command as a raw string.",
-			Parameters: map[string]any{
-				"type": "object",
-				"properties": map[string]any{
-					"cmd": map[string]any{
-						"type":        "string",
-						"description": "Full command string (e.g., 'action strike hero goblin --weapon sword')",
-					},
-				},
-				"required": []any{"cmd"},
-			},
-		},
-
-		// B) Top-5 structured tools
-		{
-			Name:        "vd_action_strike",
-			Description: "Perform a melee or ranged attack.",
-			Parameters: map[string]any{
-				"type": "object",
-				"properties": map[string]any{
-					"actor":  map[string]any{"type": "string", "description": "Attacker entity ID"},
-					"target": map[string]any{"type": "string", "description": "Target entity ID"},
-					"weapon": map[string]any{"type": "string", "description": "Weapon ID (optional)"},
-					"map":    map[string]any{"type": "integer", "description": "Multi-Attack Penalty (0=None,1=-5,2=-10)", "enum": []int{0, 1, 2}},
-				},
-				"required": []any{"actor", "target"},
-			},
-		},
-		{
-			Name:        "vd_damage",
-			Description: "Apply damage to an entity, respecting immunities/weaknesses/resistances.",
-			Parameters: map[string]any{
-				"type": "object",
-				"properties": map[string]any{
-					"id":     map[string]any{"type": "string", "description": "Target entity ID"},
-					"amount": map[string]any{"type": "integer", "description": "Damage amount"},
-					"type":   map[string]any{"type": "string", "description": "Damage type (optional)"},
-				},
-				"required": []any{"id", "amount"},
-			},
-		},
-		{
-			Name:        "vd_heal",
-			Description: "Restore HP to an entity.",
-			Parameters: map[string]any{
-				"type": "object",
-				"properties": map[string]any{
-					"id":     map[string]any{"type": "string", "description": "Target entity ID"},
-					"amount": map[string]any{"type": "integer", "description": "Healing amount"},
-				},
-				"required": []any{"id", "amount"},
-			},
-		},
-		{
-			Name:        "vd_condition_add",
-			Description: "Apply a condition to an entity.",
-			Parameters: map[string]any{
-				"type": "object",
-				"properties": map[string]any{
-					"id":        map[string]any{"type": "string", "description": "Target entity ID"},
-					"condition": map[string]any{"type": "string", "description": "Condition name (e.g., 'frightened', 'prone')"},
-					"value":     map[string]any{"type": "integer", "description": "Condition value (optional)"},
-					"duration":  map[string]any{"type": "integer", "description": "Duration in rounds (optional)"},
-					"source":    map[string]any{"type": "string", "description": "Source of condition (optional)"},
-				},
-				"required": []any{"id", "condition"},
-			},
-		},
-
-		{
-			Name:        "vd_action_stride",
-			Description: "Move an entity to a new zone, potentially triggering reactions.",
-			Parameters: map[string]any{
-				"type": "object",
-				"properties": map[string]any{
-					"actor": map[string]any{"type": "string", "description": "Entity ID to move"},
-					"to":    map[string]any{"type": "string", "description": "Target zone ID"},
-				},
-				"required": []any{"actor", "to"},
-			},
-		},
-		// C) Manual tool
-		{
-			Name:        "vd_manual",
-			Description: "Retrieve the full VD CLI manual (vd_manual.md).",
-			Parameters:  nil, // no arguments
-		},
-
-		// D) Ripgrep tool
-		{
-			Name:        "ripgrep",
-			Description: "Search for text in rule files using ripgrep (fast). If rg is not installed, a loud warning will be printed.",
-			Parameters: map[string]any{
-				"type": "object",
-				"properties": map[string]any{
-					"pattern": map[string]any{"type": "string", "description": "Search pattern (regex)"},
-					"path":    map[string]any{"type": "string", "description": "Directory to search (default: 'rules/')"},
-				},
-				"required": []any{"pattern"},
-			},
-		},
-	}
-}
-
 // ProcessInput takes natural language input and returns a narrated response.
 func (o *Orchestrator) ProcessInput(ctx context.Context, input string) (string, error) {
 	if !o.mu.TryLock() {
@@ -282,30 +146,38 @@ func (o *Orchestrator) ProcessInput(ctx context.Context, input string) (string, 
 		stdout = "No active game session found. A new session must be created."
 	}
 
-	if o.rlm != nil {
-		resp, thinking, err := o.rlm.Complete(runCtx, input, stdout, o.history)
+	if o.researchRLM != nil && o.vdRLM != nil {
+		// 1. Call Research RLM
+		researchNotes, _, err := o.researchRLM.Complete(runCtx, input, stdout, o.history)
+		if err != nil {
+			slog.Error("Research RLM failed", "error", err)
+			researchNotes = fmt.Sprintf("(Research failed: %v)", err)
+		}
+		slog.Info("RESEARCH_END", "notes", researchNotes)
+
+		// 2. Combine research notes with original query for VDLM
+		vdQuery := fmt.Sprintf("Research notes:\n%s\n\nOriginal request: %s", researchNotes, input)
+
+		// 3. Call VDLM (this will execute VD tools via its own tool-calling loop)
+		finalResp, thinking, err := o.vdRLM.Complete(runCtx, vdQuery, stdout, o.history)
 		if err != nil {
 			return "", err
 		}
-		slog.Info("RLM_END", "response", resp)
+		slog.Info("VDLM_END", "response", finalResp)
 
-		// Process markers and tools
-		processedResp := o.handleTextMarkers(resp)
+		// Process markers (for legacy support)
+		finalResp = o.handleTextMarkers(finalResp)
 
-		// Include user input as a quote if desired (though orchestrator handles this in Loop,
-		// for RLM we should check if we want it here too. For now let's just use finalResp)
-		finalResp := processedResp
-
-		// We still append to history for the simple state tracking
-		o.history = append(o.history, Message{Role: "user", Content: input})
-		o.history = append(o.history, Message{Role: "model", Content: finalResp, Thinking: thinking})
+		// Append to history
+		o.history = append(o.history, llmtypes.Message{Role: "user", Content: input})
+		o.history = append(o.history, llmtypes.Message{Role: "model", Content: finalResp, Thinking: thinking})
 
 		return finalResp, nil
 	}
 
 	contextInput := fmt.Sprintf("Current Game State:\n%s\n\nUser Input: %s", stdout, input)
 
-	o.history = append(o.history, Message{Role: "user", Content: contextInput})
+	o.history = append(o.history, llmtypes.Message{Role: "user", Content: contextInput})
 
 	return o.generationLoop(runCtx)
 }
@@ -325,7 +197,7 @@ func (o *Orchestrator) Interrupt() bool {
 
 func (o *Orchestrator) generationLoop(ctx context.Context) (string, error) {
 	for i := 0; i < 50; i++ { // Guard against infinite loops
-		var resp GenerationResponse
+		var resp llmtypes.GenerationResponse
 		var err error
 
 		// Log LLM Input (History)
@@ -359,7 +231,7 @@ func (o *Orchestrator) generationLoop(ctx context.Context) (string, error) {
 			resp.Content = o.handleTextMarkers(resp.Content)
 			slog.Info("GENERATION_COMPLETE", "iterations", i+1)
 
-			o.history = append(o.history, Message{Role: "model", Content: resp.Content, Thinking: resp.Thinking})
+			o.history = append(o.history, llmtypes.Message{Role: "model", Content: resp.Content, Thinking: resp.Thinking})
 			return resp.Content, nil
 		}
 
@@ -369,14 +241,14 @@ func (o *Orchestrator) generationLoop(ctx context.Context) (string, error) {
 				"thinking", resp.Thinking,
 			)
 			// Add assistant tool calls to history
-			o.history = append(o.history, Message{Role: "model", ToolCalls: resp.ToolCalls, Thinking: resp.Thinking})
+			o.history = append(o.history, llmtypes.Message{Role: "model", ToolCalls: resp.ToolCalls, Thinking: resp.Thinking})
 
 			for _, call := range resp.ToolCalls {
 				// Execute tool
 				result := o.executeTool(call)
 
 				// Add tool result to history
-				o.history = append(o.history, Message{
+				o.history = append(o.history, llmtypes.Message{
 					Role:       "tool",
 					Name:       call.Name,
 					ToolCallID: call.ID,
@@ -442,12 +314,12 @@ func (o *Orchestrator) getSchemaPrompt() string {
 	return sb.String()
 }
 
-func (o *Orchestrator) parseJSONResponse(content string) GenerationResponse {
+func (o *Orchestrator) parseJSONResponse(content string) llmtypes.GenerationResponse {
 	// Simple JSON extraction (finding first { and last })
 	start := strings.Index(content, "{")
 	end := strings.LastIndex(content, "}")
 	if start == -1 || end == -1 || end <= start {
-		return GenerationResponse{Content: content, FinishReason: "stop"}
+		return llmtypes.GenerationResponse{Content: content, FinishReason: "stop"}
 	}
 
 	jsonStr := content[start : end+1]
@@ -458,17 +330,17 @@ func (o *Orchestrator) parseJSONResponse(content string) GenerationResponse {
 	}
 
 	if err := json.Unmarshal([]byte(jsonStr), &data); err != nil {
-		return GenerationResponse{Content: content, FinishReason: "stop"}
+		return llmtypes.GenerationResponse{Content: content, FinishReason: "stop"}
 	}
 
 	if data.Tool == "" {
-		return GenerationResponse{Content: data.Narration, FinishReason: "stop"}
+		return llmtypes.GenerationResponse{Content: data.Narration, FinishReason: "stop"}
 	}
 
 	args, _ := json.Marshal(data.Arguments)
-	return GenerationResponse{
+	return llmtypes.GenerationResponse{
 		Content: data.Narration,
-		ToolCalls: []ToolCall{
+		ToolCalls: []llmtypes.ToolCall{
 			{
 				Name:      data.Tool,
 				Arguments: string(args),
@@ -478,74 +350,13 @@ func (o *Orchestrator) parseJSONResponse(content string) GenerationResponse {
 	}
 }
 
-func (o *Orchestrator) executeTool(call ToolCall) string {
+func (o *Orchestrator) executeTool(call llmtypes.ToolCall) string {
 	start := time.Now()
-	var stdout string
-	var exitCode int
-	var cmdArgs []string
-
-	// Special-case tools that don't go through mapToolToArgs
-	switch call.Name {
-	case "vd":
-		var args map[string]any
-		if err := json.Unmarshal([]byte(call.Arguments), &args); err != nil {
-			return errorJSON(fmt.Sprintf("Error parsing arguments: %v", err))
-		}
-		cmd, _ := args["cmd"].(string)
-		if cmd == "" {
-			return errorJSON("Missing 'cmd' field")
-		}
-		// Use the Phase-0 helper
-		res := vdhelpers.ExecuteGenericVD(cmd, o.deps)
-		var vdr vdhelpers.VDResult
-		json.Unmarshal([]byte(res), &vdr)
-		stdout = vdr.Stdout
-		exitCode = vdr.ExitCode
-		goto LOG
-
-	case "vd_manual":
-		// Read vd_manual.md from the project root
-		content, err := os.ReadFile("vd_manual.md")
-		if err != nil {
-			return errorJSON(fmt.Sprintf("Could not read vd_manual.md: %v", err))
-		}
-		stdout = string(content)
-		exitCode = 0
-		goto LOG
-
-	case "ripgrep":
-		var args map[string]any
-		if err := json.Unmarshal([]byte(call.Arguments), &args); err != nil {
-			return errorJSON(fmt.Sprintf("Error parsing arguments: %v", err))
-		}
-		pattern, _ := args["pattern"].(string)
-		path, _ := args["path"].(string)
-		if pattern == "" {
-			return errorJSON("Missing 'pattern' field")
-		}
-		result, err := ripgrep.Search(pattern, path)
-		if err != nil {
-			return errorJSON(fmt.Sprintf("Ripgrep search failed: %v", err))
-		}
-		// ripgrep.Search already returns JSON-ready string via ToJSON()
-		res := result.ToJSON()
-		var resMap map[string]any
-		json.Unmarshal([]byte(res), &resMap)
-		slog.Info("RIPGREP_RESULTS", "count", len(res))
-		stdout = res // For logging
-		exitCode = 0
-		goto LOG
+	stdout, exitCode, cmdArgs, err := o.engine.ExecuteTool(call)
+	if err != nil {
+		return errorJSON(err.Error())
 	}
 
-	// Structured tools (including the original 4 scene tools)
-	cmdArgs = o.mapToolToArgs(call)
-	if cmdArgs == nil {
-		return errorJSON(fmt.Sprintf("Unknown tool or invalid arguments for %s", call.Name))
-	}
-
-	stdout, exitCode = cli.Run(cmdArgs, o.deps)
-
-LOG:
 	duration := time.Since(start)
 
 	// Create a summary of the result (first 100 chars)
@@ -588,121 +399,6 @@ func errorJSON(msg string) string {
 	}
 	b, _ := json.Marshal(result)
 	return string(b)
-}
-
-func (o *Orchestrator) mapToolToArgs(call ToolCall) []string {
-	var args map[string]any
-	_ = json.Unmarshal([]byte(call.Arguments), &args)
-
-	getString := func(key string) string {
-		v, ok := args[key]
-		if !ok || v == nil {
-			return ""
-		}
-		s, _ := v.(string)
-		return s
-	}
-	getInt := func(key string) int {
-		v, ok := args[key]
-		if !ok || v == nil {
-			return 0
-		}
-		// JSON numbers decode as float64
-		if f, ok := v.(float64); ok {
-			return int(f)
-		}
-		return 0
-	}
-
-	switch call.Name {
-	case "vd_scene_new":
-		name := getString("name")
-		if name == "" {
-			name = "New Scene"
-		}
-		return []string{"scene", "new", name}
-	case "vd_scene_save":
-		return []string{"scene", "save"}
-	case "vd_scene_load":
-		name := getString("name")
-		if name == "" {
-			return nil
-		}
-		return []string{"scene", "load", name}
-	case "vd_status":
-		return []string{"status"}
-
-	// ----- NEW STRUCTURED TOOLS -----
-	case "vd_action_strike":
-		actor := getString("actor")
-		target := getString("target")
-		weapon := getString("weapon")
-		mapVal := getInt("map")
-		if actor == "" || target == "" {
-			return nil
-		}
-		argv := []string{"action", "strike", actor, target}
-		if weapon != "" {
-			argv = append(argv, "--weapon", weapon)
-		}
-		if mapVal > 0 && mapVal <= 2 {
-			argv = append(argv, "--map", strconv.Itoa(mapVal))
-		}
-		return argv
-
-	case "vd_action_stride":
-		actor := getString("actor")
-		to := getString("to")
-		if actor == "" || to == "" {
-			return nil
-		}
-		return []string{"action", "stride", actor, "--to", to}
-
-	case "vd_damage":
-		id := getString("id")
-		amount := getInt("amount")
-		dmgType := getString("type")
-		if id == "" || amount == 0 {
-			return nil
-		}
-		argv := []string{"damage", id, strconv.Itoa(amount)}
-		if dmgType != "" {
-			argv = append(argv, dmgType)
-		}
-		return argv
-
-	case "vd_heal":
-		id := getString("id")
-		amount := getInt("amount")
-		if id == "" || amount == 0 {
-			return nil
-		}
-		return []string{"heal", id, strconv.Itoa(amount)}
-
-	case "vd_condition_add":
-		id := getString("id")
-		condition := getString("condition")
-		value := getInt("value")
-		duration := getInt("duration")
-		source := getString("source")
-		if id == "" || condition == "" {
-			return nil
-		}
-		argv := []string{"condition", "add", id, condition}
-		if value != 0 {
-			argv = append(argv, strconv.Itoa(value))
-		}
-		if duration > 0 {
-			argv = append(argv, "--duration", strconv.Itoa(duration))
-		}
-		if source != "" {
-			argv = append(argv, "--source", source)
-		}
-		return argv
-
-	default:
-		return nil
-	}
 }
 
 // Close cleans up the LLM client.

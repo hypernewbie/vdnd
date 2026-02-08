@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"time"
+	"uaa/vdnd/internal/llm/llmtypes"
 )
 
 // OpenAIInternalMessage represents the message format used by OpenAI-compatible APIs.
@@ -82,7 +83,7 @@ func NewOpenAIProvider(config OpenAIProviderConfig) *OpenAIProvider {
 func (p *OpenAIProvider) Name() string      { return p.config.Name }
 func (p *OpenAIProvider) ModelName() string { return p.config.Model }
 
-func (p *OpenAIProvider) Generate(ctx context.Context, messages []Message) (string, error) {
+func (p *OpenAIProvider) Generate(ctx context.Context, messages []llmtypes.Message) (string, error) {
 	resp, err := p.GenerateWithTools(ctx, messages, nil)
 	if err != nil {
 		return "", err
@@ -90,7 +91,7 @@ func (p *OpenAIProvider) Generate(ctx context.Context, messages []Message) (stri
 	return resp.Content, nil
 }
 
-func (p *OpenAIProvider) GenerateWithTools(ctx context.Context, messages []Message, tools []Tool) (GenerationResponse, error) {
+func (p *OpenAIProvider) GenerateWithTools(ctx context.Context, messages []llmtypes.Message, tools []llmtypes.Tool) (llmtypes.GenerationResponse, error) {
 	oaMessages := p.convertToOpenAIMessages(messages)
 	oaTools := p.convertToOpenAITools(tools)
 
@@ -103,12 +104,12 @@ func (p *OpenAIProvider) GenerateWithTools(ctx context.Context, messages []Messa
 
 	jsonData, err := json.Marshal(reqBody)
 	if err != nil {
-		return GenerationResponse{}, err
+		return llmtypes.GenerationResponse{}, err
 	}
 
 	req, err := http.NewRequestWithContext(ctx, "POST", p.config.BaseURL, bytes.NewBuffer(jsonData))
 	if err != nil {
-		return GenerationResponse{}, err
+		return llmtypes.GenerationResponse{}, err
 	}
 
 	req.Header.Set("Authorization", "Bearer "+p.config.APIKey)
@@ -116,7 +117,7 @@ func (p *OpenAIProvider) GenerateWithTools(ctx context.Context, messages []Messa
 
 	resp, err := p.client.Do(req)
 	if err != nil {
-		return GenerationResponse{}, err
+		return llmtypes.GenerationResponse{}, err
 	}
 	defer resp.Body.Close()
 
@@ -125,32 +126,32 @@ func (p *OpenAIProvider) GenerateWithTools(ctx context.Context, messages []Messa
 		var errResp OpenAIChatResponse
 		json.Unmarshal(body, &errResp)
 		if errResp.Error.Message != "" {
-			return GenerationResponse{}, fmt.Errorf("%s api error: %s", p.config.Name, errResp.Error.Message)
+			return llmtypes.GenerationResponse{}, fmt.Errorf("%s api error: %s", p.config.Name, errResp.Error.Message)
 		}
-		return GenerationResponse{}, fmt.Errorf("%s api error (status %d): %s", p.config.Name, resp.StatusCode, string(body))
+		return llmtypes.GenerationResponse{}, fmt.Errorf("%s api error (status %d): %s", p.config.Name, resp.StatusCode, string(body))
 	}
 
 	var oaResp OpenAIChatResponse
 	if err := json.Unmarshal(body, &oaResp); err != nil {
-		return GenerationResponse{}, err
+		return llmtypes.GenerationResponse{}, err
 	}
 
 	if len(oaResp.Choices) == 0 {
-		return GenerationResponse{}, fmt.Errorf("empty response from %s", p.config.Name)
+		return llmtypes.GenerationResponse{}, fmt.Errorf("empty response from %s", p.config.Name)
 	}
 
 	msg := oaResp.Choices[0].Message
 
 	if len(msg.ToolCalls) > 0 {
-		toolCalls := []ToolCall{}
+		toolCalls := []llmtypes.ToolCall{}
 		for _, tc := range msg.ToolCalls {
-			toolCalls = append(toolCalls, ToolCall{
+			toolCalls = append(toolCalls, llmtypes.ToolCall{
 				ID:        tc.ID,
 				Name:      tc.Function.Name,
 				Arguments: tc.Function.Arguments,
 			})
 		}
-		return GenerationResponse{
+		return llmtypes.GenerationResponse{
 			ToolCalls:    toolCalls,
 			Thinking:     p.extractReasoning(msg),
 			FinishReason: "tool_calls",
@@ -163,7 +164,7 @@ func (p *OpenAIProvider) GenerateWithTools(ctx context.Context, messages []Messa
 	}
 	content := StripThinking(msg.Content)
 
-	return GenerationResponse{
+	return llmtypes.GenerationResponse{
 		Content:      content,
 		Thinking:     thinking,
 		FinishReason: "stop",
@@ -181,7 +182,7 @@ func (p *OpenAIProvider) extractReasoning(msg OpenAIInternalMessage) string {
 	return msg.Reasoning
 }
 
-func (p *OpenAIProvider) convertToOpenAIMessages(messages []Message) []OpenAIInternalMessage {
+func (p *OpenAIProvider) convertToOpenAIMessages(messages []llmtypes.Message) []OpenAIInternalMessage {
 	var oaMsgs []OpenAIInternalMessage
 	for _, m := range messages {
 		role := m.Role
@@ -218,7 +219,7 @@ func (p *OpenAIProvider) convertToOpenAIMessages(messages []Message) []OpenAIInt
 	return oaMsgs
 }
 
-func (p *OpenAIProvider) convertToOpenAITools(tools []Tool) []OpenAITool {
+func (p *OpenAIProvider) convertToOpenAITools(tools []llmtypes.Tool) []OpenAITool {
 	if len(tools) == 0 {
 		return nil
 	}

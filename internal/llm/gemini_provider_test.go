@@ -3,17 +3,18 @@ package llm
 import (
 	"encoding/json"
 	"testing"
+	"uaa/vdnd/internal/llm/llmtypes"
 )
 
 func TestGeminiProvider_MessageConversion(t *testing.T) {
 	p := &GeminiProvider{model: "gemini-2.0-flash-exp"}
 
-	messages := []Message{
+	messages := []llmtypes.Message{
 		{Role: "user", Content: "Call the tool"},
 		{
 			Role:     "model",
 			Thinking: "Thinking about the tool...",
-			ToolCalls: []ToolCall{
+			ToolCalls: []llmtypes.ToolCall{
 				{
 					Name:             "test_tool",
 					Arguments:        `{"arg1": "val1"}`,
