@@ -2,45 +2,77 @@ package vdhelpers
 
 import (
 	"encoding/json"
-	"io"
 	"testing"
 	"uaa/vdnd/internal/cli"
-	"uaa/vdnd/internal/state"
 )
 
 func TestExecuteGenericVD(t *testing.T) {
-	// Setup deps with memory store
-	gs := &state.GameState{
-		SceneName:     "Test Scene",
-		Positions:     make(map[string]*state.Zone),
-		Entities:      make(map[string]*state.EntityState),
-		ReactionsUsed: make(map[string]bool),
+	// Mock cliRun
+	var recordedArgs [][]string
+	mockStdout := "Scene status..."
+	mockExitCode := 0
+
+	oldCliRun := cliRun
+	cliRun = func(args []string, deps cli.Deps) (string, int) {
+		recordedArgs = append(recordedArgs, args)
+		return mockStdout, mockExitCode
 	}
-	deps := cli.Deps{
-		Roller: &cli.FixedRoller{Results: []int{10, 10}},
-		Store:  &state.MemoryStore{State: gs},
-		Clock:  &cli.FixedClock{},
-		Stderr: io.Discard,
+	defer func() { cliRun = oldCliRun }()
+
+	deps := cli.Deps{}
+	resultJSON := ExecuteGenericVD("status", deps)
+
+	// Check that cli.Run was called with correct args
+	if len(recordedArgs) != 1 {
+		t.Fatalf("cli.Run called %d times, want 1", len(recordedArgs))
+	}
+	want := []string{"status"}
+	for i, arg := range recordedArgs[0] {
+		if arg != want[i] {
+			t.Errorf("argv[%d] = %q, want %q", i, arg, want[i])
+		}
 	}
 
-	// Test a simple command
-	resStr := ExecuteGenericVD("status", deps)
-	var res VDResult
-	if err := json.Unmarshal([]byte(resStr), &res); err != nil {
+	// Verify JSON structure
+	var result VDResult
+	if err := json.Unmarshal([]byte(resultJSON), &result); err != nil {
 		t.Fatalf("failed to unmarshal result: %v", err)
 	}
-
-	// We expect status to return something in stdout
-	if res.Stdout == "" && res.Error == "" {
-		t.Errorf("expected stdout or error, got empty result")
+	if result.Stdout != mockStdout {
+		t.Errorf("Stdout = %q, want %q", result.Stdout, mockStdout)
 	}
-
-	// Test empty command
-	resStr = ExecuteGenericVD("", deps)
-	if err := json.Unmarshal([]byte(resStr), &res); err != nil {
-		t.Fatalf("failed to unmarshal result: %v", err)
+	if result.ExitCode != mockExitCode {
+		t.Errorf("ExitCode = %d, want %d", result.ExitCode, mockExitCode)
 	}
-	if res.Error != "empty command" {
-		t.Errorf("expected 'empty command' error, got %q", res.Error)
+}
+
+func TestExecuteGenericVD_QuotedCommand(t *testing.T) {
+	var recordedArgs [][]string
+	oldCliRun := cliRun
+	cliRun = func(args []string, deps cli.Deps) (string, int) {
+		recordedArgs = append(recordedArgs, args)
+		return "", 0
+	}
+	defer func() { cliRun = oldCliRun }()
+
+	ExecuteGenericVD(`action cast wizard "fire ball" --target goblin`, cli.Deps{})
+	if len(recordedArgs) != 1 {
+		t.FailNow()
+	}
+	// Expect quotes stripped
+	want := []string{"action", "cast", "wizard", "fire ball", "--target", "goblin"}
+	for i, arg := range recordedArgs[0] {
+		if arg != want[i] {
+			t.Errorf("argv[%d] = %q, want %q", i, arg, want[i])
+		}
+	}
+}
+
+func TestExecuteGenericVD_EmptyCommand(t *testing.T) {
+	resultJSON := ExecuteGenericVD("", cli.Deps{})
+	var result VDResult
+	json.Unmarshal([]byte(resultJSON), &result)
+	if result.Error == "" {
+		t.Error("Empty command should produce an error field")
 	}
 }

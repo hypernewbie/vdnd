@@ -20,11 +20,14 @@ type Result struct {
 	Matches     []Match `json:"matches"`
 }
 
+var execLookPath = exec.LookPath
+var execCommand = exec.Command
+
 // Search executes ripgrep with the given pattern and optional path.
 // If rg is not installed, a loud warning is printed to stderr.
 func Search(pattern, path string) (*Result, error) {
 	// Detection
-	rgPath, err := exec.LookPath("rg")
+	rgPath, err := execLookPath("rg")
 	installed := err == nil
 
 	result := &Result{
@@ -47,7 +50,7 @@ Falling back to slower Python regex search.
 		path = "rules/"
 	}
 
-	cmd := exec.Command(rgPath, "-n", "-i", pattern, path)
+	cmd := execCommand(rgPath, "-n", "-i", pattern, path)
 	output, err := cmd.Output()
 	if err != nil {
 		// rg returns exit code 1 when no matches are found; treat as empty result

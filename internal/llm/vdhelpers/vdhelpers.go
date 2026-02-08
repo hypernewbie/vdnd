@@ -13,13 +13,15 @@ type VDResult struct {
 	Error    string `json:"error,omitempty"`
 }
 
+var cliRun = cli.Run
+
 // ExecuteGenericVD runs a raw command string via cli.Run.
 func ExecuteGenericVD(cmd string, deps cli.Deps) string {
 	args := cmdparser.Parse(cmd)
 	if len(args) == 0 {
 		return mustJSON(VDResult{Error: "empty command"})
 	}
-	stdout, exitCode := cli.Run(args, deps)
+	stdout, exitCode := cliRun(args, deps)
 	return mustJSON(VDResult{Stdout: stdout, ExitCode: exitCode})
 }
 
