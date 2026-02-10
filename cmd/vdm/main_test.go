@@ -156,6 +156,15 @@ func TestRunCLI_EdgeCases(t *testing.T) {
 	}
 }
 
+type mockRLM struct {
+	response string
+	err      error
+}
+
+func (m *mockRLM) Complete(ctx context.Context, query string, contextData string, history []llmtypes.Message) (string, string, error) {
+	return m.response, "", m.err
+}
+
 func TestRunCLI_LLMMode(t *testing.T) {
 	t.Run("BasicInteraction", func(t *testing.T) {
 		input := "Hello DM\nexit\n"
@@ -167,9 +176,17 @@ func TestRunCLI_LLMMode(t *testing.T) {
 		}
 
 		mockProv := &mockProvider{
-			generateResponse: "Welcome adventurer!",
+			supportsToolCalling: true,
+			toolCallResponse: llmtypes.GenerationResponse{
+				Content:      "Welcome adventurer!",
+				FinishReason: "stop",
+			},
 		}
-		runCLI(context.Background(), in, out, cfg, mockProv, nil, nil, mockDeps(), false)
+		
+		mockResearch := &mockRLM{response: "Research findings"}
+		mockVD := &mockRLM{response: "Welcome adventurer!"}
+
+		runCLI(context.Background(), in, out, cfg, mockProv, mockResearch, mockVD, mockDeps(), false)
 
 		output := out.String()
 		if !strings.Contains(output, "LLM mode enabled") {
@@ -181,6 +198,7 @@ func TestRunCLI_LLMMode(t *testing.T) {
 	})
 
 	t.Run("ProviderError", func(t *testing.T) {
+		// Test behavior when RLM fails
 		input := "Hello DM\nexit\n"
 		in := strings.NewReader(input)
 		out := new(bytes.Buffer)
@@ -189,8 +207,10 @@ func TestRunCLI_LLMMode(t *testing.T) {
 		mockProv := &mockProvider{
 			generateError: fmt.Errorf("api failure"),
 		}
+		mockResearch := &mockRLM{response: "Research findings"}
+		mockVD := &mockRLM{err: fmt.Errorf("api failure")}
 
-		runCLI(context.Background(), in, out, cfg, mockProv, nil, nil, mockDeps(), false)
+		runCLI(context.Background(), in, out, cfg, mockProv, mockResearch, mockVD, mockDeps(), false)
 
 		output := out.String()
 		if !strings.Contains(output, "Error: api failure") {

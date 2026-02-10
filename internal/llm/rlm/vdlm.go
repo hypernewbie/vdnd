@@ -10,10 +10,20 @@ import (
 
 func NewVDLM(provider llmtypes.Provider, deps cli.Deps) *RLM {
 	engine := vdengine.New(deps)
+	
+	// Filter out ripgrep, as VDLM is purely execution
+	allTools := engine.Tools()
+	var vdTools []llmtypes.Tool
+	for _, t := range allTools {
+		if t.Name != "ripgrep" {
+			vdTools = append(vdTools, t)
+		}
+	}
+
 	return NewRLMWithConfig(provider, Config{
 		MaxIterations:  50,
 		MaxDepth:       1,
-		Tools:          engine.Tools(),
+		Tools:          vdTools,
 		ToolHandlers:   VDLMHandlers(engine),
 		SessionFactory: NewVDSessionFactory(deps),
 		SystemPromptBuilder: BuildVDLMSystemPrompt,

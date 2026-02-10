@@ -143,38 +143,25 @@ func TestOrchestrator_PromptContainsVDTools(t *testing.T) {
 
 	o := NewOrchestrator(ctx, p, deps)
 
-
-
 	// Force non-prompt mode to test the standard system prompt
-
 	o.EnablePromptMode(false)
 
 	prompt := o.getSystemPrompt()
 
-	if !strings.Contains(prompt, "vd_action_strike") {
-
-		t.Errorf("System prompt should mention vd_action_strike")
-
+	if !strings.Contains(prompt, "call_vdm_execution") {
+		t.Errorf("System prompt should mention call_vdm_execution")
 	}
 
-	if !strings.Contains(prompt, "NEVER write Python code to simulate combat") {
-
-		t.Errorf("System prompt must forbid Python simulation")
-
+	if !strings.Contains(prompt, "Virtual Dungeon Master (VDM) for a Pathfinder 2nd Edition game") {
+		t.Errorf("System prompt must mention VDM role")
 	}
-
-
 
 	// Test schema mode
-
 	o.EnablePromptMode(true)
 
 	schemaPrompt := o.getSchemaPrompt()
 
-	if !strings.Contains(schemaPrompt, "Do NOT write Python code to simulate combat") {
-
-		t.Errorf("Schema prompt must forbid Python simulation")
-
+	if !strings.Contains(schemaPrompt, "Virtual Dungeon Master (VDM) Supervisor") {
+		t.Errorf("Schema prompt must mention Supervisor")
 	}
-
 }

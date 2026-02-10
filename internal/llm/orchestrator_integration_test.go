@@ -1,7 +1,6 @@
 package llm
 
 import (
-	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -10,6 +9,7 @@ import (
 
 	"uaa/vdnd/internal/cli"
 	"uaa/vdnd/internal/llm/llmtypes"
+	"uaa/vdnd/internal/llm/vdengine"
 	"uaa/vdnd/internal/llm/vdhelpers"
 	"uaa/vdnd/internal/state"
 )
@@ -39,7 +39,7 @@ func createEntityFile(t *testing.T, dir, name, displayName, content string) stri
 	return path
 }
 
-func TestOrchestrator_CombatFlow(t *testing.T) {
+func TestVDEngine_CombatFlow(t *testing.T) {
 	// We need rolls for:
 	// 1. Strike attack roll (1d20) -> 15
 	// 2. Strike damage roll (1d8) -> 5
@@ -60,18 +60,30 @@ func TestOrchestrator_CombatFlow(t *testing.T) {
 - Dex: 3
 `)
 
-	ctx := context.Background()
-	p := NewDummyProvider("test")
-	o := NewOrchestrator(ctx, p, deps)
+	engine := vdengine.New(deps)
 
-		execute := func(name, args string) string {
-			call := llmtypes.ToolCall{
-				Name:      name,
-				Arguments: args,
-			}
-			return o.executeTool(call)
+	execute := func(name, args string) string {
+		call := llmtypes.ToolCall{
+			Name:      name,
+			Arguments: args,
 		}
-		// 1. Create scene
+		stdout, exitCode, _, err := engine.ExecuteTool(call)
+		
+		result := vdhelpers.VDResult{
+			Stdout:   stdout,
+			ExitCode: exitCode,
+		}
+		if err != nil {
+			result.Error = err.Error()
+		} else if exitCode != 0 {
+			result.Error = "Command failed"
+		}
+		
+		b, _ := json.Marshal(result)
+		return string(b)
+	}
+
+	// 1. Create scene
 	execute("vd_scene_new", `{"name": "test_scene"}`)
 
 	// 2. Add entities

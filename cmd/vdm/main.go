@@ -248,7 +248,7 @@ func parseConfig(args []string) (cfg *Config, useDiscord bool, verbose bool, pro
 	return cfg, *useDiscordPtr, *verbosePtr, *promptModeFlag, nil
 }
 
-func runCLI(ctx context.Context, in io.Reader, out io.Writer, cfg *Config, p llmtypes.Provider, researchRLM, vdRLM *rlm.RLM, deps cli.Deps, forcePromptMode bool) {
+func runCLI(ctx context.Context, in io.Reader, out io.Writer, cfg *Config, p llmtypes.Provider, researchRLM, vdRLM llm.RLMCompleter, deps cli.Deps, forcePromptMode bool) {
 	slog.Info("Starting CLI mode...")
 
 	var orch *llm.Orchestrator
@@ -359,7 +359,7 @@ func collectCLIFeedback(in io.Reader, out io.Writer, cfg *Config, p llmtypes.Pro
 	}
 }
 
-func runDiscord(ctx context.Context, cfg *Config, s DiscordSession, p llmtypes.Provider, researchRLM, vdRLM *rlm.RLM, deps cli.Deps, forcePromptMode bool) {
+func runDiscord(ctx context.Context, cfg *Config, s DiscordSession, p llmtypes.Provider, researchRLM, vdRLM llm.RLMCompleter, deps cli.Deps, forcePromptMode bool) {
 	cache := NewMessageCache(100)
 	// Define commands
 	commands := []*discordgo.ApplicationCommand{

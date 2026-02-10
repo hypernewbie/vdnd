@@ -5,3 +5,5 @@ sandbox/
 .venv
 state.json
 coverage.out
+run.sh
+vdm_history.json

@@ -11,8 +11,6 @@ import (
 
 	"uaa/vdnd/internal/cli"
 	"uaa/vdnd/internal/llm/llmtypes"
-	"uaa/vdnd/internal/llm/vdengine"
-	"uaa/vdnd/internal/llm/vdhelpers"
 )
 
 // ErrOrchestratorBusy is returned when the orchestrator is already processing a request.
@@ -32,22 +30,49 @@ type Orchestrator struct {
 	researchRLM  RLMCompleter
 	vdRLM        RLMCompleter
 	deps         cli.Deps
-	engine       *vdengine.VDEngine
 	tools        []llmtypes.Tool
 	history      []llmtypes.Message
 	promptMode   bool
 }
 
+var supervisorTools = []llmtypes.Tool{
+	{
+		Name:        "call_research_assistant",
+		Description: "Call a specialized research agent to look up rules, calculate stats, or inspect the game state using Python. Use this when you are unsure about rules or need to check something before deciding.",
+		Parameters: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"query": map[string]any{"type": "string", "description": "The question or research topic for the assistant."},
+			},
+			"required": []string{"query"},
+		},
+	},
+	{
+		Name:        "call_vdm_execution",
+		Description: "Call the VDM Execution Engine to perform game state changes (attacks, damage, healing, scene management, etc.). Provide the research notes (if any) and the specific instruction.",
+		Parameters: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"instruction":    map[string]any{"type": "string", "description": "The specific instruction for state modification (e.g. 'Hero attacks goblin')."},
+				"research_notes": map[string]any{"type": "string", "description": "Relevant findings from the research assistant to guide execution."},
+			},
+			"required": []string{"instruction"},
+		},
+	},
+	{
+		Name:        "vd_status",
+		Description: "Get the current game state (entities, HP, positions, etc.).",
+	},
+}
+
 // NewOrchestrator creates a new LLM orchestrator.
 func NewOrchestrator(context context.Context, provider llmtypes.Provider, deps cli.Deps) *Orchestrator {
 	promptMode := !provider.SupportsToolCalling()
-	engine := vdengine.New(deps)
 
 	o := &Orchestrator{
 		provider:   provider,
 		deps:       deps,
-		engine:     engine,
-		tools:      engine.Tools(),
+		tools:      supervisorTools,
 		promptMode: promptMode,
 	}
 
@@ -77,50 +102,23 @@ func (o *Orchestrator) getSystemPrompt() string {
 	}
 	return `You are the Virtual Dungeon Master (VDM) for a Pathfinder 2nd Edition game.
 Your goal is to narrate the game and use the provided deterministic tools to manage the game rules.
-Output immersive narration that incorporates the results of your tool calls, and ONLY the narration should be returned in the final response
-(tools are for your internal use to determine the narration, but the user should not see raw tool output or your thought process, ONLY the Dungeon Master narration).
 
-CRITICAL RULES:
-1. **NEVER write Python code to simulate combat, damage, healing, or condition changes.** All mechanical changes must be performed via VD tools.
-2. **Always check the current status** using 'vd_status' if you are unsure about the state.
-3. **Use 'vd_scene_new'** to start a new game if one hasn't started.
-4. **Use 'vd_manual'** to look up the full CLI reference when you need syntax.
-5. **Use 'ripgrep'** to quickly search rule files for specific terms (faster than Python regex).
-6. **For state changes**, call the appropriate structured tool (e.g., 'vd_action_strike', 'vd_damage', 'vd_heal', 'vd_condition_add').
-7. **If a structured tool doesn't exist**, use the generic 'vd' tool with the exact CLI command string.
+AVAILABLE TOOLS:
+- call_research_assistant: Your primary tool. Use this for general research, rule lookups, and checking context.
+- call_vdm_execution: Use this for precise mathematics, complex combat rules, and changing the game state. VD SCENE MAY BE OUDATED, call_research_assistant IS ALWAYS GROUND TRUTH.
+- vd_status: Check the current mechanical state of the game. NOTE: MAY BE OUTDATED. call_research_assistant IS GROUND TRUTH.
 
-AVAILABLE TOOLS (call them directly):
-- vd_scene_new, vd_scene_save, vd_scene_load – scene management
-- vd_status – get current game state
-- vd_action_strike – perform an attack (actor, target, weapon?, map?)
-- vd_damage – apply damage (id, amount, type?)
-- vd_heal – restore HP (id, amount)
-- vd_condition_add – apply a condition (id, condition, value?, duration?, source?)
-- vd – execute any VD CLI command as a raw string (use for commands not covered above)
-- vd_manual – retrieve the full VD CLI manual
-- ripgrep – fast text search in rule files (pattern, path?)
+RULES:
+1. **Narrate results** in an immersive, storytelling way.
+2. **Research First:** Use the research assistant for most questions.
+3. **Execute for Mechanics:** Use the execution engine for combat, math, and tricky rules.
+   - **CRITICAL:** Ensure the VD scene is synced before executing mechanics. If the scene might be outdated (e.g. entities missing), verify with 'vd_status' or instruct the execution engine to "setup" the scene first.
+   - Example: "Setup a scene with a Hero and Goblin, then calculate the attack roll."
 
-EXAMPLES:
-1. Player: "The hero attacks the goblin."
-   → Call vd_status to see current entities.
-   → Call vd_action_strike with {"actor": "hero", "target": "goblin"}.
-   → Narrate the result.
-
-2. Player: "The wizard casts fireball on the room."
-   → Call vd to execute: vd action cast wizard fireball --zone room_a --dc 22 --damage 6d6 --type fire --basic_save
-   → Narrate the outcome.
-
-3. Player: "How does grappling work?"
-   → Call ripgrep with {"pattern": "grapple"} to search rule files.
-   → Read the results, then provide an explanation.
-
-LEGACY MARKER (still works but prefer tools):
-If you want to suggest a command for the user to consider, you can use:
->VD_SUGGEST_CMD command here
-But tool calling is preferred because it executes the command immediately.
-
-NARRATION:
-After each tool call, incorporate the tool's output into your immersive, storytelling narration.
+You should only need call_research_assistant, not call_vdm_execution, most of the time, especially out of combat.
+In combat, you will likely need to use call_vdm_execution for accurate mechanics, but always check if the scene is up to date first.
+You are the storyteller. Use these tools to ensure your story respects the Pathfinder 2e rules.
+Act as the narrator. do not output any other reply text besides the Virtual Dungeon Master narration.
 `
 }
 
@@ -146,33 +144,8 @@ func (o *Orchestrator) ProcessInput(ctx context.Context, input string) (string, 
 		stdout = "No active game session found. A new session must be created."
 	}
 
-	if o.researchRLM != nil && o.vdRLM != nil {
-		// 1. Call Research RLM
-		researchNotes, _, err := o.researchRLM.Complete(runCtx, input, stdout, o.history)
-		if err != nil {
-			slog.Error("Research RLM failed", "error", err)
-			researchNotes = fmt.Sprintf("(Research failed: %v)", err)
-		}
-		slog.Info("RESEARCH_END", "notes", researchNotes)
-
-		// 2. Combine research notes with original query for VDLM
-		vdQuery := fmt.Sprintf("Research notes:\n%s\n\nOriginal request: %s", researchNotes, input)
-
-		// 3. Call VDLM (this will execute VD tools via its own tool-calling loop)
-		finalResp, thinking, err := o.vdRLM.Complete(runCtx, vdQuery, stdout, o.history)
-		if err != nil {
-			return "", err
-		}
-		slog.Info("VDLM_END", "response", finalResp)
-
-		// Process markers (for legacy support)
-		finalResp = o.handleTextMarkers(finalResp)
-
-		// Append to history
-		o.history = append(o.history, llmtypes.Message{Role: "user", Content: input})
-		o.history = append(o.history, llmtypes.Message{Role: "model", Content: finalResp, Thinking: thinking})
-
-		return finalResp, nil
+	if o.researchRLM == nil || o.vdRLM == nil {
+		return "", fmt.Errorf("RLMs not initialized: ResearchRLM=%v, VDLM=%v", o.researchRLM, o.vdRLM)
 	}
 
 	contextInput := fmt.Sprintf("Current Game State:\n%s\n\nUser Input: %s", stdout, input)
@@ -245,7 +218,7 @@ func (o *Orchestrator) generationLoop(ctx context.Context) (string, error) {
 
 			for _, call := range resp.ToolCalls {
 				// Execute tool
-				result := o.executeTool(call)
+				result := o.executeTool(ctx, call)
 
 				// Add tool result to history
 				o.history = append(o.history, llmtypes.Message{
@@ -282,35 +255,13 @@ func (o *Orchestrator) handleTextMarkers(content string) string {
 
 func (o *Orchestrator) getSchemaPrompt() string {
 	var sb strings.Builder
-	sb.WriteString("You are the Virtual Dungeon Master (VDM) for a Pathfinder 2nd Edition game.\n")
-	sb.WriteString("Your goal is to narrate the game and use tools to manage rules.\n\n")
-	sb.WriteString("REASONING:\n")
-	sb.WriteString("Before responding, you should \"think\" inside <thought> tags.\n\n")
-	sb.WriteString("CRITICAL: Do NOT write Python code to simulate combat, damage, healing, or condition changes.\n")
-	sb.WriteString("All mechanical changes MUST be performed via VD tools listed below.\n")
-	sb.WriteString("Python is only for rule lookup when ripgrep is unavailable.\n\n")
-	sb.WriteString("You MUST respond in valid JSON format only when you need to call a tool.\n")
-	sb.WriteString("JSON Schema for tool calls:\n")
-	sb.WriteString("{\n")
-	sb.WriteString("  \"tool\": \"tool_name\",\n")
-	sb.WriteString("  \"arguments\": { \"param1\": \"value1\" },\n")
-	sb.WriteString("  \"narration\": \"Your immersive narration of what is happening\"\n")
-	sb.WriteString("}\n\n")
+	sb.WriteString("You are the Virtual Dungeon Master (VDM) Supervisor.\n")
+	sb.WriteString("Manage the game by calling 'call_research_assistant' for rules and 'call_vdm_execution' for actions.\n")
+	sb.WriteString("Respond in JSON.\n\n")
 	sb.WriteString("Available Tools:\n")
 	for _, t := range o.tools {
 		sb.WriteString(fmt.Sprintf("- %s: %s\n", t.Name, t.Description))
-		if t.Parameters != nil {
-			if props, ok := t.Parameters["properties"].(map[string]any); ok {
-				sb.WriteString("  Parameters:\n")
-				for k, v := range props {
-					prop := v.(map[string]any)
-					sb.WriteString(fmt.Sprintf("    - %s (%s): %s\n", k, prop["type"], prop["description"]))
-				}
-			}
-		}
 	}
-	sb.WriteString("\nIf no tool is needed, respond with JSON where 'tool' is empty and 'narration' contains your response.\n")
-	sb.WriteString("Do not include any text outside the JSON object.\n")
 	return sb.String()
 }
 
@@ -350,55 +301,75 @@ func (o *Orchestrator) parseJSONResponse(content string) llmtypes.GenerationResp
 	}
 }
 
-func (o *Orchestrator) executeTool(call llmtypes.ToolCall) string {
+func (o *Orchestrator) executeTool(ctx context.Context, call llmtypes.ToolCall) string {
 	start := time.Now()
-	stdout, exitCode, cmdArgs, err := o.engine.ExecuteTool(call)
-	if err != nil {
-		return errorJSON(err.Error())
+	var stdout string
+
+	// Default status context (the Orchestrator's view)
+	// We might want to pass this to sub-agents or let them fetch it themselves.
+	// Currently RLM.Complete takes `contextData` string.
+	statusOut, _ := cli.Run([]string{"status"}, o.deps)
+
+	switch call.Name {
+	case "call_research_assistant":
+		var args struct {
+			Query string `json:"query"`
+		}
+		if err := json.Unmarshal([]byte(call.Arguments), &args); err != nil {
+			stdout = fmt.Sprintf("Error parsing arguments: %v", err)
+		} else {
+			// Call Research RLM
+			// We pass the current history? Or just empty history?
+			// The sub-agent has its own prompt. Passing o.history might be too much noise if it contains raw tool calls.
+			// But RLM.Complete signature expects history.
+			// Let's pass o.history so it sees the conversation context.
+			resp, _, rErr := o.researchRLM.Complete(ctx, args.Query, statusOut, o.history)
+			if rErr != nil {
+				stdout = fmt.Sprintf("Research failed: %v", rErr)
+			} else {
+				stdout = resp
+			}
+		}
+
+	case "call_vdm_execution":
+		var args struct {
+			Instruction   string `json:"instruction"`
+			ResearchNotes string `json:"research_notes"`
+		}
+		if err := json.Unmarshal([]byte(call.Arguments), &args); err != nil {
+			stdout = fmt.Sprintf("Error parsing arguments: %v", err)
+		} else {
+			// Construct query for VDLM
+			vdQuery := fmt.Sprintf("Research notes:\n%s\n\nInstruction: %s", args.ResearchNotes, args.Instruction)
+			resp, _, vErr := o.vdRLM.Complete(ctx, vdQuery, statusOut, o.history)
+			if vErr != nil {
+				stdout = fmt.Sprintf("Execution failed: %v", vErr)
+			} else {
+				stdout = resp
+			}
+		}
+
+	case "vd_status":
+		stdout = statusOut
+
+	default:
+		stdout = fmt.Sprintf("Unknown tool: %s", call.Name)
 	}
 
 	duration := time.Since(start)
 
-	// Create a summary of the result (first 100 chars)
-	resultSummary := stdout
-	if len(resultSummary) > 100 {
-		resultSummary = resultSummary[:100] + "..."
-	}
-
 	pName, pModel := o.ProviderInfo()
 
-	slog.Info("TOOL_CALL",
+	slog.Info("SUPERVISOR_TOOL_CALL",
 		"tool", call.Name,
 		"arguments", call.Arguments,
-		"mapped_args", cmdArgs,
 		"stdout_len", len(stdout),
-		"result_summary", resultSummary,
-		"exit_code", exitCode,
 		"duration_ms", duration.Milliseconds(),
 		"provider", pName,
 		"model", pModel,
 	)
 
-	result := vdhelpers.VDResult{
-		Stdout:   stdout,
-		ExitCode: exitCode,
-	}
-	if exitCode != 0 && result.Error == "" {
-		result.Error = "Command failed (non-zero exit)"
-	}
-	b, _ := json.Marshal(result)
-	return string(b)
-}
-
-// Helper for error responses
-func errorJSON(msg string) string {
-	result := vdhelpers.VDResult{
-		Stdout:   "",
-		ExitCode: 1,
-		Error:    msg,
-	}
-	b, _ := json.Marshal(result)
-	return string(b)
+	return stdout
 }
 
 // Close cleans up the LLM client.
