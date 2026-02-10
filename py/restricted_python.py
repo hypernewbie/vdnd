@@ -6,6 +6,8 @@ import traceback
 import re
 import random
 import math
+import subprocess
+import shutil
 from contextlib import redirect_stdout
 from RestrictedPython import compile_restricted
 from RestrictedPython.Guards import safe_builtins, full_write_guard, safer_getattr, guarded_iter_unpack_sequence
@@ -50,7 +52,12 @@ class UniversalPrint:
     def __init__(self, _getattr_=None):
         pass
     def __call__(self, *args, **kwargs):
-        # RestrictedPython calls _print_(_getattr_) to get the printer
+        # Bootstrap call: RestrictedPython calls _print_(_getattr_)
+        if len(args) == 1 and not kwargs and callable(args[0]):
+            return self
+        # Print function call
+        if args or kwargs:
+            print(*args, **kwargs)
         return self
     def _call_print(self, *args, **kwargs):
         print(*args, **kwargs)
@@ -101,6 +108,13 @@ class SandboxREPL:
         self.globals_dict["max"] = max
         self.globals_dict["sum"] = sum
         self.globals_dict["dir"] = dir
+        self.globals_dict["enumerate"] = enumerate
+        self.globals_dict["hasattr"] = hasattr
+        self.globals_dict["type"] = type
+        self.globals_dict["list"] = list
+        self.globals_dict["dict"] = dict
+        self.globals_dict["locals"] = lambda: self.locals_dict
+        self.globals_dict["globals"] = lambda: self.globals_dict
         
         def guarded_import(name, globals=None, locals=None, fromlist=(), level=0):
             if name in ("re", "json", "random", "math"):
@@ -126,15 +140,56 @@ class SandboxREPL:
         # Recursive LLM callback
         self.globals_dict["recursive_llm"] = self.recursive_llm
         
-        
         # Files inspection helper
         self.globals_dict["list_dir"] = self.list_dir
         self.globals_dict["search_files"] = self.search_files
+        self.globals_dict["ripgrep"] = self.ripgrep
         
         # Ensure we have a reference to builtins that RestrictedPython expects
         self.globals_dict["__builtins__"] = self.globals_dict.copy()
         
         self.locals_dict = {}
+
+    def ripgrep(self, pattern, path="rules/"):
+        """
+        Search for text in rule files using ripgrep (fast).
+        Returns a list of match strings, grouped by file.
+        """
+        # Ensure path is allowed
+        abs_path = os.path.realpath(os.path.join(PROJECT_ROOT, path))
+        allowed = False
+        for allowed_dir in ALLOWED_DIRS:
+            if abs_path.startswith(allowed_dir):
+                allowed = True
+                break
+        
+        if not allowed:
+             raise PermissionError(f"Access to '{path}' is not allowed")
+
+        rg_path = shutil.which("rg")
+        if not rg_path:
+            return ["error: ripgrep (rg) not found on system"]
+
+        try:
+            # Use --heading to group matches by file, and --color never for clean text
+            result = subprocess.run(
+                [rg_path, "--heading", "--line-number", "--color", "never", "-i", pattern, abs_path],
+                capture_output=True,
+                text=True,
+                check=False
+            )
+            
+            if result.returncode == 1: # No matches
+                return []
+            
+            if result.returncode != 0:
+                return ["error: " + (result.stderr.strip() or "Unknown ripgrep error")]
+
+            # Ripgrep with --heading separates files with empty lines
+            blocks = result.stdout.strip().split("\n\n")
+            return blocks
+        except Exception as e:
+            return ["error: " + str(e)]
 
     def list_dir(self, path="."):
         """

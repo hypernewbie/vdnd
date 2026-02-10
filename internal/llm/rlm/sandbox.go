@@ -8,22 +8,22 @@ import (
 	"uaa/vdnd/internal/llm/llmtypes"
 )
 
-func NewResearchRLM(provider llmtypes.Provider, pythonPath, scriptPath string) *RLM {
+func NewSandboxRLM(provider llmtypes.Provider, pythonPath, scriptPath string, promptBuilder SystemPromptBuilder) *RLM {
 	return NewRLMWithConfig(provider, Config{
-		MaxIterations: 100,
-		MaxDepth:      1,
-		Tools:         ResearchTools(),
-		ToolHandlers:  ResearchHandlers(),
-		SessionFactory: NewREPLSessionFactory(pythonPath, scriptPath),
-		SystemPromptBuilder: BuildDMSystemPrompt,
+		MaxIterations:       100,
+		MaxDepth:            1,
+		Tools:               SandboxTools(),
+		ToolHandlers:        SandboxHandlers(),
+		SessionFactory:      NewREPLSessionFactory(pythonPath, scriptPath),
+		SystemPromptBuilder: promptBuilder,
 	})
 }
 
-func ResearchTools() []llmtypes.Tool {
+func SandboxTools() []llmtypes.Tool {
 	return []llmtypes.Tool{
 		{
 			Name:        "execute_python",
-			Description: "Execute Python code in the persistent sandbox environment to explore context, search rules, or perform calculations. Use this for research and rule lookups ONLY. Do NOT attempt to simulate game state changes in Python.",
+			Description: "Execute Python code in the persistent sandbox environment to explore context, search rules, or perform calculations. Use this for sandbox and rule lookups ONLY. Do NOT attempt to simulate game state changes in Python.",
 			Parameters: map[string]any{
 				"type": "object",
 				"properties": map[string]map[string]any{
@@ -35,22 +35,10 @@ func ResearchTools() []llmtypes.Tool {
 				"required": []string{"code"},
 			},
 		},
-		{
-			Name:        "ripgrep",
-			Description: "Search for text in rule files using ripgrep (fast).",
-			Parameters: map[string]any{
-				"type": "object",
-				"properties": map[string]any{
-					"pattern": map[string]any{"type": "string", "description": "Search pattern (regex)"},
-					"path":    map[string]any{"type": "string", "description": "Directory to search (default: 'rules/')"},
-				},
-				"required": []any{"pattern"},
-			},
-		},
 	}
 }
 
-func ResearchHandlers() map[string]ToolHandler {
+func SandboxHandlers() map[string]ToolHandler {
 	return map[string]ToolHandler{
 		"execute_python": func(ctx context.Context, call llmtypes.ToolCall, session any) (string, error) {
 			repl, ok := session.(*REPLExecutor)
@@ -86,7 +74,6 @@ func ResearchHandlers() map[string]ToolHandler {
 			slog.Info("REPL_EXECUTE", "output", observation)
 			return observation, nil
 		},
-		"ripgrep": RipgrepHandler,
 	}
 }
 

@@ -93,13 +93,23 @@ func (m *mockProvider) GenerateWithTools(ctx context.Context, messages []llmtype
 	return m.toolCallResponse, m.generateError
 }
 
+type mockRLM struct {
+	response string
+	thinking string
+	err      error
+}
+
+func (m *mockRLM) Complete(ctx context.Context, query string, contextData string, history []llmtypes.Message) (string, string, error) {
+	return m.response, m.thinking, m.err
+}
+
 func TestRunCLI_EchoLoop(t *testing.T) {
 	input := "echo hello world\nexit\n"
 	in := strings.NewReader(input)
 	out := new(bytes.Buffer)
 	cfg := &Config{LLMProvider: "none"}
 
-	runCLI(context.Background(), in, out, cfg, nil, nil, nil, mockDeps(), false)
+	runCLI(context.Background(), in, out, cfg, nil, nil, nil, mockDeps())
 
 	outputStr := out.String()
 	if !strings.Contains(outputStr, "Standard CLI mode enabled") {
@@ -144,7 +154,7 @@ func TestRunCLI_EdgeCases(t *testing.T) {
 			out := new(bytes.Buffer)
 			cfg := &Config{LLMProvider: "none"}
 
-			runCLI(context.Background(), in, out, cfg, nil, nil, nil, mockDeps(), false)
+			runCLI(context.Background(), in, out, cfg, nil, nil, nil, mockDeps())
 
 			output := out.String()
 			for _, exp := range tt.expected {
@@ -156,15 +166,7 @@ func TestRunCLI_EdgeCases(t *testing.T) {
 	}
 }
 
-type mockRLM struct {
-	response string
-	err      error
-}
-
-func (m *mockRLM) Complete(ctx context.Context, query string, contextData string, history []llmtypes.Message) (string, string, error) {
-	return m.response, "", m.err
-}
-
+// TestRunCLI_LLMMode tests the CLI with LLM providers
 func TestRunCLI_LLMMode(t *testing.T) {
 	t.Run("BasicInteraction", func(t *testing.T) {
 		input := "Hello DM\nexit\n"
@@ -173,6 +175,7 @@ func TestRunCLI_LLMMode(t *testing.T) {
 		cfg := &Config{
 			LLMProvider: "mock",
 			LLMModel:    "test-model",
+			HistoryFile: t.TempDir() + "/history.json",
 		}
 
 		mockProv := &mockProvider{
@@ -182,11 +185,9 @@ func TestRunCLI_LLMMode(t *testing.T) {
 				FinishReason: "stop",
 			},
 		}
-		
-		mockResearch := &mockRLM{response: "Research findings"}
-		mockVD := &mockRLM{response: "Welcome adventurer!"}
 
-		runCLI(context.Background(), in, out, cfg, mockProv, mockResearch, mockVD, mockDeps(), false)
+		mockRLMInst := &mockRLM{response: "Welcome adventurer!"}
+		runCLI(context.Background(), in, out, cfg, mockProv, mockRLMInst, mockRLMInst, mockDeps())
 
 		output := out.String()
 		if !strings.Contains(output, "LLM mode enabled") {
@@ -202,15 +203,14 @@ func TestRunCLI_LLMMode(t *testing.T) {
 		input := "Hello DM\nexit\n"
 		in := strings.NewReader(input)
 		out := new(bytes.Buffer)
-		cfg := &Config{LLMProvider: "mock"}
-
-		mockProv := &mockProvider{
-			generateError: fmt.Errorf("api failure"),
+		cfg := &Config{
+			LLMProvider: "mock",
+			HistoryFile: t.TempDir() + "/history.json",
 		}
-		mockResearch := &mockRLM{response: "Research findings"}
-		mockVD := &mockRLM{err: fmt.Errorf("api failure")}
+		mockProv := &mockProvider{}
+		mockRLMInst := &mockRLM{err: fmt.Errorf("api failure")}
 
-		runCLI(context.Background(), in, out, cfg, mockProv, mockResearch, mockVD, mockDeps(), false)
+		runCLI(context.Background(), in, out, cfg, mockProv, mockRLMInst, mockRLMInst, mockDeps())
 
 		output := out.String()
 		if !strings.Contains(output, "Error: api failure") {
@@ -261,7 +261,7 @@ func TestParseConfig(t *testing.T) {
 	t.Run("FlagOverrides", func(t *testing.T) {
 		t.Setenv("LLM_PROVIDER", "groq")
 		args := []string{"-provider", "gemini", "-discord", "-verbose"}
-		cfg, useDiscord, verbose, promptMode, err := parseConfig(args)
+		cfg, useDiscord, verbose, err := parseConfig(args)
 		if err != nil {
 			t.Fatalf("parseConfig failed: %v", err)
 		}
@@ -272,12 +272,11 @@ func TestParseConfig(t *testing.T) {
 		if !useDiscord || !verbose {
 			t.Errorf("Expected flags true, got useDiscord=%v, verbose=%v", useDiscord, verbose)
 		}
-		_ = promptMode
 	})
 
 	t.Run("InvalidFlag", func(t *testing.T) {
 		args := []string{"-invalid"}
-		_, _, _, _, err := parseConfig(args)
+		_, _, _, err := parseConfig(args)
 		if err == nil {
 			t.Errorf("Expected error for invalid flag")
 		}
@@ -297,7 +296,7 @@ func TestRunDiscord(t *testing.T) {
 		cancel()
 	}()
 
-	runDiscord(ctx, cfg, m, nil, nil, nil, mockDeps(), false)
+	runDiscord(ctx, cfg, m, nil, nil, nil, mockDeps())
 
 	if len(m.commandsCreated) == 0 {
 		t.Errorf("Expected commands to be created")
@@ -475,27 +474,62 @@ func TestDiscordHandlers(t *testing.T) {
 
 	})
 
-	t.Run("HandleInteraction_NonEcho", func(t *testing.T) {
-
+	t.Run("HandleInteraction_vcomment", func(t *testing.T) {
 		m := &mockDiscordSession{}
-
-		handler := handleInteraction(m, nil, false, NewMessageCache(10))
+		cache := NewMessageCache(10)
+		handler := handleInteraction(m, nil, false, cache)
 
 		i := &discordgo.InteractionCreate{
-
 			Interaction: &discordgo.Interaction{
-
 				Type: discordgo.InteractionApplicationCommand,
-
 				Data: discordgo.ApplicationCommandInteractionData{
-
-					Name: "unknown",
+					Name: "vcomment",
+					Options: []*discordgo.ApplicationCommandInteractionDataOption{
+						{
+							Type:  discordgo.ApplicationCommandOptionString,
+							Value: "Unit test comment",
+						},
+					},
 				},
+				Member: &discordgo.Member{
+					User: &discordgo.User{ID: "user-id", Username: "tester"},
+				},
+				GuildID:   "guild-id",
+				ChannelID: "channel-id",
+				ID:        "interaction-id",
 			},
 		}
 
 		handler(nil, i)
 
+		// Check if message was added to cache
+		msgs := cache.Get("channel-id")
+		if len(msgs) != 1 {
+			t.Errorf("Expected 1 message in cache, got %d", len(msgs))
+		} else if msgs[0].Content != "Unit test comment" {
+			t.Errorf("Expected message content 'Unit test comment', got '%s'", msgs[0].Content)
+		}
+	})
+
+	t.Run("HandleMessageCreate_NoAutoCache", func(t *testing.T) {
+		cache := NewMessageCache(10)
+		handler := handleMessageCreate(cache)
+
+		m := &discordgo.MessageCreate{
+			Message: &discordgo.Message{
+				Content:   "Automatic message",
+				ChannelID: "channel-id",
+				Author:    &discordgo.User{ID: "user-id", Bot: false},
+			},
+		}
+
+		handler(nil, m)
+
+		// Check if message was NOT added to cache
+		msgs := cache.Get("channel-id")
+		if len(msgs) != 0 {
+			t.Errorf("Expected 0 messages in cache, got %d", len(msgs))
+		}
 	})
 
 }

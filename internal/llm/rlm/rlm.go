@@ -7,7 +7,6 @@ import (
 	"log/slog"
 
 	"uaa/vdnd/internal/llm/llmtypes"
-	"uaa/vdnd/internal/llm/ripgrep"
 )
 
 // ToolHandler processes a tool call, returning the observation string.
@@ -46,21 +45,8 @@ var RLMTools = []llmtypes.Tool{
 			"required": []string{"code"},
 		},
 	},
-	{
-		Name:        "ripgrep",
-		Description: "Search for text in rule files using ripgrep (fast). If rg is not installed, a loud warning will be printed.",
-		Parameters: map[string]any{
-			"type": "object",
-			"properties": map[string]any{
-				"pattern": map[string]any{"type": "string", "description": "Search pattern (regex)"},
-				"path":    map[string]any{"type": "string", "description": "Directory to search (default: 'rules/')"},
-			},
-			"required": []any{"pattern"},
-		},
-	},
 }
 
-// RLM implementation.
 type RLM struct {
 	provider       llmtypes.Provider
 	maxIterations  int
@@ -70,11 +56,6 @@ type RLM struct {
 	handlers       map[string]ToolHandler
 	sessionFactory SessionFactory
 	promptBuilder  SystemPromptBuilder
-}
-
-// NewRLM creates a new RLM instance with default research configuration.
-func NewRLM(provider llmtypes.Provider, pythonPath, scriptPath string) *RLM {
-	return NewResearchRLM(provider, pythonPath, scriptPath)
 }
 
 // NewRLMWithConfig creates a new RLM instance with the given config.
@@ -88,6 +69,7 @@ func NewRLMWithConfig(provider llmtypes.Provider, cfg Config) *RLM {
 	if cfg.SystemPromptBuilder == nil {
 		panic("SystemPromptBuilder must be provided")
 	}
+
 	return &RLM{
 		provider:       provider,
 		maxIterations:  cfg.MaxIterations,
@@ -119,7 +101,7 @@ func (r *RLM) Complete(ctx context.Context, query string, contextData string, hi
 		}
 	}
 
-	// Session initialization for Research RLM (Python REPL)
+	// Session initialization for Sandbox RLM (Python REPL)
 	if repl, ok := session.(*REPLExecutor); ok {
 		// Handle recursive calls
 		repl.RecursiveHandler = func(q, c string) (string, error) {
@@ -207,23 +189,10 @@ func (r *RLM) Complete(ctx context.Context, query string, contextData string, hi
 
 // Common handlers
 
-func RipgrepHandler(ctx context.Context, call llmtypes.ToolCall, session any) (string, error) {
-	var args struct {
-		Pattern string `json:"pattern"`
-		Path    string `json:"path"`
-	}
-	if err := json.Unmarshal([]byte(call.Arguments), &args); err != nil {
-		return "", err
-	}
-	
-	slog.Info("TOOL_CALL",
-		"tool", "ripgrep",
-		"arguments", call.Arguments,
-	)
-	
-	result, err := ripgrep.Search(args.Pattern, args.Path)
-	if err != nil {
-		return fmt.Sprintf("Ripgrep error: %v", err), nil
-	}
-	return result.ToJSON(), nil
+func (r *RLM) ToolHandlers() map[string]ToolHandler {
+	return r.handlers
+}
+
+func (r *RLM) Tools() []llmtypes.Tool {
+	return r.tools
 }

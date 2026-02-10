@@ -2,31 +2,24 @@ package rlm
 
 import (
 	"context"
+	"encoding/json"
 	"log/slog"
+
 	"uaa/vdnd/internal/cli"
 	"uaa/vdnd/internal/llm/llmtypes"
 	"uaa/vdnd/internal/llm/vdengine"
+	"uaa/vdnd/internal/llm/vdhelpers"
 )
 
-func NewVDLM(provider llmtypes.Provider, deps cli.Deps) *RLM {
+func NewVDLM(provider llmtypes.Provider, deps cli.Deps, promptBuilder SystemPromptBuilder) *RLM {
 	engine := vdengine.New(deps)
-	
-	// Filter out ripgrep, as VDLM is purely execution
-	allTools := engine.Tools()
-	var vdTools []llmtypes.Tool
-	for _, t := range allTools {
-		if t.Name != "ripgrep" {
-			vdTools = append(vdTools, t)
-		}
-	}
-
 	return NewRLMWithConfig(provider, Config{
-		MaxIterations:  50,
-		MaxDepth:       1,
-		Tools:          vdTools,
-		ToolHandlers:   VDLMHandlers(engine),
-		SessionFactory: NewVDSessionFactory(deps),
-		SystemPromptBuilder: BuildVDLMSystemPrompt,
+		MaxIterations:       50,
+		MaxDepth:            1,
+		Tools:               engine.Tools(),
+		ToolHandlers:        VDLMHandlers(engine),
+		SessionFactory:      NewVDSessionFactory(deps),
+		SystemPromptBuilder: promptBuilder,
 	})
 }
 
@@ -49,11 +42,15 @@ func VDLMHandlers(engine *vdengine.VDEngine) map[string]ToolHandler {
 				"exit_code", exitCode,
 			)
 
-			// VDEngine.ExecuteTool for ripgrep returns the JSON result directly
-			// For others it returns stdout. We should probably wrap in VDResult 
-			// if it's not already, but vdengine.ExecuteTool is generic.
-			// Actually VDLM expectation is the observation string.
-			return stdout, nil
+			res := vdhelpers.VDResult{
+				Stdout:   stdout,
+				ExitCode: exitCode,
+			}
+			if exitCode != 0 {
+				res.Error = "Command failed"
+			}
+			b, _ := json.Marshal(res)
+			return string(b), nil
 		}
 	}
 	return handlers
@@ -61,7 +58,7 @@ func VDLMHandlers(engine *vdengine.VDEngine) map[string]ToolHandler {
 
 func NewVDSessionFactory(deps cli.Deps) SessionFactory {
 	return func() (any, func(), error) {
-		// VDLM doesn't need special session state per call for now, 
+		// VDLM doesn't need special session state per call for now,
 		// as engine holds deps.
 		return deps, nil, nil
 	}

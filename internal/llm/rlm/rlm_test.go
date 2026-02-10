@@ -66,8 +66,8 @@ func TestRLMStepByStep(t *testing.T) {
 
 	rlm := NewRLMWithConfig(mock, Config{
 		MaxIterations:  5,
-		Tools:          ResearchTools(),
-		ToolHandlers:   ResearchHandlers(),
+		Tools:          SandboxTools(),
+		ToolHandlers:   SandboxHandlers(),
 		SessionFactory: NewREPLSessionFactory(pythonPath, scriptPath),
 		SystemPromptBuilder: func(size, depth int) string {
 			return "Mock Prompt"
@@ -122,8 +122,8 @@ func TestRLMRecursion(t *testing.T) {
 	rlm := NewRLMWithConfig(mock, Config{
 		MaxIterations:  5,
 		MaxDepth:       2,
-		Tools:          ResearchTools(),
-		ToolHandlers:   ResearchHandlers(),
+		Tools:          SandboxTools(),
+		ToolHandlers:   SandboxHandlers(),
 		SessionFactory: NewREPLSessionFactory(pythonPath, scriptPath),
 		SystemPromptBuilder: func(size, depth int) string {
 			return "Mock Prompt"

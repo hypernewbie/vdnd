@@ -1,6 +1,7 @@
 package llm
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -9,7 +10,7 @@ import (
 
 	"uaa/vdnd/internal/cli"
 	"uaa/vdnd/internal/llm/llmtypes"
-	"uaa/vdnd/internal/llm/vdengine"
+	"uaa/vdnd/internal/llm/rlm"
 	"uaa/vdnd/internal/llm/vdhelpers"
 	"uaa/vdnd/internal/state"
 )
@@ -44,7 +45,7 @@ func TestVDEngine_CombatFlow(t *testing.T) {
 	// 1. Strike attack roll (1d20) -> 15
 	// 2. Strike damage roll (1d8) -> 5
 	deps := newTestDeps(t, []int{15, 5})
-	
+
 	heroPath := createEntityFile(t, deps.Cwd, "hero.md", "Hero", `
 - HP: 20/20
 - AC: 15
@@ -60,27 +61,27 @@ func TestVDEngine_CombatFlow(t *testing.T) {
 - Dex: 3
 `)
 
-	engine := vdengine.New(deps)
+	// Create a VDLM to test the tools in the same way the orchestrator would
+	ctx := context.Background()
+	p := NewDummyProvider("test")
+	vdRLM := rlm.NewVDLM(p, deps, func(ctxSize, depth int) string { return "test prompt" })
 
 	execute := func(name, args string) string {
 		call := llmtypes.ToolCall{
 			Name:      name,
 			Arguments: args,
 		}
-		stdout, exitCode, _, err := engine.ExecuteTool(call)
-		
-		result := vdhelpers.VDResult{
-			Stdout:   stdout,
-			ExitCode: exitCode,
+
+		// Use VDLM handlers to exercise the tool-to-args mapping and execution logic
+		handler := vdRLM.ToolHandlers()[name]
+		if handler == nil {
+			t.Fatalf("No handler for tool %s", name)
 		}
+		res, err := handler(ctx, call, nil)
 		if err != nil {
-			result.Error = err.Error()
-		} else if exitCode != 0 {
-			result.Error = "Command failed"
+			t.Fatalf("Tool call failed: %v", err)
 		}
-		
-		b, _ := json.Marshal(result)
-		return string(b)
+		return res
 	}
 
 	// 1. Create scene
@@ -123,7 +124,7 @@ func TestVDEngine_CombatFlow(t *testing.T) {
 
 	// 6. Apply more damage
 	execute("vd_damage", `{"id": "goblin", "amount": 5}`)
-	
+
 	// 7. Final status
 	res = execute("vd_status", "{}")
 	json.Unmarshal([]byte(res), &result)

@@ -2,7 +2,9 @@ package rlm
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -61,6 +63,57 @@ func TestREPLExecutor(t *testing.T) {
 		}
 		if result.Stdout == "" {
 			t.Error("Expected some stdout content, got empty string")
+		}
+	})
+
+	t.Run("Ripgrep", func(t *testing.T) {
+		// Use the sandbox directory for testing ripgrep
+		sandboxFile := filepath.Join(absRoot, "sandbox", "test_rg.md")
+		os.WriteFile(sandboxFile, []byte("The secret word is Antigravity"), 0644)
+		defer os.Remove(sandboxFile)
+
+		result, err := executor.Execute("res = ripgrep('Antigravity', 'sandbox/'); print(res[0])")
+		if err != nil {
+			t.Errorf("Execute failed: %v", err)
+		}
+		if !strings.Contains(result.Stdout, "sandbox/test_rg.md") {
+			t.Errorf("Expected filename in stdout, got %q", result.Stdout)
+		}
+		if !strings.Contains(result.Stdout, "The secret word is Antigravity") {
+			t.Errorf("Expected match in stdout, got %q", result.Stdout)
+		}
+	})
+	t.Run("Enumerate", func(t *testing.T) {
+		result, err := executor.Execute("l = ['a', 'b']; print(list(enumerate(l)))")
+		if err != nil {
+			t.Errorf("Execute failed: %v", err)
+		}
+		if !strings.Contains(result.Stdout, "[(0, 'a'), (1, 'b')]") {
+			t.Errorf("Expected enumerate output, got %q", result.Stdout)
+		}
+	})
+
+	t.Run("Extended Builtins", func(t *testing.T) {
+		code := `
+print(f"type: {type([]) is list}")
+print(f"hasattr: {hasattr([], 'append')}")
+print(f"locals: {'x' in locals()}")
+print(f"globals: {'list_dir' in globals()}")
+`
+		result, err := executor.Execute(code)
+		if err != nil {
+			t.Errorf("Execute failed: %v", err)
+		}
+		expected := []string{
+			"type: True",
+			"hasattr: True",
+			"locals: True",
+			"globals: True",
+		}
+		for _, e := range expected {
+			if !strings.Contains(result.Stdout, e) {
+				t.Errorf("Expected %q in stdout, got %q", e, result.Stdout)
+			}
 		}
 	})
 }

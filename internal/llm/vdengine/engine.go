@@ -6,7 +6,6 @@ import (
 	"strconv"
 	"uaa/vdnd/internal/cli"
 	"uaa/vdnd/internal/llm/llmtypes"
-	"uaa/vdnd/internal/llm/ripgrep"
 	"uaa/vdnd/internal/llm/vdhelpers"
 )
 
@@ -138,18 +137,6 @@ func (e *VDEngine) Tools() []llmtypes.Tool {
 			Description: "Retrieve the full VD CLI manual (vd_manual.md).",
 			Parameters:  nil,
 		},
-		{
-			Name:        "ripgrep",
-			Description: "Search for text in rule files using ripgrep (fast). If rg is not installed, a loud warning will be printed.",
-			Parameters: map[string]any{
-				"type": "object",
-				"properties": map[string]any{
-					"pattern": map[string]any{"type": "string", "description": "Search pattern (regex)"},
-					"path":    map[string]any{"type": "string", "description": "Directory to search (default: 'rules/')"},
-				},
-				"required": []any{"pattern"},
-			},
-		},
 	}
 }
 
@@ -178,21 +165,6 @@ func (e *VDEngine) ExecuteTool(call llmtypes.ToolCall) (stdout string, exitCode 
 		}
 		return content, 0, nil, nil
 
-	case "ripgrep":
-		var args map[string]any
-		if err := json.Unmarshal([]byte(call.Arguments), &args); err != nil {
-			return "", 1, nil, fmt.Errorf("error parsing arguments: %w", err)
-		}
-		pattern, _ := args["pattern"].(string)
-		path, _ := args["path"].(string)
-		if pattern == "" {
-			return "", 1, nil, fmt.Errorf("missing 'pattern' field")
-		}
-		result, err := ripgrep.Search(pattern, path)
-		if err != nil {
-			return "", 1, nil, fmt.Errorf("ripgrep search failed: %w", err)
-		}
-		return result.ToJSON(), 0, nil, nil
 	}
 
 	cmdArgs = e.mapToolToArgs(call)

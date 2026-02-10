@@ -1,7 +1,6 @@
 package llm
 
 import (
-	"context"
 	"fmt"
 	"io"
 	"strings"
@@ -130,38 +129,5 @@ func TestOrchestrator_TruncateHistory(t *testing.T) {
 	}
 	if totalSize > 10*1024 {
 		t.Errorf("Total size %d exceeds 10KB limit", totalSize)
-	}
-}
-
-func TestOrchestrator_PromptContainsVDTools(t *testing.T) {
-
-	deps := cli.DefaultDeps()
-
-	ctx := context.Background()
-
-	p := NewDummyProvider("test")
-
-	o := NewOrchestrator(ctx, p, deps)
-
-	// Force non-prompt mode to test the standard system prompt
-	o.EnablePromptMode(false)
-
-	prompt := o.getSystemPrompt()
-
-	if !strings.Contains(prompt, "call_vdm_execution") {
-		t.Errorf("System prompt should mention call_vdm_execution")
-	}
-
-	if !strings.Contains(prompt, "Virtual Dungeon Master (VDM) for a Pathfinder 2nd Edition game") {
-		t.Errorf("System prompt must mention VDM role")
-	}
-
-	// Test schema mode
-	o.EnablePromptMode(true)
-
-	schemaPrompt := o.getSchemaPrompt()
-
-	if !strings.Contains(schemaPrompt, "Virtual Dungeon Master (VDM) Supervisor") {
-		t.Errorf("Schema prompt must mention Supervisor")
 	}
 }

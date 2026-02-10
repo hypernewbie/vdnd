@@ -65,20 +65,22 @@ func saveFeedback(f Feedback) error {
 
 // Config holds the application configuration
 type Config struct {
-	Token          string `env:"DISCORD_TOKEN"`
-	RemoveCommands bool   `env:"DISCORD_REMOVE_COMMANDS" envDefault:"true"`
-	GeminiKey      string `env:"GEMINI_API_KEY"`
-	GroqKey        string `env:"GROQ_API_KEY"`
-	DeepSeekKey    string `env:"DEEPSEEK_API_KEY"`
-	GLMKey         string `env:"GLM_API_KEY"`
-	AnthropicKey   string `env:"ANTHROPIC_API_KEY"`
-	OpenAIKey      string `env:"OPENAI_API_KEY"`
-	OllamaURL      string `env:"OLLAMA_URL"`
-	LLMProvider    string `env:"LLM_PROVIDER" envDefault:"groq"`
-	LLMModel       string `env:"LLM_MODEL" envDefault:"qwen/qwen3-32b"`
-	DryRun         bool   `env:"DRY_RUN" envDefault:"false"`
-	Feedback       bool   `env:"FEEDBACK" envDefault:"false"`
-	PromptFile     string `env:"VDM_PROMPT_FILE" envDefault:"vdm_prompt.txt"`
+	Token             string `env:"DISCORD_TOKEN"`
+	RemoveCommands    bool   `env:"DISCORD_REMOVE_COMMANDS" envDefault:"true"`
+	GeminiKey         string `env:"GEMINI_API_KEY"`
+	GroqKey           string `env:"GROQ_API_KEY"`
+	DeepSeekKey       string `env:"DEEPSEEK_API_KEY"`
+	GLMKey            string `env:"GLM_API_KEY"`
+	AnthropicKey      string `env:"ANTHROPIC_API_KEY"`
+	OpenAIKey         string `env:"OPENAI_API_KEY"`
+	OllamaURL         string `env:"OLLAMA_URL"`
+	LLMProvider       string `env:"LLM_PROVIDER" envDefault:"groq"`
+	LLMModel          string `env:"LLM_MODEL" envDefault:"qwen/qwen3-32b"`
+	DryRun            bool   `env:"DRY_RUN" envDefault:"false"`
+	Feedback          bool   `env:"FEEDBACK" envDefault:"false"`
+	SandboxPromptFile string `env:"SANDBOX_PROMPT_FILE" envDefault:"config/prompt_sandbox.txt"`
+	VDPromptFile      string `env:"VD_PROMPT_FILE" envDefault:""`
+	HistoryFile       string `env:"VDM_HISTORY_FILE" envDefault:"vdm_history.json"`
 }
 
 // loadConfig reads configuration from environment variables
@@ -106,7 +108,7 @@ func main() {
 	// Load .env file if it exists
 	_ = godotenv.Load()
 
-	cfg, useDiscord, verbose, promptMode, err := parseConfig(os.Args[1:])
+	cfg, useDiscord, verbose, err := parseConfig(os.Args[1:])
 	if err != nil {
 		if err == flag.ErrHelp {
 			os.Exit(0)
@@ -136,15 +138,35 @@ func main() {
 	}
 
 	deps := cli.DefaultDeps()
-	var researchRLM, vdRLM *rlm.RLM
+	var sandboxRLM, vdRLM llm.RLMCompleter
 	if p != nil {
 		// Detect project root and setup RLM paths
 		wd, _ := os.Getwd()
 		python := rlm.FindPythonPath(wd)
 		script := filepath.Join(wd, "py", "restricted_python.py")
 
-		researchRLM = rlm.NewResearchRLM(p, python, script)
-		vdRLM = rlm.NewVDLM(p, deps)
+		// Load prompts from files
+		if cfg.SandboxPromptFile != "" {
+			sandboxPrompt, err := os.ReadFile(cfg.SandboxPromptFile)
+			if err != nil {
+				slog.Error("failed to read sandbox prompt", "file", cfg.SandboxPromptFile, "error", err)
+				os.Exit(1)
+			}
+			sandboxRLM = rlm.NewSandboxRLM(p, python, script, func(ctxSize, depth int) string {
+				return fmt.Sprintf(string(sandboxPrompt), depth)
+			})
+		}
+
+		if cfg.VDPromptFile != "" {
+			vdPrompt, err := os.ReadFile(cfg.VDPromptFile)
+			if err != nil {
+				slog.Error("failed to read VD prompt", "file", cfg.VDPromptFile, "error", err)
+				os.Exit(1)
+			}
+			vdRLM = rlm.NewVDLM(p, deps, func(ctxSize, depth int) string {
+				return fmt.Sprintf(string(vdPrompt), depth)
+			})
+		}
 	}
 
 	if useDiscord {
@@ -158,12 +180,12 @@ func main() {
 			os.Exit(1)
 		}
 		s.Identify.Intents = discordgo.IntentGuildMessages | discordgo.IntentMessageContent
-		runDiscord(context.Background(), cfg, &discordSessionWrapper{s}, p, researchRLM, vdRLM, deps, promptMode)
+		runDiscord(context.Background(), cfg, &discordSessionWrapper{s}, p, sandboxRLM, vdRLM, deps)
 	} else {
 		if cfg.DryRun {
 			slog.Info("DRY RUN MODE ENABLED. Prompts will be echoed back.")
 		}
-		runCLI(context.Background(), os.Stdin, os.Stdout, cfg, p, researchRLM, vdRLM, deps, promptMode)
+		runCLI(context.Background(), os.Stdin, os.Stdout, cfg, p, sandboxRLM, vdRLM, deps)
 	}
 }
 
@@ -206,7 +228,7 @@ func initProvider(ctx context.Context, cfg *Config) (llmtypes.Provider, error) {
 	return p, err
 }
 
-func parseConfig(args []string) (cfg *Config, useDiscord bool, verbose bool, promptMode bool, err error) {
+func parseConfig(args []string) (cfg *Config, useDiscord bool, verbose bool, err error) {
 	fs := flag.NewFlagSet("vdm", flag.ContinueOnError)
 	useDiscordPtr := fs.Bool("discord", false, "Run in Discord bot mode")
 	providerFlag := fs.String("provider", "", "LLM provider (gemini, ollama, groq, anthropic)")
@@ -217,12 +239,12 @@ func parseConfig(args []string) (cfg *Config, useDiscord bool, verbose bool, pro
 	verbosePtr := fs.Bool("verbose", false, "Print configuration and secrets on startup")
 
 	if err := fs.Parse(args); err != nil {
-		return nil, false, false, false, err
+		return nil, false, false, err
 	}
 
 	cfg, err = loadConfig()
 	if err != nil {
-		return nil, false, false, false, err
+		return nil, false, false, err
 	}
 
 	// Flag overrides environment
@@ -245,23 +267,27 @@ func parseConfig(args []string) (cfg *Config, useDiscord bool, verbose bool, pro
 		cfg.Feedback = true
 	}
 
-	return cfg, *useDiscordPtr, *verbosePtr, *promptModeFlag, nil
+	return cfg, *useDiscordPtr, *verbosePtr, nil
 }
 
-func runCLI(ctx context.Context, in io.Reader, out io.Writer, cfg *Config, p llmtypes.Provider, researchRLM, vdRLM llm.RLMCompleter, deps cli.Deps, forcePromptMode bool) {
+func runCLI(ctx context.Context, in io.Reader, out io.Writer, cfg *Config, p llmtypes.Provider, sandboxRLM, vdRLM llm.RLMCompleter, deps cli.Deps) {
 	slog.Info("Starting CLI mode...")
 
 	var orch *llm.Orchestrator
 
 	if p != nil {
 		orch = llm.NewOrchestrator(ctx, p, deps)
-		if researchRLM != nil && vdRLM != nil {
-			orch.SetRLMs(researchRLM, vdRLM)
+		orch.SetRLMs(sandboxRLM, vdRLM)
+		// Load history
+		if err := orch.LoadHistory(cfg.HistoryFile); err != nil {
+			slog.Warn("failed to load history", "error", err)
 		}
-		if forcePromptMode {
-			orch.EnablePromptMode(true)
-		}
-		defer orch.Close()
+		defer func() {
+			if err := orch.SaveHistory(cfg.HistoryFile); err != nil {
+				slog.Error("failed to save history", "error", err)
+			}
+			orch.Close()
+		}()
 		fmt.Fprintf(out, "LLM mode enabled (Generative DM using %s/%s with two-stage RLM). Type 'exit' to quit.\n", cfg.LLMProvider, cfg.LLMModel)
 	} else {
 		fmt.Fprintln(out, "Standard CLI mode enabled. Type 'exit' to quit.")
@@ -359,7 +385,7 @@ func collectCLIFeedback(in io.Reader, out io.Writer, cfg *Config, p llmtypes.Pro
 	}
 }
 
-func runDiscord(ctx context.Context, cfg *Config, s DiscordSession, p llmtypes.Provider, researchRLM, vdRLM llm.RLMCompleter, deps cli.Deps, forcePromptMode bool) {
+func runDiscord(ctx context.Context, cfg *Config, s DiscordSession, p llmtypes.Provider, sandboxRLM, vdRLM llm.RLMCompleter, deps cli.Deps) {
 	cache := NewMessageCache(100)
 	// Define commands
 	commands := []*discordgo.ApplicationCommand{
@@ -420,18 +446,34 @@ func runDiscord(ctx context.Context, cfg *Config, s DiscordSession, p llmtypes.P
 				},
 			},
 		},
+		{
+			Name:        "vcomment",
+			Description: "Add a comment to the DM's context",
+			Options: []*discordgo.ApplicationCommandOption{
+				{
+					Type:        discordgo.ApplicationCommandOptionString,
+					Name:        "comment",
+					Description: "The comment to add",
+					Required:    true,
+				},
+			},
+		},
 	}
 
 	var orch *llm.Orchestrator
 	if p != nil {
 		orch = llm.NewOrchestrator(ctx, p, deps)
-		if researchRLM != nil && vdRLM != nil {
-			orch.SetRLMs(researchRLM, vdRLM)
+		orch.SetRLMs(sandboxRLM, vdRLM)
+		// Load history
+		if err := orch.LoadHistory(cfg.HistoryFile); err != nil {
+			slog.Warn("failed to load history", "error", err)
 		}
-		if forcePromptMode {
-			orch.EnablePromptMode(true)
-		}
-		defer orch.Close()
+		defer func() {
+			if err := orch.SaveHistory(cfg.HistoryFile); err != nil {
+				slog.Error("failed to save history", "error", err)
+			}
+			orch.Close()
+		}()
 	}
 
 	// Register handlers
@@ -491,7 +533,7 @@ func runDiscord(ctx context.Context, cfg *Config, s DiscordSession, p llmtypes.P
 func handleInteraction(s DiscordSession, orch *llm.Orchestrator, dryRun bool, cache *MessageCache) func(sess *discordgo.Session, i *discordgo.InteractionCreate) {
 	return func(sess *discordgo.Session, i *discordgo.InteractionCreate) {
 		name := i.ApplicationCommandData().Name
-		if name != "echo" && name != "vdm" && name != "vstop" && name != "vstatus" && name != "vfeedback" {
+		if name != "echo" && name != "vdm" && name != "vstop" && name != "vstatus" && name != "vfeedback" && name != "vcomment" {
 			return
 		}
 		// Enforce Guild-only interactions
@@ -589,6 +631,37 @@ func handleInteraction(s DiscordSession, orch *llm.Orchestrator, dryRun bool, ca
 				Type: discordgo.InteractionResponseChannelMessageWithSource,
 				Data: &discordgo.InteractionResponseData{
 					Content: "Thank you for your feedback! It has been saved for review.",
+				},
+			})
+			return
+		}
+		if name == "vcomment" {
+			comment := options[0].StringValue()
+			slog.Info("vcomment command",
+				"guild_id", i.GuildID,
+				"channel_id", i.ChannelID,
+				"user_id", i.Member.User.ID,
+				"comment", comment,
+			)
+
+			// Add to cache
+			msg := &discordgo.Message{
+				ID:        i.ID, // Use interaction ID as message ID
+				ChannelID: i.ChannelID,
+				Content:   comment,
+				Author:    i.Member.User,
+				Timestamp: time.Now(),
+				Type:      discordgo.MessageTypeDefault,
+			}
+			cache.Add(msg)
+
+			userDisplayName := getDisplayName(i.Member.User)
+			echoContent := fmt.Sprintf("> %s: %s", userDisplayName, comment)
+
+			s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+				Type: discordgo.InteractionResponseChannelMessageWithSource,
+				Data: &discordgo.InteractionResponseData{
+					Content: echoContent,
 				},
 			})
 			return
@@ -735,7 +808,8 @@ func handleMessageCreate(cache *MessageCache) func(sess *discordgo.Session, m *d
 			"author", getDisplayName(m.Author),
 			"content", m.Content,
 		)
-		cache.Add(m.Message)
+		// No longer adding to cache automatically
+		// cache.Add(m.Message)
 	}
 }
 
