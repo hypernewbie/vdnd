@@ -50,6 +50,19 @@ func (p *DummyProvider) GenerateWithTools(ctx context.Context, messages []llmtyp
 	}, nil
 }
 
+func (p *DummyProvider) GenerateStream(ctx context.Context, messages []llmtypes.Message, tools []llmtypes.Tool, callback func(chunk string) error) (llmtypes.GenerationResponse, error) {
+	resp, err := p.GenerateWithTools(ctx, messages, tools)
+	if err != nil {
+		return llmtypes.GenerationResponse{}, err
+	}
+	if resp.FinishReason == "stop" && resp.Content != "" && callback != nil {
+		if err := callback(resp.Content); err != nil {
+			return llmtypes.GenerationResponse{}, err
+		}
+	}
+	return resp, nil
+}
+
 func (p *DummyProvider) SupportsToolCalling() bool {
 	return false
 }

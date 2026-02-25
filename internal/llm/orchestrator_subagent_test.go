@@ -29,6 +29,18 @@ func (p *scriptedProvider) GenerateWithTools(ctx context.Context, messages []llm
 	p.calls++
 	return resp, nil
 }
+func (p *scriptedProvider) GenerateStream(ctx context.Context, messages []llmtypes.Message, tools []llmtypes.Tool, callback func(chunk string) error) (llmtypes.GenerationResponse, error) {
+	resp, err := p.GenerateWithTools(ctx, messages, tools)
+	if err != nil {
+		return llmtypes.GenerationResponse{}, err
+	}
+	if resp.Content != "" && callback != nil {
+		if err := callback(resp.Content); err != nil {
+			return llmtypes.GenerationResponse{}, err
+		}
+	}
+	return resp, nil
+}
 
 type fakeSubagent struct {
 	name     string
@@ -88,7 +100,7 @@ func TestOrchestrator_DelegatesToSubagent(t *testing.T) {
 	orch := NewOrchestrator(context.Background(), provider, deps)
 	orch.RegisterSubagents(agent)
 
-	got, err := orch.ProcessInput(context.Background(), "Can I flank the enemy?")
+	got, err := orch.ProcessInput(context.Background(), "Can I flank the enemy?", nil)
 	if err != nil {
 		t.Fatalf("ProcessInput error: %v", err)
 	}

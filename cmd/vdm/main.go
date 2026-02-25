@@ -312,7 +312,7 @@ func runCLI(ctx context.Context, in io.Reader, out io.Writer, cfg *Config, p llm
 		cmd, arg, _ := strings.Cut(line, " ")
 		if orch != nil {
 			slog.Info("USER", "content", line)
-			resp, err := orch.ProcessInput(ctx, line)
+			resp, err := orch.ProcessInput(ctx, line, nil)
 			if err != nil {
 				slog.Error("orchestrator error", "error", err)
 				fmt.Fprintf(out, "Error: %v\n", err)
@@ -730,48 +730,24 @@ func handleInteraction(s DiscordSession, orch *llm.Orchestrator, dryRun bool, ca
 				"user_id", i.Member.User.ID,
 				"full_input", fullInput,
 			)
-			var resp string
-			var err error
+
+			streamer := NewDiscordStreamer(sess, i.Interaction, i.ChannelID)
+			defer streamer.Close()
+
+			streamer.Chunk(fmt.Sprintf("> %s\n\n", content))
+
 			if dryRun {
-				resp = "=== DRY RUN (Full Input) ===\n" + fullInput
+				streamer.Chunk("=== DRY RUN (Full Input) ===\n" + fullInput)
 			} else {
-				resp, err = orch.ProcessInput(context.Background(), fullInput)
+				reporter := &discordReporter{streamer: streamer}
+				resp, err := orch.ProcessInput(context.Background(), fullInput, reporter)
 				if err != nil {
 					slog.Error("orchestrator error", "error", err)
-					resp = fmt.Sprintf("Error: %v", err)
+					streamer.Chunk(fmt.Sprintf("Error: %v", err))
+					return
 				}
-			}
-
-			if strings.TrimSpace(resp) == "" {
-				resp = "*(The DM is silent)*"
-			}
-			// Prepend user input as a quote
-			resp = fmt.Sprintf("> %s\n\n%s", content, resp)
-
-			// Split response into chunks of 1900 characters
-			var chunks []string
-			for len(resp) > 1900 {
-				chunks = append(chunks, resp[:1900]+"...")
-				resp = "..." + resp[1900:]
-			}
-			chunks = append(chunks, resp)
-
-			// Send the first chunk as an InteractionResponseEdit
-			_, err = sess.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{
-				Content: &chunks[0],
-			})
-			if err != nil {
-				slog.Error("failed to edit interaction response", "error", err)
-			}
-
-			// Send subsequent chunks as new messages
-			for _, chunk := range chunks[1:] {
-				if chunk == "" {
-					continue
-				}
-				_, err = sess.ChannelMessageSend(i.ChannelID, chunk)
-				if err != nil {
-					slog.Error("failed to send subsequent chunk", "error", err)
+				if strings.TrimSpace(resp) == "" {
+					streamer.Chunk("*(The DM is silent)*")
 				}
 			}
 			return

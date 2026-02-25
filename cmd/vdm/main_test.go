@@ -92,6 +92,18 @@ func (m *mockProvider) Generate(ctx context.Context, messages []llmtypes.Message
 func (m *mockProvider) GenerateWithTools(ctx context.Context, messages []llmtypes.Message, tools []llmtypes.Tool) (llmtypes.GenerationResponse, error) {
 	return m.toolCallResponse, m.generateError
 }
+func (m *mockProvider) GenerateStream(ctx context.Context, messages []llmtypes.Message, tools []llmtypes.Tool, callback func(chunk string) error) (llmtypes.GenerationResponse, error) {
+	resp, err := m.GenerateWithTools(ctx, messages, tools)
+	if err != nil {
+		return llmtypes.GenerationResponse{}, err
+	}
+	if resp.Content != "" && callback != nil {
+		if err := callback(resp.Content); err != nil {
+			return llmtypes.GenerationResponse{}, err
+		}
+	}
+	return resp, nil
+}
 
 type mockRLM struct {
 	response string

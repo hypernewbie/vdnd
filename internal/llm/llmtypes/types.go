@@ -43,5 +43,6 @@ type Provider interface {
 	ModelName() string
 	Generate(ctx context.Context, messages []Message) (string, error)
 	GenerateWithTools(ctx context.Context, messages []Message, tools []Tool) (GenerationResponse, error)
+	GenerateStream(ctx context.Context, messages []Message, tools []Tool, callback func(chunk string) error) (GenerationResponse, error)
 	SupportsToolCalling() bool
 }

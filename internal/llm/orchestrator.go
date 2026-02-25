@@ -16,6 +16,12 @@ import (
 // ErrOrchestratorBusy is returned when the orchestrator is already processing a request.
 var ErrOrchestratorBusy = fmt.Errorf("the DM is currently busy thinking... please wait")
 
+// StreamReporter receives status and token chunks for progressive UX updates.
+type StreamReporter interface {
+	Status(msg string)
+	Chunk(delta string)
+}
+
 const defaultBossPrompt = `You are the Virtual Dungeon Master.
 - Use call_research_assistant for rules lookups, uncertain adjudication, and state inspection questions.
 - Use call_vdm_execution for concrete state-changing actions.
@@ -69,7 +75,7 @@ func (o *Orchestrator) ProviderInfo() (string, string) {
 }
 
 // ProcessInput takes natural language input and returns a narrated response.
-func (o *Orchestrator) ProcessInput(ctx context.Context, input string) (string, error) {
+func (o *Orchestrator) ProcessInput(ctx context.Context, input string, reporter StreamReporter) (string, error) {
 	if !o.mu.TryLock() {
 		return "", ErrOrchestratorBusy
 	}
@@ -100,48 +106,33 @@ func (o *Orchestrator) ProcessInput(ctx context.Context, input string) (string, 
 		}
 
 		if response.FinishReason == "tool_calls" {
-			messages = append(messages, llmtypes.Message{Role: "model", ToolCalls: response.ToolCalls, Thinking: response.Thinking})
-			for _, call := range response.ToolCalls {
-				agent, ok := o.subagents[call.Name]
-				if !ok {
-					messages = append(messages, llmtypes.Message{
-						Role:       "tool",
-						Name:       call.Name,
-						ToolCallID: call.ID,
-						Content:    fmt.Sprintf("Error: Unknown subagent %s", call.Name),
-					})
-					continue
-				}
-
-				agentInput, err := toolInputForSubagent(call)
-				if err != nil {
-					messages = append(messages, llmtypes.Message{
-						Role:       "tool",
-						Name:       call.Name,
-						ToolCallID: call.ID,
-						Content:    fmt.Sprintf("Error: %v", err),
-					})
-					continue
-				}
-
-				slog.Info("SUBAGENT_CALL", "name", call.Name, "input", agentInput)
-				result, err := agent.Run(runCtx, agentInput, nil)
-				if err != nil {
-					result = fmt.Sprintf("Error: %v", err)
-				}
-
-				messages = append(messages, llmtypes.Message{
-					Role:       "tool",
-					Name:       call.Name,
-					ToolCallID: call.ID,
-					Content:    result,
-				})
+			if err := o.executeSubagentToolCalls(runCtx, &messages, response.ToolCalls, response.Thinking, reporter); err != nil {
+				return "", err
 			}
 			continue
 		}
 
 		if response.FinishReason == "stop" && response.Content != "" {
-			finalResp := o.handleTextMarkers(response.Content)
+			finalResp := response.Content
+			if reporter != nil {
+				streamedResp, streamedContent, err := o.streamFinalResponse(runCtx, messages, reporter)
+				if err != nil {
+					return "", err
+				}
+				if streamedResp.FinishReason == "tool_calls" {
+					if err := o.executeSubagentToolCalls(runCtx, &messages, streamedResp.ToolCalls, streamedResp.Thinking, reporter); err != nil {
+						return "", err
+					}
+					continue
+				}
+				if strings.TrimSpace(streamedContent) != "" {
+					finalResp = streamedContent
+				} else {
+					reporter.Chunk(finalResp)
+				}
+			}
+
+			finalResp = o.handleTextMarkers(finalResp)
 			o.history = append(o.history, llmtypes.Message{Role: "user", Content: input})
 			o.history = append(o.history, llmtypes.Message{Role: "model", Content: finalResp, Thinking: response.Thinking})
 			slog.Info("ORCHESTRATOR_END", "response", finalResp)
@@ -150,6 +141,81 @@ func (o *Orchestrator) ProcessInput(ctx context.Context, input string) (string, 
 	}
 
 	return "", fmt.Errorf("max orchestrator iterations exceeded")
+}
+
+func (o *Orchestrator) executeSubagentToolCalls(ctx context.Context, messages *[]llmtypes.Message, calls []llmtypes.ToolCall, thinking string, reporter StreamReporter) error {
+	*messages = append(*messages, llmtypes.Message{Role: "model", ToolCalls: calls, Thinking: thinking})
+	for _, call := range calls {
+		agent, ok := o.subagents[call.Name]
+		if !ok {
+			*messages = append(*messages, llmtypes.Message{
+				Role:       "tool",
+				Name:       call.Name,
+				ToolCallID: call.ID,
+				Content:    fmt.Sprintf("Error: Unknown subagent %s", call.Name),
+			})
+			continue
+		}
+
+		if reporter != nil {
+			reporter.Status(statusMessageForTool(call.Name))
+		}
+
+		agentInput, err := toolInputForSubagent(call)
+		if err != nil {
+			*messages = append(*messages, llmtypes.Message{
+				Role:       "tool",
+				Name:       call.Name,
+				ToolCallID: call.ID,
+				Content:    fmt.Sprintf("Error: %v", err),
+			})
+			continue
+		}
+
+		slog.Info("SUBAGENT_CALL", "name", call.Name, "input", agentInput)
+		result, err := agent.Run(ctx, agentInput, nil)
+		if err != nil {
+			result = fmt.Sprintf("Error: %v", err)
+		}
+
+		*messages = append(*messages, llmtypes.Message{
+			Role:       "tool",
+			Name:       call.Name,
+			ToolCallID: call.ID,
+			Content:    result,
+		})
+	}
+	return nil
+}
+
+func (o *Orchestrator) streamFinalResponse(ctx context.Context, messages []llmtypes.Message, reporter StreamReporter) (llmtypes.GenerationResponse, string, error) {
+	var streamed strings.Builder
+	resp, err := o.provider.GenerateStream(ctx, messages, o.tools, func(chunk string) error {
+		streamed.WriteString(chunk)
+		reporter.Chunk(chunk)
+		return nil
+	})
+	if err != nil {
+		return llmtypes.GenerationResponse{}, "", err
+	}
+
+	if streamed.Len() == 0 && strings.TrimSpace(resp.Content) != "" {
+		reporter.Chunk(resp.Content)
+		streamed.WriteString(resp.Content)
+	}
+
+	return resp, streamed.String(), nil
+}
+
+func statusMessageForTool(name string) string {
+	switch name {
+	case "call_research_assistant":
+		return "*(The DM is checking the rules...)*\n"
+	case "call_vdm_execution":
+		return "*(The DM is resolving the action...)*\n"
+	default:
+		return "*(The DM is delegating work...)*\n"
+	}
 }
 
 func toolInputForSubagent(call llmtypes.ToolCall) (string, error) {

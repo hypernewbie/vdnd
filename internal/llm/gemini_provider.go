@@ -185,6 +185,19 @@ func (p *GeminiProvider) GenerateWithTools(ctx context.Context, messages []llmty
 	return result, nil
 }
 
+func (p *GeminiProvider) GenerateStream(ctx context.Context, messages []llmtypes.Message, tools []llmtypes.Tool, callback func(chunk string) error) (llmtypes.GenerationResponse, error) {
+	resp, err := p.GenerateWithTools(ctx, messages, tools)
+	if err != nil {
+		return llmtypes.GenerationResponse{}, err
+	}
+	if resp.FinishReason == "stop" && resp.Content != "" && callback != nil {
+		if err := callback(resp.Content); err != nil {
+			return llmtypes.GenerationResponse{}, err
+		}
+	}
+	return resp, nil
+}
+
 func (p *GeminiProvider) SupportsToolCalling() bool { return true }
 
 func (p *GeminiProvider) callAPI(ctx context.Context, jsonData []byte) ([]byte, error) {

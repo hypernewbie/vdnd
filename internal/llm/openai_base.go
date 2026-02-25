@@ -1,12 +1,14 @@
 package llm
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 	"uaa/vdnd/internal/llm/llmtypes"
 )
@@ -23,6 +25,7 @@ type OpenAIInternalMessage struct {
 }
 
 type OpenAIToolCall struct {
+	Index    int    `json:"index,omitempty"`
 	ID       string `json:"id"`
 	Type     string `json:"type"`
 	Function struct {
@@ -52,6 +55,18 @@ type OpenAIChatRequest struct {
 type OpenAIChatResponse struct {
 	Choices []struct {
 		Message OpenAIInternalMessage `json:"message"`
+	} `json:"choices"`
+	Error struct {
+		Message string `json:"message"`
+	} `json:"error"`
+}
+
+type OpenAIStreamResponse struct {
+	Choices []struct {
+		Delta OpenAIInternalMessage `json:"delta"`
+		// Some providers still emit full messages in streamed chunks.
+		Message      OpenAIInternalMessage `json:"message"`
+		FinishReason string                `json:"finish_reason"`
 	} `json:"choices"`
 	Error struct {
 		Message string `json:"message"`
@@ -167,6 +182,148 @@ func (p *OpenAIProvider) GenerateWithTools(ctx context.Context, messages []llmty
 	return llmtypes.GenerationResponse{
 		Content:      content,
 		Thinking:     thinking,
+		FinishReason: "stop",
+	}, nil
+}
+
+func (p *OpenAIProvider) GenerateStream(ctx context.Context, messages []llmtypes.Message, tools []llmtypes.Tool, callback func(chunk string) error) (llmtypes.GenerationResponse, error) {
+	oaMessages := p.convertToOpenAIMessages(messages)
+	oaTools := p.convertToOpenAITools(tools)
+
+	reqBody := OpenAIChatRequest{
+		Model:    p.config.Model,
+		Messages: oaMessages,
+		Tools:    oaTools,
+		Stream:   true,
+	}
+
+	jsonData, err := json.Marshal(reqBody)
+	if err != nil {
+		return llmtypes.GenerationResponse{}, err
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", p.config.BaseURL, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return llmtypes.GenerationResponse{}, err
+	}
+	req.Header.Set("Authorization", "Bearer "+p.config.APIKey)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := p.client.Do(req)
+	if err != nil {
+		return llmtypes.GenerationResponse{}, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		var errResp OpenAIChatResponse
+		_ = json.Unmarshal(body, &errResp)
+		if errResp.Error.Message != "" {
+			return llmtypes.GenerationResponse{}, fmt.Errorf("%s api error: %s", p.config.Name, errResp.Error.Message)
+		}
+		return llmtypes.GenerationResponse{}, fmt.Errorf("%s api error (status %d): %s", p.config.Name, resp.StatusCode, string(body))
+	}
+
+	var contentBuilder strings.Builder
+	var thinkingBuilder strings.Builder
+	toolCallOrder := []int{}
+	toolCalls := map[int]*OpenAIToolCall{}
+	finishReason := ""
+
+	scanner := bufio.NewScanner(resp.Body)
+	scanner.Buffer(make([]byte, 0, 64*1024), 10*1024*1024)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" || !strings.HasPrefix(line, "data: ") {
+			continue
+		}
+
+		payload := strings.TrimSpace(strings.TrimPrefix(line, "data: "))
+		if payload == "[DONE]" {
+			break
+		}
+
+		var chunk OpenAIStreamResponse
+		if err := json.Unmarshal([]byte(payload), &chunk); err != nil {
+			return llmtypes.GenerationResponse{}, fmt.Errorf("failed to decode stream chunk: %w", err)
+		}
+		if chunk.Error.Message != "" {
+			return llmtypes.GenerationResponse{}, fmt.Errorf("%s api error: %s", p.config.Name, chunk.Error.Message)
+		}
+
+		for _, choice := range chunk.Choices {
+			msg := choice.Delta
+			if msg.Content == "" && choice.Message.Content != "" {
+				msg = choice.Message
+			}
+
+			if msg.Content != "" {
+				contentBuilder.WriteString(msg.Content)
+				if callback != nil {
+					if err := callback(msg.Content); err != nil {
+						return llmtypes.GenerationResponse{}, err
+					}
+				}
+			}
+			if msg.ReasoningContent != "" {
+				thinkingBuilder.WriteString(msg.ReasoningContent)
+			}
+			if msg.Reasoning != "" {
+				thinkingBuilder.WriteString(msg.Reasoning)
+			}
+
+			for _, tc := range msg.ToolCalls {
+				call, exists := toolCalls[tc.Index]
+				if !exists {
+					tcCopy := OpenAIToolCall{Index: tc.Index}
+					call = &tcCopy
+					toolCalls[tc.Index] = call
+					toolCallOrder = append(toolCallOrder, tc.Index)
+				}
+				if tc.ID != "" {
+					call.ID = tc.ID
+				}
+				if tc.Type != "" {
+					call.Type = tc.Type
+				}
+				if tc.Function.Name != "" {
+					call.Function.Name = tc.Function.Name
+				}
+				if tc.Function.Arguments != "" {
+					call.Function.Arguments += tc.Function.Arguments
+				}
+			}
+
+			if choice.FinishReason != "" {
+				finishReason = choice.FinishReason
+			}
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return llmtypes.GenerationResponse{}, fmt.Errorf("stream read error: %w", err)
+	}
+
+	if len(toolCalls) > 0 || finishReason == "tool_calls" {
+		resp := llmtypes.GenerationResponse{
+			FinishReason: "tool_calls",
+			Thinking:     thinkingBuilder.String(),
+		}
+		for _, idx := range toolCallOrder {
+			call := toolCalls[idx]
+			resp.ToolCalls = append(resp.ToolCalls, llmtypes.ToolCall{
+				ID:        call.ID,
+				Name:      call.Function.Name,
+				Arguments: call.Function.Arguments,
+			})
+		}
+		return resp, nil
+	}
+
+	return llmtypes.GenerationResponse{
+		Content:      contentBuilder.String(),
+		Thinking:     thinkingBuilder.String(),
 		FinishReason: "stop",
 	}, nil
 }
