@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"strings"
 
+	"uaa/vdnd/internal/cli"
 	"uaa/vdnd/internal/llm/llmtypes"
 )
 
@@ -116,6 +117,7 @@ func (a *ResearchSubagent) Run(ctx context.Context, query string, history []llmt
 
 func (a *ResearchSubagent) executeToolCall(repl *REPLExecutor, call llmtypes.ToolCall) (string, error) {
 	if call.Name != "execute_python" {
+		cli.PrintWarning(fmt.Sprintf("Research tool not supported: %s", call.Name))
 		return "", fmt.Errorf("unknown research tool: %s", call.Name)
 	}
 
@@ -127,6 +129,7 @@ func (a *ResearchSubagent) executeToolCall(repl *REPLExecutor, call llmtypes.Too
 	}
 
 	slog.Debug("RESEARCH_EXECUTE_PYTHON", "code", args.Code)
+	cli.PrintSandboxExecution()
 	replResult, err := repl.Execute(args.Code)
 	if err != nil {
 		return "", err

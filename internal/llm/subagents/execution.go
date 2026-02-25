@@ -97,8 +97,10 @@ func (a *ExecutionSubagent) Run(ctx context.Context, instruction string, history
 }
 
 func (a *ExecutionSubagent) executeToolCall(call llmtypes.ToolCall) (string, error) {
+	cli.PrintVDEngineExecution(call.Name, call.Arguments)
 	stdout, exitCode, _, err := a.engine.ExecuteTool(call)
 	if err != nil {
+		cli.PrintWarning(fmt.Sprintf("VD tool failed: %v", err))
 		return errorJSON(err.Error()), nil
 	}
 

@@ -93,6 +93,7 @@ func (o *Orchestrator) ProcessInput(ctx context.Context, input string, reporter 
 	if exitCode != 0 {
 		stdout = "No active game session found. A new session must be created."
 	}
+	cli.PrintInfo("Orchestrator processing player input")
 
 	systemPrompt := fmt.Sprintf("%s\n\nCurrent game state:\n%s", defaultBossPrompt, stdout)
 	messages := append([]llmtypes.Message{}, o.history...)
@@ -148,6 +149,7 @@ func (o *Orchestrator) executeSubagentToolCalls(ctx context.Context, messages *[
 	for _, call := range calls {
 		agent, ok := o.subagents[call.Name]
 		if !ok {
+			cli.PrintWarning(fmt.Sprintf("Unknown subagent requested: %s", call.Name))
 			*messages = append(*messages, llmtypes.Message{
 				Role:       "tool",
 				Name:       call.Name,
@@ -157,12 +159,9 @@ func (o *Orchestrator) executeSubagentToolCalls(ctx context.Context, messages *[
 			continue
 		}
 
-		if reporter != nil {
-			reporter.Status(statusMessageForTool(call.Name))
-		}
-
 		agentInput, err := toolInputForSubagent(call)
 		if err != nil {
+			cli.PrintWarning(fmt.Sprintf("Invalid subagent arguments for %s: %v", call.Name, err))
 			*messages = append(*messages, llmtypes.Message{
 				Role:       "tool",
 				Name:       call.Name,
@@ -172,9 +171,15 @@ func (o *Orchestrator) executeSubagentToolCalls(ctx context.Context, messages *[
 			continue
 		}
 
+		cli.PrintSubagentInvocation(call.Name, agentInput)
+		if reporter != nil {
+			reporter.Status(statusMessageForTool(call.Name))
+		}
+
 		slog.Info("SUBAGENT_CALL", "name", call.Name, "input", agentInput)
 		result, err := agent.Run(ctx, agentInput, nil)
 		if err != nil {
+			cli.PrintWarning(fmt.Sprintf("Subagent %s failed: %v", call.Name, err))
 			result = fmt.Sprintf("Error: %v", err)
 		}
 

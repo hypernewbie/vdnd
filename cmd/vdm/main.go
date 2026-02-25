@@ -116,6 +116,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "failed to parse config: %v\n", err)
 		os.Exit(1)
 	}
+	cli.PrintDraculaBanner()
 
 	if verbose {
 		fmt.Printf("--- VERBOSE STARTUP ---\n")
@@ -143,6 +144,11 @@ func main() {
 		slog.Error("failed to initialize subagents", "error", err)
 		os.Exit(1)
 	}
+	historyBytes := 0
+	if fi, statErr := os.Stat(cfg.HistoryFile); statErr == nil {
+		historyBytes = int(fi.Size())
+	}
+	cli.PrintStartupConfig(cfg.LLMProvider, cfg.LLMModel, historyBytes)
 
 	if useDiscord {
 		if cfg.Token == "" {
@@ -312,6 +318,7 @@ func runCLI(ctx context.Context, in io.Reader, out io.Writer, cfg *Config, p llm
 		cmd, arg, _ := strings.Cut(line, " ")
 		if orch != nil {
 			slog.Info("USER", "content", line)
+			cli.PrintPlayerInput(line)
 			resp, err := orch.ProcessInput(ctx, line, nil)
 			if err != nil {
 				slog.Error("orchestrator error", "error", err)
@@ -722,6 +729,7 @@ func handleInteraction(s DiscordSession, orch *llm.Orchestrator, dryRun bool, ca
 
 			userDisplayName := getDisplayName(i.Member.User)
 			content = fmt.Sprintf("%s: %s", userDisplayName, content)
+			cli.PrintPlayerInput(content)
 
 			fullInput := partyTalk.String() + "DM_COMMAND:\n" + content
 			slog.Info("vdm command",
