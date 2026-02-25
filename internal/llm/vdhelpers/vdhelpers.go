@@ -25,19 +25,15 @@ func ExecuteGenericVD(cmd string, deps cli.Deps) string {
 	return mustJSON(VDResult{Stdout: stdout, ExitCode: exitCode})
 }
 
-// ExecuteStructuredVD maps a structured tool call to argv.
-// This is a placeholder; actual mapping will be done in orchestrator's mapToolToArgs.
-func ExecuteStructuredVD(toolName string, args map[string]any, deps cli.Deps) string {
-	// Delegated to orchestrator's existing mapToolToArgs logic
-	// Returns same JSON result format
-	return mustJSON(VDResult{Error: "not implemented yet"})
-}
-
-// mustJSON marshals a VDResult to JSON string (panics on error, should never happen).
+// mustJSON marshals a VDResult to JSON string.
 func mustJSON(r VDResult) string {
 	b, err := json.Marshal(r)
 	if err != nil {
-		panic(fmt.Sprintf("vdhelpers: failed to marshal JSON: %v", err))
+		fallback, _ := json.Marshal(VDResult{
+			ExitCode: 1,
+			Error:    fmt.Sprintf("vdhelpers: failed to marshal JSON: %v", err),
+		})
+		return string(fallback)
 	}
 	return string(b)
 }

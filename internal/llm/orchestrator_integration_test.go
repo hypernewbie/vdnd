@@ -1,7 +1,6 @@
 package llm
 
 import (
-	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -10,7 +9,7 @@ import (
 
 	"uaa/vdnd/internal/cli"
 	"uaa/vdnd/internal/llm/llmtypes"
-	"uaa/vdnd/internal/llm/rlm"
+	"uaa/vdnd/internal/llm/vdengine"
 	"uaa/vdnd/internal/llm/vdhelpers"
 	"uaa/vdnd/internal/state"
 )
@@ -61,27 +60,29 @@ func TestVDEngine_CombatFlow(t *testing.T) {
 - Dex: 3
 `)
 
-	// Create a VDLM to test the tools in the same way the orchestrator would
-	ctx := context.Background()
-	p := NewDummyProvider("test")
-	vdRLM := rlm.NewVDLM(p, deps, func(ctxSize, depth int) string { return "test prompt" })
+	engine := vdengine.New(deps)
 
 	execute := func(name, args string) string {
 		call := llmtypes.ToolCall{
 			Name:      name,
 			Arguments: args,
 		}
-
-		// Use VDLM handlers to exercise the tool-to-args mapping and execution logic
-		handler := vdRLM.ToolHandlers()[name]
-		if handler == nil {
-			t.Fatalf("No handler for tool %s", name)
-		}
-		res, err := handler(ctx, call, nil)
+		stdout, exitCode, _, err := engine.ExecuteTool(call)
 		if err != nil {
 			t.Fatalf("Tool call failed: %v", err)
 		}
-		return res
+		res := vdhelpers.VDResult{
+			Stdout:   stdout,
+			ExitCode: exitCode,
+		}
+		if exitCode != 0 {
+			res.Error = "Command failed"
+		}
+		b, err := json.Marshal(res)
+		if err != nil {
+			t.Fatalf("Failed to marshal result: %v", err)
+		}
+		return string(b)
 	}
 
 	// 1. Create scene
