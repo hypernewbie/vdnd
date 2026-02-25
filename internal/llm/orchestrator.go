@@ -8,77 +8,36 @@ import (
 	"os"
 	"strings"
 	"sync"
-	"time"
 
 	"uaa/vdnd/internal/cli"
 	"uaa/vdnd/internal/llm/llmtypes"
-	"uaa/vdnd/internal/llm/rlm"
-	"uaa/vdnd/internal/llm/vdengine"
-	"uaa/vdnd/internal/llm/vdhelpers"
 )
 
 // ErrOrchestratorBusy is returned when the orchestrator is already processing a request.
 var ErrOrchestratorBusy = fmt.Errorf("the DM is currently busy thinking... please wait")
 
-type RLMCompleter interface {
-	Complete(ctx context.Context, query string, contextData string, history []llmtypes.Message) (string, string, error)
-}
+const defaultBossPrompt = `You are the Virtual Dungeon Master.
+- Use call_research_assistant for rules lookups, uncertain adjudication, and state inspection questions.
+- Use call_vdm_execution for concrete state-changing actions.
+- Always narrate outcomes clearly after delegating tools.`
 
-// Orchestrator coordinates communication between the user, the LLM, and the rules engine.
+// Orchestrator coordinates communication between the user, the LLM, and subagents.
 type Orchestrator struct {
 	mu           sync.Mutex
 	activeCancel context.CancelFunc
 	provider     llmtypes.Provider
-	sandboxRLM   RLMCompleter
-	vdRLM        RLMCompleter
 	deps         cli.Deps
-	engine       *vdengine.VDEngine
+	subagents    map[string]Subagent
 	tools        []llmtypes.Tool
 	history      []llmtypes.Message
-	promptMode   bool
-}
-
-var supervisorTools = []llmtypes.Tool{
-	{
-		Name:        "call_research_assistant",
-		Description: "Call a specialized research agent to look up rules, calculate stats, or inspect the game state using Python. Use this when you are unsure about rules or need to check something before deciding.",
-		Parameters: map[string]any{
-			"type": "object",
-			"properties": map[string]any{
-				"query": map[string]any{"type": "string", "description": "The question or research topic for the assistant."},
-			},
-			"required": []string{"query"},
-		},
-	},
-	{
-		Name:        "call_vdm_execution",
-		Description: "Call the VDM Execution Engine to perform game state changes (attacks, damage, healing, scene management, etc.). Provide the research notes (if any) and the specific instruction.",
-		Parameters: map[string]any{
-			"type": "object",
-			"properties": map[string]any{
-				"instruction":    map[string]any{"type": "string", "description": "The specific instruction for state modification (e.g. 'Hero attacks goblin')."},
-				"research_notes": map[string]any{"type": "string", "description": "Relevant findings from the research assistant to guide execution."},
-			},
-			"required": []string{"instruction"},
-		},
-	},
-	{
-		Name:        "vd_status",
-		Description: "Get the current game state (entities, HP, positions, etc.).",
-	},
 }
 
 // NewOrchestrator creates a new LLM orchestrator.
 func NewOrchestrator(context context.Context, provider llmtypes.Provider, deps cli.Deps) *Orchestrator {
-	promptMode := !provider.SupportsToolCalling()
-
-	engine := vdengine.New(deps)
 	o := &Orchestrator{
-		provider:   provider,
-		deps:       deps,
-		engine:     engine,
-		tools:      engine.Tools(),
-		promptMode: promptMode,
+		provider:  provider,
+		deps:      deps,
+		subagents: make(map[string]Subagent),
 	}
 
 	o.history = []llmtypes.Message{
@@ -88,9 +47,17 @@ func NewOrchestrator(context context.Context, provider llmtypes.Provider, deps c
 	return o
 }
 
-func (o *Orchestrator) SetRLMs(sandbox, vd RLMCompleter) {
-	o.sandboxRLM = sandbox
-	o.vdRLM = vd
+// RegisterSubagents sets the available subagents as callable tools.
+func (o *Orchestrator) RegisterSubagents(agents ...Subagent) {
+	o.subagents = make(map[string]Subagent)
+	o.tools = o.tools[:0]
+	for _, agent := range agents {
+		if agent == nil {
+			continue
+		}
+		o.subagents[agent.Name()] = agent
+		o.tools = append(o.tools, agent.ToolDefinition())
+	}
 }
 
 // ProviderInfo returns the provider name and model name.
@@ -101,17 +68,6 @@ func (o *Orchestrator) ProviderInfo() (string, string) {
 	return o.provider.Name(), o.provider.ModelName()
 }
 
-func isRLMNil(i RLMCompleter) bool {
-	if i == nil {
-		return true
-	}
-	// Detect typed nil (e.g., *rlm.RLM(nil) wrapped in interface)
-	if r, ok := i.(*rlm.RLM); ok {
-		return r == nil
-	}
-	return false
-}
-
 // ProcessInput takes natural language input and returns a narrated response.
 func (o *Orchestrator) ProcessInput(ctx context.Context, input string) (string, error) {
 	if !o.mu.TryLock() {
@@ -119,7 +75,6 @@ func (o *Orchestrator) ProcessInput(ctx context.Context, input string) (string, 
 	}
 	defer o.mu.Unlock()
 
-	// Create a cancelable context for this specific run
 	runCtx, cancel := context.WithCancel(ctx)
 	o.activeCancel = cancel
 	defer func() {
@@ -128,51 +83,97 @@ func (o *Orchestrator) ProcessInput(ctx context.Context, input string) (string, 
 	}()
 	defer o.truncateHistory()
 
-	// Include status context in the message content
 	stdout, exitCode := cli.Run([]string{"status"}, o.deps)
 	if exitCode != 0 {
 		stdout = "No active game session found. A new session must be created."
 	}
 
-	if isRLMNil(o.sandboxRLM) {
-		return "", fmt.Errorf("Sandbox RLM not initialized")
-	}
+	systemPrompt := fmt.Sprintf("%s\n\nCurrent game state:\n%s", defaultBossPrompt, stdout)
+	messages := append([]llmtypes.Message{}, o.history...)
+	messages = append(messages, llmtypes.Message{Role: "system", Content: systemPrompt})
+	messages = append(messages, llmtypes.Message{Role: "user", Content: input})
 
-	// 1. Call Sandbox RLM
-	sandboxNotes, sandboxThinking, err := o.sandboxRLM.Complete(runCtx, input, stdout, o.history)
-	if err != nil {
-		slog.Error("Sandbox RLM failed", "error", err)
-		sandboxNotes = fmt.Sprintf("(Sandbox failed: %v)", err)
-	}
-	slog.Info("SANDBOX_END", "notes", sandboxNotes)
-
-	var finalResp string
-	var thinking string
-
-	if isRLMNil(o.vdRLM) {
-		finalResp = sandboxNotes
-		thinking = sandboxThinking
-	} else {
-		// 2. Combine sandbox notes with original query for VDLM
-		vdQuery := fmt.Sprintf("Sandbox notes:\n%s\n\nOriginal request: %s", sandboxNotes, input)
-
-		// 3. Call VDLM (this will execute VD tools via its own tool-calling loop)
-		finalResp, thinking, err = o.vdRLM.Complete(runCtx, vdQuery, stdout, o.history)
+	for i := 0; i < 12; i++ {
+		response, err := o.provider.GenerateWithTools(runCtx, messages, o.tools)
 		if err != nil {
 			return "", err
 		}
+
+		if response.FinishReason == "tool_calls" {
+			messages = append(messages, llmtypes.Message{Role: "model", ToolCalls: response.ToolCalls, Thinking: response.Thinking})
+			for _, call := range response.ToolCalls {
+				agent, ok := o.subagents[call.Name]
+				if !ok {
+					messages = append(messages, llmtypes.Message{
+						Role:       "tool",
+						Name:       call.Name,
+						ToolCallID: call.ID,
+						Content:    fmt.Sprintf("Error: Unknown subagent %s", call.Name),
+					})
+					continue
+				}
+
+				agentInput, err := toolInputForSubagent(call)
+				if err != nil {
+					messages = append(messages, llmtypes.Message{
+						Role:       "tool",
+						Name:       call.Name,
+						ToolCallID: call.ID,
+						Content:    fmt.Sprintf("Error: %v", err),
+					})
+					continue
+				}
+
+				slog.Info("SUBAGENT_CALL", "name", call.Name, "input", agentInput)
+				result, err := agent.Run(runCtx, agentInput, nil)
+				if err != nil {
+					result = fmt.Sprintf("Error: %v", err)
+				}
+
+				messages = append(messages, llmtypes.Message{
+					Role:       "tool",
+					Name:       call.Name,
+					ToolCallID: call.ID,
+					Content:    result,
+				})
+			}
+			continue
+		}
+
+		if response.FinishReason == "stop" && response.Content != "" {
+			finalResp := o.handleTextMarkers(response.Content)
+			o.history = append(o.history, llmtypes.Message{Role: "user", Content: input})
+			o.history = append(o.history, llmtypes.Message{Role: "model", Content: finalResp, Thinking: response.Thinking})
+			slog.Info("ORCHESTRATOR_END", "response", finalResp)
+			return finalResp, nil
+		}
 	}
 
-	slog.Info("ORCHESTRATOR_END", "response", finalResp)
+	return "", fmt.Errorf("max orchestrator iterations exceeded")
+}
 
-	// Process markers (for legacy support)
-	finalResp = o.handleTextMarkers(finalResp)
+func toolInputForSubagent(call llmtypes.ToolCall) (string, error) {
+	if strings.TrimSpace(call.Arguments) == "" {
+		return "", fmt.Errorf("missing tool arguments")
+	}
 
-	// Append to history
-	o.history = append(o.history, llmtypes.Message{Role: "user", Content: input})
-	o.history = append(o.history, llmtypes.Message{Role: "model", Content: finalResp, Thinking: thinking})
+	var args map[string]any
+	if err := json.Unmarshal([]byte(call.Arguments), &args); err != nil {
+		return "", fmt.Errorf("invalid tool arguments: %w", err)
+	}
 
-	return finalResp, nil
+	for _, key := range []string{"query", "instruction"} {
+		if v, ok := args[key].(string); ok && strings.TrimSpace(v) != "" {
+			return v, nil
+		}
+	}
+	for _, raw := range args {
+		if v, ok := raw.(string); ok && strings.TrimSpace(v) != "" {
+			return v, nil
+		}
+	}
+
+	return "", fmt.Errorf("no string input argument found")
 }
 
 // Interrupt cancels any active processing in the orchestrator.
@@ -202,57 +203,6 @@ func (o *Orchestrator) handleTextMarkers(content string) string {
 		}
 	}
 	return strings.Join(newLines, "\n")
-}
-
-func (o *Orchestrator) executeTool(call llmtypes.ToolCall) string {
-	start := time.Now()
-	stdout, exitCode, cmdArgs, err := o.engine.ExecuteTool(call)
-	if err != nil {
-		return errorJSON(err.Error())
-	}
-
-	duration := time.Since(start)
-
-	// Create a summary of the result (first 100 chars)
-	resultSummary := stdout
-	if len(resultSummary) > 100 {
-		resultSummary = resultSummary[:100] + "..."
-	}
-
-	pName, pModel := o.ProviderInfo()
-
-	slog.Info("TOOL_CALL",
-		"tool", call.Name,
-		"arguments", call.Arguments,
-		"mapped_args", cmdArgs,
-		"stdout_len", len(stdout),
-		"result_summary", resultSummary,
-		"exit_code", exitCode,
-		"duration_ms", duration.Milliseconds(),
-		"provider", pName,
-		"model", pModel,
-	)
-
-	result := vdhelpers.VDResult{
-		Stdout:   stdout,
-		ExitCode: exitCode,
-	}
-	if exitCode != 0 && result.Error == "" {
-		result.Error = "Command failed (non-zero exit)"
-	}
-	b, _ := json.Marshal(result)
-	return string(b)
-}
-
-// Helper for error responses
-func errorJSON(msg string) string {
-	result := vdhelpers.VDResult{
-		Stdout:   "",
-		ExitCode: 1,
-		Error:    msg,
-	}
-	b, _ := json.Marshal(result)
-	return string(b)
 }
 
 // Close cleans up the LLM client.
@@ -287,7 +237,7 @@ func (o *Orchestrator) LoadHistory(path string) error {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil // No history to load
+			return nil
 		}
 		return fmt.Errorf("failed to read history file: %w", err)
 	}

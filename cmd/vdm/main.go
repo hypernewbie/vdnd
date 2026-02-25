@@ -18,7 +18,7 @@ import (
 	"uaa/vdnd/internal/cli"
 	"uaa/vdnd/internal/llm"
 	"uaa/vdnd/internal/llm/llmtypes"
-	"uaa/vdnd/internal/llm/rlm"
+	"uaa/vdnd/internal/llm/subagents"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/caarlos0/env/v11"
@@ -138,35 +138,10 @@ func main() {
 	}
 
 	deps := cli.DefaultDeps()
-	var sandboxRLM, vdRLM llm.RLMCompleter
-	if p != nil {
-		// Detect project root and setup RLM paths
-		wd, _ := os.Getwd()
-		python := rlm.FindPythonPath(wd)
-		script := filepath.Join(wd, "py", "restricted_python.py")
-
-		// Load prompts from files
-		if cfg.SandboxPromptFile != "" {
-			sandboxPrompt, err := os.ReadFile(cfg.SandboxPromptFile)
-			if err != nil {
-				slog.Error("failed to read sandbox prompt", "file", cfg.SandboxPromptFile, "error", err)
-				os.Exit(1)
-			}
-			sandboxRLM = rlm.NewSandboxRLM(p, python, script, func(ctxSize, depth int) string {
-				return fmt.Sprintf(string(sandboxPrompt), depth)
-			})
-		}
-
-		if cfg.VDPromptFile != "" {
-			vdPrompt, err := os.ReadFile(cfg.VDPromptFile)
-			if err != nil {
-				slog.Error("failed to read VD prompt", "file", cfg.VDPromptFile, "error", err)
-				os.Exit(1)
-			}
-			vdRLM = rlm.NewVDLM(p, deps, func(ctxSize, depth int) string {
-				return fmt.Sprintf(string(vdPrompt), depth)
-			})
-		}
+	agents, err := initSubagents(cfg, p, deps)
+	if err != nil {
+		slog.Error("failed to initialize subagents", "error", err)
+		os.Exit(1)
 	}
 
 	if useDiscord {
@@ -180,12 +155,12 @@ func main() {
 			os.Exit(1)
 		}
 		s.Identify.Intents = discordgo.IntentGuildMessages | discordgo.IntentMessageContent
-		runDiscord(context.Background(), cfg, &discordSessionWrapper{s}, p, sandboxRLM, vdRLM, deps)
+		runDiscord(context.Background(), cfg, &discordSessionWrapper{s}, p, agents, deps)
 	} else {
 		if cfg.DryRun {
 			slog.Info("DRY RUN MODE ENABLED. Prompts will be echoed back.")
 		}
-		runCLI(context.Background(), os.Stdin, os.Stdout, cfg, p, sandboxRLM, vdRLM, deps)
+		runCLI(context.Background(), os.Stdin, os.Stdout, cfg, p, agents, deps)
 	}
 }
 
@@ -226,6 +201,36 @@ func initProvider(ctx context.Context, cfg *Config) (llmtypes.Provider, error) {
 		}
 	}
 	return p, err
+}
+
+func initSubagents(cfg *Config, p llmtypes.Provider, deps cli.Deps) ([]llm.Subagent, error) {
+	if p == nil {
+		return nil, nil
+	}
+
+	wd, _ := os.Getwd()
+	python := subagents.FindPythonPath(wd)
+	script := filepath.Join(wd, "py", "restricted_python.py")
+
+	researchAgent := subagents.NewResearchSubagent(p, python, script)
+	if cfg.SandboxPromptFile != "" {
+		sandboxPrompt, err := os.ReadFile(cfg.SandboxPromptFile)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read sandbox prompt: %w", err)
+		}
+		researchAgent.SetPrompt(string(sandboxPrompt))
+	}
+
+	execAgent := subagents.NewExecutionSubagent(p, deps)
+	if cfg.VDPromptFile != "" {
+		vdPrompt, err := os.ReadFile(cfg.VDPromptFile)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read execution prompt: %w", err)
+		}
+		execAgent.SetPrompt(string(vdPrompt))
+	}
+
+	return []llm.Subagent{researchAgent, execAgent}, nil
 }
 
 func parseConfig(args []string) (cfg *Config, useDiscord bool, verbose bool, err error) {
@@ -270,14 +275,14 @@ func parseConfig(args []string) (cfg *Config, useDiscord bool, verbose bool, err
 	return cfg, *useDiscordPtr, *verbosePtr, nil
 }
 
-func runCLI(ctx context.Context, in io.Reader, out io.Writer, cfg *Config, p llmtypes.Provider, sandboxRLM, vdRLM llm.RLMCompleter, deps cli.Deps) {
+func runCLI(ctx context.Context, in io.Reader, out io.Writer, cfg *Config, p llmtypes.Provider, agents []llm.Subagent, deps cli.Deps) {
 	slog.Info("Starting CLI mode...")
 
 	var orch *llm.Orchestrator
 
 	if p != nil {
 		orch = llm.NewOrchestrator(ctx, p, deps)
-		orch.SetRLMs(sandboxRLM, vdRLM)
+		orch.RegisterSubagents(agents...)
 		// Load history
 		if err := orch.LoadHistory(cfg.HistoryFile); err != nil {
 			slog.Warn("failed to load history", "error", err)
@@ -288,7 +293,7 @@ func runCLI(ctx context.Context, in io.Reader, out io.Writer, cfg *Config, p llm
 			}
 			orch.Close()
 		}()
-		fmt.Fprintf(out, "LLM mode enabled (Generative DM using %s/%s with two-stage RLM). Type 'exit' to quit.\n", cfg.LLMProvider, cfg.LLMModel)
+		fmt.Fprintf(out, "LLM mode enabled (Generative DM using %s/%s with subagents). Type 'exit' to quit.\n", cfg.LLMProvider, cfg.LLMModel)
 	} else {
 		fmt.Fprintln(out, "Standard CLI mode enabled. Type 'exit' to quit.")
 	}
@@ -385,7 +390,7 @@ func collectCLIFeedback(in io.Reader, out io.Writer, cfg *Config, p llmtypes.Pro
 	}
 }
 
-func runDiscord(ctx context.Context, cfg *Config, s DiscordSession, p llmtypes.Provider, sandboxRLM, vdRLM llm.RLMCompleter, deps cli.Deps) {
+func runDiscord(ctx context.Context, cfg *Config, s DiscordSession, p llmtypes.Provider, agents []llm.Subagent, deps cli.Deps) {
 	cache := NewMessageCache(100)
 	// Define commands
 	commands := []*discordgo.ApplicationCommand{
@@ -463,7 +468,7 @@ func runDiscord(ctx context.Context, cfg *Config, s DiscordSession, p llmtypes.P
 	var orch *llm.Orchestrator
 	if p != nil {
 		orch = llm.NewOrchestrator(ctx, p, deps)
-		orch.SetRLMs(sandboxRLM, vdRLM)
+		orch.RegisterSubagents(agents...)
 		// Load history
 		if err := orch.LoadHistory(cfg.HistoryFile); err != nil {
 			slog.Warn("failed to load history", "error", err)

@@ -109,7 +109,7 @@ func TestRunCLI_EchoLoop(t *testing.T) {
 	out := new(bytes.Buffer)
 	cfg := &Config{LLMProvider: "none"}
 
-	runCLI(context.Background(), in, out, cfg, nil, nil, nil, mockDeps())
+	runCLI(context.Background(), in, out, cfg, nil, nil, mockDeps())
 
 	outputStr := out.String()
 	if !strings.Contains(outputStr, "Standard CLI mode enabled") {
@@ -154,7 +154,7 @@ func TestRunCLI_EdgeCases(t *testing.T) {
 			out := new(bytes.Buffer)
 			cfg := &Config{LLMProvider: "none"}
 
-			runCLI(context.Background(), in, out, cfg, nil, nil, nil, mockDeps())
+			runCLI(context.Background(), in, out, cfg, nil, nil, mockDeps())
 
 			output := out.String()
 			for _, exp := range tt.expected {
@@ -186,8 +186,7 @@ func TestRunCLI_LLMMode(t *testing.T) {
 			},
 		}
 
-		mockRLMInst := &mockRLM{response: "Welcome adventurer!"}
-		runCLI(context.Background(), in, out, cfg, mockProv, mockRLMInst, mockRLMInst, mockDeps())
+		runCLI(context.Background(), in, out, cfg, mockProv, nil, mockDeps())
 
 		output := out.String()
 		if !strings.Contains(output, "LLM mode enabled") {
@@ -199,7 +198,7 @@ func TestRunCLI_LLMMode(t *testing.T) {
 	})
 
 	t.Run("ProviderError", func(t *testing.T) {
-		// Test behavior when RLM fails
+		// Test behavior when provider fails
 		input := "Hello DM\nexit\n"
 		in := strings.NewReader(input)
 		out := new(bytes.Buffer)
@@ -207,10 +206,9 @@ func TestRunCLI_LLMMode(t *testing.T) {
 			LLMProvider: "mock",
 			HistoryFile: t.TempDir() + "/history.json",
 		}
-		mockProv := &mockProvider{}
-		mockRLMInst := &mockRLM{err: fmt.Errorf("api failure")}
+		mockProv := &mockProvider{generateError: fmt.Errorf("api failure")}
 
-		runCLI(context.Background(), in, out, cfg, mockProv, mockRLMInst, mockRLMInst, mockDeps())
+		runCLI(context.Background(), in, out, cfg, mockProv, nil, mockDeps())
 
 		output := out.String()
 		if !strings.Contains(output, "Error: api failure") {
@@ -296,7 +294,7 @@ func TestRunDiscord(t *testing.T) {
 		cancel()
 	}()
 
-	runDiscord(ctx, cfg, m, nil, nil, nil, mockDeps())
+	runDiscord(ctx, cfg, m, nil, nil, mockDeps())
 
 	if len(m.commandsCreated) == 0 {
 		t.Errorf("Expected commands to be created")
