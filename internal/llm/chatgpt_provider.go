@@ -10,16 +10,17 @@ type ChatGPTProvider struct {
 	*OpenAIProvider
 }
 
-func NewChatGPTProvider(apiKey string, model string) (*ChatGPTProvider, error) {
+func NewChatGPTProvider(apiKey string, model string, enableThinking bool) (*ChatGPTProvider, error) {
 	if model == "" {
 		model = "gpt-4o"
 	}
 	config := OpenAIProviderConfig{
-		Name:          "chatgpt",
-		BaseURL:       "https://api.openai.com/v1/chat/completions",
-		APIKey:        apiKey,
-		Model:         model,
-		SupportsTools: true,
+		Name:           "chatgpt",
+		BaseURL:        "https://api.openai.com/v1/chat/completions",
+		APIKey:         apiKey,
+		Model:          model,
+		SupportsTools:  true,
+		EnableThinking: enableThinking,
 	}
 	return &ChatGPTProvider{
 		OpenAIProvider: NewOpenAIProvider(config),

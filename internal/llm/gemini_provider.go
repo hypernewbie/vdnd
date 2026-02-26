@@ -47,8 +47,17 @@ type GeminiContent struct {
 }
 
 type GeminiRequest struct {
-	Contents []GeminiContent `json:"contents"`
-	Tools    []GeminiTool    `json:"tools,omitempty"`
+	Contents         []GeminiContent   `json:"contents"`
+	Tools            []GeminiTool      `json:"tools,omitempty"`
+	GenerationConfig *GeminiGenConfig `json:"generationConfig,omitempty"`
+}
+
+type GeminiGenConfig struct {
+	ThinkingConfig *GeminiThinkingConfig `json:"thinking_config,omitempty"`
+}
+
+type GeminiThinkingConfig struct {
+	IncludeThoughts bool `json:"include_thoughts"`
 }
 
 type GeminiResponse struct {
@@ -62,17 +71,19 @@ type GeminiResponse struct {
 }
 
 type GeminiProvider struct {
-	apiKey string
-	model  string
+	apiKey         string
+	model          string
+	enableThinking bool
 }
 
-func NewGeminiProvider(ctx context.Context, apiKey string, modelName string) (*GeminiProvider, error) {
+func NewGeminiProvider(ctx context.Context, apiKey string, modelName string, enableThinking bool) (*GeminiProvider, error) {
 	if modelName == "" {
 		modelName = "gemini-2.0-flash-exp"
 	}
 	return &GeminiProvider{
-		apiKey: apiKey,
-		model:  modelName,
+		apiKey:         apiKey,
+		model:          modelName,
+		enableThinking: enableThinking,
 	}, nil
 }
 
@@ -82,6 +93,11 @@ func (p *GeminiProvider) ModelName() string { return p.model }
 func (p *GeminiProvider) Generate(ctx context.Context, messages []llmtypes.Message) (string, error) {
 	contents := p.convertMessagesToGeminiContents(messages)
 	request := GeminiRequest{Contents: contents}
+	if p.enableThinking {
+		request.GenerationConfig = &GeminiGenConfig{
+			ThinkingConfig: &GeminiThinkingConfig{IncludeThoughts: true},
+		}
+	}
 
 	jsonBytes, err := json.Marshal(request)
 	if err != nil {
@@ -125,6 +141,11 @@ func (p *GeminiProvider) GenerateWithTools(ctx context.Context, messages []llmty
 	request := GeminiRequest{
 		Contents: contents,
 		Tools:    geminiTools,
+	}
+	if p.enableThinking {
+		request.GenerationConfig = &GeminiGenConfig{
+			ThinkingConfig: &GeminiThinkingConfig{IncludeThoughts: true},
+		}
 	}
 
 	jsonBytes, err := json.Marshal(request)

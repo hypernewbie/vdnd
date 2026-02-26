@@ -10,16 +10,17 @@ type DeepSeekProvider struct {
 	*OpenAIProvider
 }
 
-func NewDeepSeekProvider(apiKey string, model string) (*DeepSeekProvider, error) {
+func NewDeepSeekProvider(apiKey string, model string, enableThinking bool) (*DeepSeekProvider, error) {
 	if model == "" {
 		model = "deepseek-chat"
 	}
 	config := OpenAIProviderConfig{
-		Name:          "deepseek",
-		BaseURL:       "https://api.deepseek.com/chat/completions",
-		APIKey:        apiKey,
-		Model:         model,
-		SupportsTools: !strings.Contains(model, "reasoner"),
+		Name:           "deepseek",
+		BaseURL:        "https://api.deepseek.com/chat/completions",
+		APIKey:         apiKey,
+		Model:          model,
+		SupportsTools:  !strings.Contains(model, "reasoner"),
+		EnableThinking: enableThinking,
 	}
 	return &DeepSeekProvider{
 		OpenAIProvider: NewOpenAIProvider(config),

@@ -11,16 +11,17 @@ type GLMProvider struct {
 
 // NewGLMProvider creates a new GLM provider.
 // Base URL: https://api.z.ai/api/coding/paas/v4/chat/completions
-func NewGLMProvider(apiKey string, model string) (*GLMProvider, error) {
+func NewGLMProvider(apiKey string, model string, enableThinking bool) (*GLMProvider, error) {
 	if model == "" {
 		model = "glm-4.7"
 	}
 	config := OpenAIProviderConfig{
-		Name:          "glm",
-		BaseURL:       "https://api.z.ai/api/coding/paas/v4/chat/completions",
-		APIKey:        apiKey,
-		Model:         model,
-		SupportsTools: true,
+		Name:           "glm",
+		BaseURL:        "https://api.z.ai/api/coding/paas/v4/chat/completions",
+		APIKey:         apiKey,
+		Model:          model,
+		SupportsTools:  true,
+		EnableThinking: enableThinking,
 	}
 	return &GLMProvider{
 		OpenAIProvider: NewOpenAIProvider(config),

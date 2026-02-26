@@ -9,16 +9,17 @@ type OpenRouterProvider struct {
 	*OpenAIProvider
 }
 
-func NewOpenRouterProvider(apiKey string, model string) (*OpenRouterProvider, error) {
+func NewOpenRouterProvider(apiKey string, model string, enableThinking bool) (*OpenRouterProvider, error) {
 	if model == "" {
 		model = "openrouter/auto"
 	}
 	config := OpenAIProviderConfig{
-		Name:          "openrouter",
-		BaseURL:       "https://openrouter.ai/api/v1/chat/completions",
-		APIKey:        apiKey,
-		Model:         model,
-		SupportsTools: true,
+		Name:           "openrouter",
+		BaseURL:        "https://openrouter.ai/api/v1/chat/completions",
+		APIKey:         apiKey,
+		Model:          model,
+		SupportsTools:  true,
+		EnableThinking: enableThinking,
 		ExtraHeaders: map[string]string{
 			"HTTP-Referer": "https://github.com/google/gemini-cli", // Required for some OpenRouter rankings/models
 			"X-Title":      "VDND Virtual Dungeon Master",

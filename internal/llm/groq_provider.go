@@ -9,16 +9,17 @@ type GroqProvider struct {
 	*OpenAIProvider
 }
 
-func NewGroqProvider(apiKey string, model string) (*GroqProvider, error) {
+func NewGroqProvider(apiKey string, model string, enableThinking bool) (*GroqProvider, error) {
 	if model == "" {
 		model = "qwen/qwen3-32b"
 	}
 	config := OpenAIProviderConfig{
-		Name:          "groq",
-		BaseURL:       "https://api.groq.com/openai/v1/chat/completions",
-		APIKey:        apiKey,
-		Model:         model,
-		SupportsTools: true,
+		Name:           "groq",
+		BaseURL:        "https://api.groq.com/openai/v1/chat/completions",
+		APIKey:         apiKey,
+		Model:          model,
+		SupportsTools:  true,
+		EnableThinking: enableThinking,
 	}
 	return &GroqProvider{
 		OpenAIProvider: NewOpenAIProvider(config),

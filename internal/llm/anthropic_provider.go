@@ -17,11 +17,12 @@ type AnthropicCacheControl struct {
 
 // Anthropic API structures
 type AnthropicContentBlock struct {
-	Type  string `json:"type"`
-	Text  string `json:"text,omitempty"`
-	ID    string `json:"id,omitempty"`    // for tool_use
-	Name  string `json:"name,omitempty"`  // for tool_use
-	Input any    `json:"input,omitempty"` // for tool_use
+	Type     string `json:"type"`
+	Text     string `json:"text,omitempty"`
+	Thinking string `json:"thinking,omitempty"` // For Claude 3.7+ thinking blocks
+	ID       string `json:"id,omitempty"`       // for tool_use
+	Name     string `json:"name,omitempty"`     // for tool_use
+	Input    any    `json:"input,omitempty"`    // for tool_use
 
 	ToolUseID    string                 `json:"tool_use_id,omitempty"` // for tool_result
 	Content      string                 `json:"content,omitempty"`     // for tool_result
@@ -40,6 +41,11 @@ type AnthropicTool struct {
 	InputSchema map[string]any `json:"input_schema"`
 }
 
+type AnthropicThinking struct {
+	Type         string `json:"type"` // "enabled"
+	BudgetTokens int    `json:"budget_tokens"`
+}
+
 type AnthropicRequest struct {
 	Model     string             `json:"model"`
 	Messages  []AnthropicMessage `json:"messages"`
@@ -47,6 +53,7 @@ type AnthropicRequest struct {
 	MaxTokens int                `json:"max_tokens"`
 	Tools     []AnthropicTool    `json:"tools,omitempty"`
 	Stream    bool               `json:"stream"`
+	Thinking  *AnthropicThinking `json:"thinking,omitempty"`
 }
 
 type AnthropicResponse struct {
@@ -67,21 +74,23 @@ type AnthropicResponse struct {
 }
 
 type AnthropicProvider struct {
-	apiKey  string
-	model   string
-	baseURL string
-	client  *http.Client
+	apiKey         string
+	model          string
+	baseURL        string
+	enableThinking bool
+	client         *http.Client
 }
 
-func NewAnthropicProvider(apiKey string, model string) (*AnthropicProvider, error) {
+func NewAnthropicProvider(apiKey string, model string, enableThinking bool) (*AnthropicProvider, error) {
 	if model == "" {
 		model = "claude-3-5-sonnet-20240620"
 	}
 	return &AnthropicProvider{
-		apiKey:  apiKey,
-		model:   model,
-		baseURL: "https://api.anthropic.com/v1/messages",
-		client:  &http.Client{Timeout: 90 * time.Second},
+		apiKey:         apiKey,
+		model:          model,
+		baseURL:        "https://api.anthropic.com/v1/messages",
+		enableThinking: enableThinking,
+		client:         &http.Client{Timeout: 90 * time.Second},
 	}, nil
 }
 
@@ -116,9 +125,17 @@ func (p *AnthropicProvider) GenerateWithTools(ctx context.Context, messages []ll
 		Model:     p.model,
 		Messages:  anthropicMessages,
 		System:    system,
-		MaxTokens: 1600,
+		MaxTokens: 4096,
 		Tools:     anthropicTools,
 		Stream:    false,
+	}
+
+	if p.enableThinking {
+		reqBody.Thinking = &AnthropicThinking{
+			Type:         "enabled",
+			BudgetTokens: 2048,
+		}
+		reqBody.MaxTokens = 8192 // Increase total max tokens when thinking is enabled
 	}
 
 	jsonData, err := json.Marshal(reqBody)
@@ -164,6 +181,8 @@ func (p *AnthropicProvider) GenerateWithTools(ctx context.Context, messages []ll
 	for _, block := range anthropicResp.Content {
 		if block.Type == "text" {
 			result.Content += block.Text
+		} else if block.Type == "thinking" {
+			result.Thinking += block.Thinking
 		} else if block.Type == "tool_use" {
 			args, _ := json.Marshal(block.Input)
 			result.ToolCalls = append(result.ToolCalls, llmtypes.ToolCall{

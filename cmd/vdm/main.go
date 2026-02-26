@@ -78,6 +78,7 @@ type Config struct {
 	OllamaURL              string `env:"OLLAMA_URL"`
 	LLMProvider            string `env:"LLM_PROVIDER" envDefault:"groq"`
 	LLMModel               string `env:"LLM_MODEL" envDefault:"qwen/qwen3-32b"`
+	LLMThinking            bool   `env:"LLM_THINKING" envDefault:"false"`
 	DryRun                 bool   `env:"DRY_RUN" envDefault:"false"`
 	Feedback               bool   `env:"FEEDBACK" envDefault:"false"`
 	ResearcherPromptFile   string `env:"RESEARCHER_PROMPT_FILE" envDefault:"config/prompt_researcher.txt"`
@@ -201,33 +202,33 @@ func initProvider(ctx context.Context, cfg *Config) (llmtypes.Provider, error) {
 	switch cfg.LLMProvider {
 	case "gemini":
 		if cfg.GeminiKey != "" {
-			p, err = llm.NewGeminiProvider(ctx, cfg.GeminiKey, cfg.LLMModel)
+			p, err = llm.NewGeminiProvider(ctx, cfg.GeminiKey, cfg.LLMModel, cfg.LLMThinking)
 		}
 	case "ollama":
 		p, err = llm.NewOllamaProvider(cfg.LLMModel, cfg.OllamaURL)
 	case "groq":
 		if cfg.GroqKey != "" {
-			p, err = llm.NewGroqProvider(cfg.GroqKey, cfg.LLMModel)
+			p, err = llm.NewGroqProvider(cfg.GroqKey, cfg.LLMModel, cfg.LLMThinking)
 		}
 	case "deepseek":
 		if cfg.DeepSeekKey != "" {
-			p, err = llm.NewDeepSeekProvider(cfg.DeepSeekKey, cfg.LLMModel)
+			p, err = llm.NewDeepSeekProvider(cfg.DeepSeekKey, cfg.LLMModel, cfg.LLMThinking)
 		}
 	case "glm":
 		if cfg.GLMKey != "" {
-			p, err = llm.NewGLMProvider(cfg.GLMKey, cfg.LLMModel)
+			p, err = llm.NewGLMProvider(cfg.GLMKey, cfg.LLMModel, cfg.LLMThinking)
 		}
 	case "anthropic":
 		if cfg.AnthropicKey != "" {
-			p, err = llm.NewAnthropicProvider(cfg.AnthropicKey, cfg.LLMModel)
+			p, err = llm.NewAnthropicProvider(cfg.AnthropicKey, cfg.LLMModel, cfg.LLMThinking)
 		}
 	case "chatgpt":
 		if cfg.OpenAIKey != "" {
-			p, err = llm.NewChatGPTProvider(cfg.OpenAIKey, cfg.LLMModel)
+			p, err = llm.NewChatGPTProvider(cfg.OpenAIKey, cfg.LLMModel, cfg.LLMThinking)
 		}
 	case "openrouter":
 		if cfg.OpenRouterKey != "" {
-			p, err = llm.NewOpenRouterProvider(cfg.OpenRouterKey, cfg.LLMModel)
+			p, err = llm.NewOpenRouterProvider(cfg.OpenRouterKey, cfg.LLMModel, cfg.LLMThinking)
 		}
 	}
 	return p, err
@@ -269,6 +270,7 @@ func parseConfig(args []string) (cfg *Config, useDiscord bool, verbose bool, err
 	useDiscordPtr := fs.Bool("discord", false, "Run in Discord bot mode")
 	providerFlag := fs.String("provider", "", "LLM provider (gemini, ollama, groq, anthropic)")
 	modelFlag := fs.String("model", "", "LLM model name")
+	thinkingFlag := fs.Bool("thinking", false, "Enable LLM thinking/reasoning mode")
 	promptModeFlag := fs.Bool("prompt-mode", false, "Force schema-constrained prompting (JSON)")
 	dryRunFlag := fs.Bool("dry-run", false, "Enable dry run mode (echo prompts)")
 	feedbackFlag := fs.Bool("feedback", false, "Collect feedback after CLI session")
@@ -289,6 +291,9 @@ func parseConfig(args []string) (cfg *Config, useDiscord bool, verbose bool, err
 	}
 	if *modelFlag != "" {
 		cfg.LLMModel = *modelFlag
+	}
+	if *thinkingFlag {
+		cfg.LLMThinking = true
 	}
 
 	if *promptModeFlag {

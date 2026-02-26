@@ -47,10 +47,12 @@ type OpenAIFunction struct {
 }
 
 type OpenAIChatRequest struct {
-	Model    string                  `json:"model"`
-	Messages []OpenAIInternalMessage `json:"messages"`
-	Tools    []OpenAITool            `json:"tools,omitempty"`
-	Stream   bool                    `json:"stream"`
+	Model            string                  `json:"model"`
+	Messages         []OpenAIInternalMessage `json:"messages"`
+	Tools            []OpenAITool            `json:"tools,omitempty"`
+	Stream           bool                    `json:"stream"`
+	IncludeReasoning bool                    `json:"include_reasoning,omitempty"` // For OpenRouter/Minimax
+	EnableReasoning  bool                    `json:"enable_reasoning,omitempty"`  // For GLM-4.7
 }
 
 type OpenAIChatResponse struct {
@@ -76,12 +78,13 @@ type OpenAIStreamResponse struct {
 
 // OpenAIProviderConfig holds configuration for an OpenAI-compatible provider.
 type OpenAIProviderConfig struct {
-	Name          string
-	BaseURL       string
-	APIKey        string
-	Model         string
-	SupportsTools bool
-	ExtraHeaders  map[string]string
+	Name           string
+	BaseURL        string
+	APIKey         string
+	Model          string
+	SupportsTools  bool
+	EnableThinking bool
+	ExtraHeaders   map[string]string
 }
 
 // OpenAIProvider is a generic provider for OpenAI-compatible APIs.
@@ -113,10 +116,12 @@ func (p *OpenAIProvider) GenerateWithTools(ctx context.Context, messages []llmty
 	oaTools := p.convertToOpenAITools(tools)
 
 	reqBody := OpenAIChatRequest{
-		Model:    p.config.Model,
-		Messages: oaMessages,
-		Tools:    oaTools,
-		Stream:   false,
+		Model:            p.config.Model,
+		Messages:         oaMessages,
+		Tools:            oaTools,
+		Stream:           false,
+		IncludeReasoning: p.config.EnableThinking,
+		EnableReasoning:  p.config.EnableThinking,
 	}
 
 	jsonData, err := json.Marshal(reqBody)
@@ -200,10 +205,12 @@ func (p *OpenAIProvider) GenerateStream(ctx context.Context, messages []llmtypes
 	oaTools := p.convertToOpenAITools(tools)
 
 	reqBody := OpenAIChatRequest{
-		Model:    p.config.Model,
-		Messages: oaMessages,
-		Tools:    oaTools,
-		Stream:   true,
+		Model:            p.config.Model,
+		Messages:         oaMessages,
+		Tools:            oaTools,
+		Stream:           true,
+		IncludeReasoning: p.config.EnableThinking,
+		EnableReasoning:  p.config.EnableThinking,
 	}
 
 	jsonData, err := json.Marshal(reqBody)
