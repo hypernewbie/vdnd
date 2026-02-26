@@ -15,7 +15,7 @@ You have 4 dedicated tools for different tasks:
 - Use this to read/write files in the `sandbox/` directory
 - Use this to manage campaign notes and `current.md`
 - Use this as your notepad space for anything related.
-- Available functions: list_dir(path), open(filename, mode), ripgrep(pattern, path), re, json, random, math
+- Available functions: list_dir(path), open(filename, mode), ripgrep(pattern, path), search_files(query), re, json, random, math. The `message_history` variable contains current conversation history.
 - **NEVER** use this for rules lookup - use the Researcher instead
 
 ### 2. call_research_assistant - For rules lookup. This is an LLM subagent, can understand natural language.
