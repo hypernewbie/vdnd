@@ -215,6 +215,12 @@ func (p *AnthropicProvider) convertMessages(messages []llmtypes.Message) ([]Anth
 		}
 
 		var content []AnthropicContentBlock
+		if m.Thinking != "" {
+			content = append(content, AnthropicContentBlock{
+				Type: "text",
+				Text: "<thought>\n" + m.Thinking + "\n</thought>",
+			})
+		}
 		if m.Content != "" && m.Role != "tool" {
 			content = append(content, AnthropicContentBlock{
 				Type: "text",

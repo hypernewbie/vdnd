@@ -8,33 +8,33 @@ import (
 // Core Melee Weapons
 var (
 	Fist = NewWeapon("fist", "Fist", CategoryUnarmed, GroupBrawling,
-		dice.DieRoll{Count: 1, Sides: 4, Modifier: 0}, Bludgeoning, 1, 0, 0,
+		dice.DieRoll{Groups: []dice.DiceGroup{{Count: 1, Sides: 4}}, Modifier: 0}, Bludgeoning, 1, 0, 0,
 		trait.TraitAgile, trait.TraitFinesse)
 
 	Dagger = NewWeapon("dagger", "Dagger", CategorySimple, GroupKnife,
-		dice.DieRoll{Count: 1, Sides: 4, Modifier: 0}, Piercing, 1, 10, 0,
+		dice.DieRoll{Groups: []dice.DiceGroup{{Count: 1, Sides: 4}}, Modifier: 0}, Piercing, 1, 10, 0,
 		trait.TraitAgile, trait.TraitFinesse, trait.TraitThrown, trait.TraitVersatile)
 
 	Longsword = NewWeapon("longsword", "Longsword", CategoryMartial, GroupSword,
-		dice.DieRoll{Count: 1, Sides: 8, Modifier: 0}, Slashing, 1, 0, 1,
+		dice.DieRoll{Groups: []dice.DiceGroup{{Count: 1, Sides: 8}}, Modifier: 0}, Slashing, 1, 0, 1,
 		trait.TraitVersatile)
 
 	Greatsword = NewWeapon("greatsword", "Greatsword", CategoryMartial, GroupSword,
-		dice.DieRoll{Count: 1, Sides: 12, Modifier: 0}, Slashing, 2, 0, 2)
+		dice.DieRoll{Groups: []dice.DiceGroup{{Count: 1, Sides: 12}}, Modifier: 0}, Slashing, 2, 0, 2)
 
 	Rapier = NewWeapon("rapier", "Rapier", CategoryMartial, GroupSword,
-		dice.DieRoll{Count: 1, Sides: 6, Modifier: 0}, Piercing, 1, 0, 1,
+		dice.DieRoll{Groups: []dice.DiceGroup{{Count: 1, Sides: 6}}, Modifier: 0}, Piercing, 1, 0, 1,
 		trait.TraitDeadly, trait.TraitFinesse)
 )
 
 // Core Ranged Weapons
 var (
 	Shortbow = NewWeapon("shortbow", "Shortbow", CategoryMartial, GroupBow,
-		dice.DieRoll{Count: 1, Sides: 6, Modifier: 0}, Piercing, 2, 60, 2,
+		dice.DieRoll{Groups: []dice.DiceGroup{{Count: 1, Sides: 6}}, Modifier: 0}, Piercing, 2, 60, 2,
 		trait.TraitDeadly)
 
 	Crossbow = NewWeapon("crossbow", "Crossbow", CategorySimple, GroupCrossbow,
-		dice.DieRoll{Count: 1, Sides: 8, Modifier: 0}, Piercing, 2, 120, 2)
+		dice.DieRoll{Groups: []dice.DiceGroup{{Count: 1, Sides: 8}}, Modifier: 0}, Piercing, 2, 120, 2)
 )
 
 // Core Armor
@@ -60,8 +60,8 @@ func init() {
 
 	Longsword.VersatileType = Piercing
 
-	Rapier.DeadlyDie = dice.DieRoll{Count: 1, Sides: 8, Modifier: 0}
-	Shortbow.DeadlyDie = dice.DieRoll{Count: 1, Sides: 10, Modifier: 0}
+	Rapier.DeadlyDie = dice.DieRoll{Groups: []dice.DiceGroup{{Count: 1, Sides: 8}}, Modifier: 0}
+	Shortbow.DeadlyDie = dice.DieRoll{Groups: []dice.DiceGroup{{Count: 1, Sides: 10}}, Modifier: 0}
 
 	// Tower shield has special trait
 	StandardShields["tower_shield"].SpeedPenalty = -5

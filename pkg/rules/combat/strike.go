@@ -173,10 +173,10 @@ func (s *StrikeAction) rollDamageInstance(actor *entity.Entity, turn *TurnState,
 
 		if strikesWithWeapon == 1 {
 			// Second attack: bonus = number of damage dice
-			dr.Modifier += s.Weapon.Damage.Count
+			dr.Modifier += s.Weapon.Damage.GetDiceCount()
 		} else if strikesWithWeapon >= 2 {
 			// Third or more: bonus = 2 * number of damage dice
-			dr.Modifier += 2 * s.Weapon.Damage.Count
+			dr.Modifier += 2 * s.Weapon.Damage.GetDiceCount()
 		}
 	}
 

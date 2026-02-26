@@ -73,6 +73,7 @@ type Config struct {
 	GLMKey                 string `env:"GLM_API_KEY"`
 	AnthropicKey           string `env:"ANTHROPIC_API_KEY"`
 	OpenAIKey              string `env:"OPENAI_API_KEY"`
+	OpenRouterKey          string `env:"OPENROUTER_API_KEY"`
 	OllamaURL              string `env:"OLLAMA_URL"`
 	LLMProvider            string `env:"LLM_PROVIDER" envDefault:"groq"`
 	LLMModel               string `env:"LLM_MODEL" envDefault:"qwen/qwen3-32b"`
@@ -128,6 +129,7 @@ func main() {
 		fmt.Printf("GLM_API_KEY: %s\n", cfg.GLMKey)
 		fmt.Printf("ANTHROPIC_API_KEY: %s\n", cfg.AnthropicKey)
 		fmt.Printf("OPENAI_API_KEY: %s\n", cfg.OpenAIKey)
+		fmt.Printf("OPENROUTER_API_KEY: %s\n", cfg.OpenRouterKey)
 		fmt.Printf("LLM_PROVIDER: %s\n", cfg.LLMProvider)
 		fmt.Printf("LLM_MODEL: %s\n", cfg.LLMModel)
 		fmt.Printf("------------------------\n")
@@ -217,6 +219,10 @@ func initProvider(ctx context.Context, cfg *Config) (llmtypes.Provider, error) {
 	case "chatgpt":
 		if cfg.OpenAIKey != "" {
 			p, err = llm.NewChatGPTProvider(cfg.OpenAIKey, cfg.LLMModel)
+		}
+	case "openrouter":
+		if cfg.OpenRouterKey != "" {
+			p, err = llm.NewOpenRouterProvider(cfg.OpenRouterKey, cfg.LLMModel)
 		}
 	}
 	return p, err

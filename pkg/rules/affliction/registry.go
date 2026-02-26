@@ -20,19 +20,19 @@ var (
 		Stages: []Stage{
 			{
 				Number:     1,
-				Damage:     dice.DieRoll{Count: 1, Sides: 6, Modifier: 0},
+				Damage:     dice.DieRoll{Groups: []dice.DiceGroup{{Count: 1, Sides: 6}}, Modifier: 0},
 				DamageType: item.Poison,
 				Conditions: []ConditionEffect{{ID: condition.FlatFooted, Value: 0}},
 			},
 			{
 				Number:     2,
-				Damage:     dice.DieRoll{Count: 1, Sides: 8, Modifier: 0},
+				Damage:     dice.DieRoll{Groups: []dice.DiceGroup{{Count: 1, Sides: 8}}, Modifier: 0},
 				DamageType: item.Poison,
 				Conditions: []ConditionEffect{{ID: condition.FlatFooted, Value: 0}, {ID: condition.Clumsy, Value: 1}},
 			},
 			{
 				Number:     3,
-				Damage:     dice.DieRoll{Count: 1, Sides: 12, Modifier: 0},
+				Damage:     dice.DieRoll{Groups: []dice.DiceGroup{{Count: 1, Sides: 12}}, Modifier: 0},
 				DamageType: item.Poison,
 				Conditions: []ConditionEffect{{ID: condition.FlatFooted, Value: 0}, {ID: condition.Clumsy, Value: 2}},
 			},
@@ -57,13 +57,13 @@ var (
 			},
 			{
 				Number:     2,
-				Damage:     dice.DieRoll{Count: 1, Sides: 6, Modifier: 0},
+				Damage:     dice.DieRoll{Groups: []dice.DiceGroup{{Count: 1, Sides: 6}}, Modifier: 0},
 				DamageType: item.Negative,
 				Conditions: []ConditionEffect{{ID: condition.Slowed, Value: 1}},
 			},
 			{
 				Number:     3,
-				Damage:     dice.DieRoll{Count: 1, Sides: 6, Modifier: 0},
+				Damage:     dice.DieRoll{Groups: []dice.DiceGroup{{Count: 1, Sides: 6}}, Modifier: 0},
 				DamageType: item.Negative,
 				Conditions: []ConditionEffect{{ID: condition.Slowed, Value: 2}},
 			},

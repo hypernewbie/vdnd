@@ -27,6 +27,19 @@ type Roller interface {
 	Roll(count, sides int) []int
 }
 
+// GetDiceCount returns the total number of dice in all groups.
+func (d DieRoll) GetDiceCount() int {
+	count := 0
+	for _, g := range d.Groups {
+		c := g.Count
+		if c < 0 {
+			c = -c
+		}
+		count += c
+	}
+	return count
+}
+
 // SimpleRoller uses math/rand for rolling.
 type SimpleRoller struct{}
 

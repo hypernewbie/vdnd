@@ -21,7 +21,7 @@ func (e *Encounter) RollInitiative(initType InitiativeType) {
 		if p.Type == ParticipantEntity {
 			p.Initiative = RollInitiativeFor(p.Entity, initType)
 		} else if p.Type == ParticipantHazard && p.Hazard != nil {
-			roll := dice.DieRoll{Count: 1, Sides: 20}.Roll()
+			roll := dice.DieRoll{Groups: []dice.DiceGroup{{Count: 1, Sides: 20}}}.Roll()
 			p.Initiative = roll + p.Hazard.Initiative
 		}
 	}
@@ -40,7 +40,7 @@ func RollInitiativeFor(ent *entity.Entity, initType InitiativeType) int {
 		mod = ent.GetSkillModifier(ability.SkillDeception)
 	}
 
-	roll := dice.DieRoll{Count: 1, Sides: 20, Modifier: 0}.Roll()
+	roll := dice.DieRoll{Groups: []dice.DiceGroup{{Count: 1, Sides: 20}}, Modifier: 0}.Roll()
 	return roll + mod
 }
 

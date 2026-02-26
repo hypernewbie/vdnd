@@ -20,7 +20,7 @@ var (
 		Save:        ability.SaveReflex,
 		IsBasicSave: true,
 		Effect: &DamageEffect{
-			DamageDice: dice.DieRoll{Count: 1, Sides: 4, Modifier: 0},
+			DamageDice: dice.DieRoll{Groups: []dice.DiceGroup{{Count: 1, Sides: 4}}, Modifier: 0},
 			DamageType: item.Electricity,
 		},
 	}
@@ -39,7 +39,7 @@ var (
 		Save:        ability.SaveReflex,
 		IsBasicSave: true,
 		Effect: &DamageEffect{
-			DamageDice: dice.DieRoll{Count: 6, Sides: 6, Modifier: 0},
+			DamageDice: dice.DieRoll{Groups: []dice.DiceGroup{{Count: 6, Sides: 6}}, Modifier: 0},
 			DamageType: item.Fire,
 		},
 	}

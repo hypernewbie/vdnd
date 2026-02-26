@@ -124,10 +124,7 @@ func (t *AfflictionTracker) Tick(unit ability.IntervalUnit) []TickResult {
 
 		// Apply current stage effects
 		dmgRoll, dmgType, conditions := inst.GetCurrentEffects()
-		damage := 0
-		if dmgRoll.Count > 0 {
-			damage = dmgRoll.Roll()
-		}
+		damage := dmgRoll.Roll()
 
 		isFatal := false
 		if stage := inst.Affliction.GetStage(inst.CurrentStage); stage != nil {

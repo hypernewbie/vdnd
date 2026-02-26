@@ -161,7 +161,11 @@ func (o *Orchestrator) ProcessInput(ctx context.Context, input string, reporter 
 			continue
 		}
 
-		if response.FinishReason == "stop" && response.Content != "" {
+		if response.FinishReason == "stop" {
+			if response.Content == "" {
+				// Handle edge case where model stops without content (Anthropic sometimes does this)
+				return "The DM remains silent.", nil
+			}
 			finalResp := response.Content
 			if reporter != nil {
 				streamedResp, streamedContent, err := o.streamFinalResponse(runCtx, messages, reporter)
@@ -190,6 +194,11 @@ func (o *Orchestrator) ProcessInput(ctx context.Context, input string, reporter 
 			o.syncToSandbox()
 
 			return finalResp, nil
+		}
+
+		// Safety break: if we get here without a known finish reason, stop to avoid spin loops
+		if response.FinishReason == "" && response.Content == "" && len(response.ToolCalls) == 0 {
+			return "The DM is lost in thought.", nil
 		}
 	}
 

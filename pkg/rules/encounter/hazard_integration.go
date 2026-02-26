@@ -23,7 +23,7 @@ func (e *Encounter) RollHazardInitiative() {
 		if e.Participants[i].Type == ParticipantHazard && e.Participants[i].Hazard != nil {
 			h := e.Participants[i].Hazard
 			// Hazards use their Initiative modifier
-			roll := dice.DieRoll{Count: 1, Sides: 20}.Roll()
+			roll := dice.DieRoll{Groups: []dice.DiceGroup{{Count: 1, Sides: 20}}}.Roll()
 			e.Participants[i].Initiative = roll + h.Initiative
 		}
 	}

@@ -45,8 +45,14 @@ func (d DamageRoll) Roll() DamageInstance {
 func (d DamageRoll) RollCritical(deadlyDie dice.DieRoll, fatalDie dice.DieRoll) DamageInstance {
 	// If fatal: damage die changes AND adds extra die
 	baseDice := d.BaseDice
-	if fatalDie.Sides > 0 {
-		baseDice = dice.DieRoll{Count: baseDice.Count, Sides: fatalDie.Sides, Modifier: baseDice.Modifier}
+	hasFatal := len(fatalDie.Groups) > 0 && fatalDie.Groups[0].Sides > 0
+	if hasFatal {
+		// Replace all dice groups' sides with the fatal die sides
+		newGroups := make([]dice.DiceGroup, len(baseDice.Groups))
+		for i, g := range baseDice.Groups {
+			newGroups[i] = dice.DiceGroup{Count: g.Count, Sides: fatalDie.Groups[0].Sides}
+		}
+		baseDice = dice.DieRoll{Groups: newGroups, Modifier: baseDice.Modifier}
 	}
 
 	// Roll base + modifiers, then double
@@ -58,17 +64,14 @@ func (d DamageRoll) RollCritical(deadlyDie dice.DieRoll, fatalDie dice.DieRoll) 
 	doubledTotal := baseTotal * 2
 
 	// Add deadly dice (NOT doubled)
-	if deadlyDie.Sides > 0 {
-		deadlyCount := deadlyDie.Count
-		if deadlyCount == 0 {
-			deadlyCount = 1
-		}
-		doubledTotal += dice.DieRoll{Count: deadlyCount, Sides: deadlyDie.Sides, Modifier: 0}.Roll()
+	if len(deadlyDie.Groups) > 0 && deadlyDie.Groups[0].Sides > 0 {
+		doubledTotal += deadlyDie.Roll()
 	}
 
 	// Add fatal extra die (NOT doubled)
-	if fatalDie.Sides > 0 {
-		doubledTotal += dice.DieRoll{Count: 1, Sides: fatalDie.Sides, Modifier: 0}.Roll()
+	if hasFatal {
+		extraFatal := dice.DieRoll{Groups: []dice.DiceGroup{{Count: 1, Sides: fatalDie.Groups[0].Sides}}}
+		doubledTotal += extraFatal.Roll()
 	}
 
 	return DamageInstance{

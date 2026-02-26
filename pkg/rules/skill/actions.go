@@ -128,7 +128,7 @@ func Climb(actor *entity.Entity, dc int, naturalRoll int) (MovementResult, check
 		move.Speed = 5
 	case check.CriticalFailure:
 		actor.Conditions.Apply(condition.NewCondition(condition.Prone, "Climb (Crit Fail)"))
-		move.Damage = dice.DieRoll{Count: 1, Sides: 6}.Roll()
+		move.Damage = dice.DieRoll{Groups: []dice.DiceGroup{{Count: 1, Sides: 6}}}.Roll()
 	}
 	return move, res
 }
@@ -688,7 +688,7 @@ func Trip(attacker, target *entity.Entity, modifiers []check.Modifier, naturalRo
 	switch res.Degree {
 	case check.CriticalSuccess:
 		target.Conditions.Apply(condition.NewCondition(condition.Prone, "Trip"))
-		target.ApplyDamage(dice.DieRoll{Count: 1, Sides: 6}.Roll())
+		target.ApplyDamage(dice.DieRoll{Groups: []dice.DiceGroup{{Count: 1, Sides: 6}}}.Roll())
 	case check.Success:
 		target.Conditions.Apply(condition.NewCondition(condition.Prone, "Trip"))
 	case check.CriticalFailure:
@@ -837,7 +837,7 @@ func RepairShield(actor *entity.Entity, s *item.Shield, naturalRoll int) (Repair
 		}
 	} else if res.Degree == check.CriticalFailure {
 		// Deal 2d6 damage to shield
-		damage := dice.DieRoll{Count: 2, Sides: 6}.Roll()
+		damage := dice.DieRoll{Groups: []dice.DiceGroup{{Count: 2, Sides: 6}}}.Roll()
 		s.TakeDamage(damage)
 	}
 

@@ -26,7 +26,7 @@ var (
 			MinWeight: 50,
 		},
 		Effect: &DamageEffect{
-			Damage:      dice.DieRoll{Count: 2, Sides: 6, Modifier: 0}, // 2d6 fall damage
+			Damage:      dice.DieRoll{Groups: []dice.DiceGroup{{Count: 2, Sides: 6}}, Modifier: 0}, // 2d6 fall damage
 			DamageType:  item.Bludgeoning,
 			SaveType:    ability.SaveReflex,
 			SaveDC:      17,
@@ -54,7 +54,7 @@ var (
 			Effects: []HazardEffect{
 				&AttackEffect{
 					AttackBonus: 12,
-					Damage:      dice.DieRoll{Count: 1, Sides: 6, Modifier: 0},
+					Damage:      dice.DieRoll{Groups: []dice.DiceGroup{{Count: 1, Sides: 6}}, Modifier: 0},
 					DamageType:  item.Piercing,
 				},
 				&AfflictionEffect{
@@ -84,7 +84,7 @@ var (
 		},
 		Trigger: TriggerCondition{Type: TriggerEnter},
 		Effect: &DamageEffect{
-			Damage:      dice.DieRoll{Count: 3, Sides: 8, Modifier: 0}, // 3d8 per round
+			Damage:      dice.DieRoll{Groups: []dice.DiceGroup{{Count: 3, Sides: 8}}, Modifier: 0}, // 3d8 per round
 			DamageType:  item.Slashing,
 			SaveType:    ability.SaveReflex,
 			SaveDC:      22,
@@ -122,8 +122,8 @@ func init() {
 		}
 
 		h.Routine = NewRoutine(2).
-			AddAttack("Blade Slash", 1, 15, dice.DieRoll{Count: 2, Sides: 8, Modifier: 5}, item.Slashing, 1).
-			AddAttack("Blade Slash", 1, 15, dice.DieRoll{Count: 2, Sides: 8, Modifier: 5}, item.Slashing, 1)
+			AddAttack("Blade Slash", 1, 15, dice.DieRoll{Groups: []dice.DiceGroup{{Count: 2, Sides: 8}}, Modifier: 5}, item.Slashing, 1).
+			AddAttack("Blade Slash", 1, 15, dice.DieRoll{Groups: []dice.DiceGroup{{Count: 2, Sides: 8}}, Modifier: 5}, item.Slashing, 1)
 
 		return h
 	}
@@ -147,12 +147,12 @@ func init() {
 		}
 
 		h.Routine = NewRoutine(3).
-			AddAttack("Poison Dart", 1, 17, dice.DieRoll{Count: 1, Sides: 6, Modifier: 3}, item.Piercing, 1).
+			AddAttack("Poison Dart", 1, 17, dice.DieRoll{Groups: []dice.DiceGroup{{Count: 1, Sides: 6}}, Modifier: 3}, item.Piercing, 1).
 			AddSaveEffect("Poison", 0, ability.SaveFortitude, 22,
 				"No effect",
 				"Sickened 1 and 1d6 poison damage",
 				"Sickened 2 and 2d6 poison damage").
-			AddAttack("Poison Dart", 1, 17, dice.DieRoll{Count: 1, Sides: 6, Modifier: 3}, item.Piercing, 1)
+			AddAttack("Poison Dart", 1, 17, dice.DieRoll{Groups: []dice.DiceGroup{{Count: 1, Sides: 6}}, Modifier: 3}, item.Piercing, 1)
 
 		return h
 	}
