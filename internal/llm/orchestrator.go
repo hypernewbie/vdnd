@@ -11,19 +11,20 @@ import (
 
 	"uaa/vdnd/internal/cli"
 	"uaa/vdnd/internal/llm/llmtypes"
-)
+	"uaa/vdnd/internal/llm/subagents"
+	)
 
-// ErrOrchestratorBusy is returned when the orchestrator is already processing a request.
-var ErrOrchestratorBusy = fmt.Errorf("the DM is currently busy thinking... please wait")
+	// ErrOrchestratorBusy is returned when the orchestrator is already processing a request.
+	var ErrOrchestratorBusy = fmt.Errorf("the DM is currently busy thinking... please wait")
 
-// StreamReporter receives status and token chunks for progressive UX updates.
-type StreamReporter interface {
+	// StreamReporter receives status and token chunks for progressive UX updates.
+	type StreamReporter interface {
 	Status(msg string)
 	Chunk(delta string)
-}
+	}
 
-// Orchestrator coordinates communication between the user, the LLM, and subagents.
-type Orchestrator struct {
+	// Orchestrator coordinates communication between the user, the LLM, and subagents.
+	type Orchestrator struct {
 	mu           sync.Mutex
 	activeCancel context.CancelFunc
 	provider     llmtypes.Provider
@@ -32,7 +33,8 @@ type Orchestrator struct {
 	subagents    map[string]llmtypes.Subagent
 	tools        []llmtypes.Tool
 	history      []llmtypes.Message
-}
+	pythonRepl   *subagents.REPLExecutor
+	}
 
 func (o *Orchestrator) getVDManual() (string, error) {
 	content, err := o.deps.Store.GetManual()
@@ -48,18 +50,29 @@ func (o *Orchestrator) SetPrompt(prompt string) {
 }
 
 // NewOrchestrator creates a new LLM orchestrator.
-func NewOrchestrator(context context.Context, provider llmtypes.Provider, deps cli.Deps) *Orchestrator {
+func NewOrchestrator(context context.Context, provider llmtypes.Provider, deps cli.Deps, pythonPath, scriptPath string) (*Orchestrator, error) {
+	repl, err := subagents.NewREPLExecutorWithEnv(pythonPath, scriptPath, []string{"VDM_PYTHON_READONLY=1"})
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize orchestrator python: %w", err)
+	}
+
 	o := &Orchestrator{
-		provider:  provider,
-		deps:      deps,
-		subagents: make(map[string]llmtypes.Subagent),
+		provider:   provider,
+		deps:       deps,
+		subagents:  make(map[string]llmtypes.Subagent),
+		pythonRepl: repl,
 	}
 
 	o.history = []llmtypes.Message{
 		{Role: "model", Content: "I am ready to be your Dungeon Master. What happens next?"},
 	}
 
-	return o
+	return o, nil
+}
+
+func (o *Orchestrator) injectSandboxState() string {
+	historyJSON, _ := json.Marshal(o.history)
+	return fmt.Sprintf("message_history = json.loads(%q)\ncontext = \"\"", string(historyJSON))
 }
 
 // RegisterSubagents sets the available subagents as callable tools.
@@ -78,6 +91,17 @@ func (o *Orchestrator) RegisterSubagents(agents ...llmtypes.Subagent) {
 	o.tools = append(o.tools, llmtypes.Tool{
 		Name:        "get_vd_manual",
 		Description: "Get the full VD CLI manual for command reference.",
+	})
+	o.tools = append(o.tools, llmtypes.Tool{
+		Name:        "execute_python_readonly",
+		Description: "Execute read-only Python code in the persistent sandbox. Use this to query message_history, context, or read files.",
+		Parameters: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"code": map[string]any{"type": "string", "description": "The Python code to execute."},
+			},
+			"required": []string{"code"},
+		},
 	})
 }
 
@@ -167,6 +191,36 @@ func (o *Orchestrator) executeSubagentToolCalls(ctx context.Context, messages *[
 			content, err := o.getVDManual()
 			if err != nil {
 				content = fmt.Sprintf("Error: %v", err)
+			}
+			*messages = append(*messages, llmtypes.Message{
+				Role:       "tool",
+				Name:       call.Name,
+				ToolCallID: call.ID,
+				Content:    content,
+			})
+			continue
+		}
+
+		if call.Name == "execute_python_readonly" {
+			cli.PrintSubagentInvocation(call.Name, call.Arguments)
+			var args map[string]any
+			if err := json.Unmarshal([]byte(call.Arguments), &args); err != nil {
+				return fmt.Errorf("error parsing arguments: %w", err)
+			}
+			code, _ := args["code"].(string)
+			fullCode := o.injectSandboxState() + "\n" + code
+			result, err := o.pythonRepl.Execute(fullCode)
+			content := ""
+			if err != nil {
+				content = fmt.Sprintf("Error: %v", err)
+			} else if result.Error != "" {
+				cli.PrintError(fmt.Sprintf("Orchestrator Python Error: %s", result.Error))
+				content = fmt.Sprintf("Python Error: %s", result.Error)
+			} else {
+				content = result.Stdout
+			}
+			if content == "" {
+				content = "(Success: no output)"
 			}
 			*messages = append(*messages, llmtypes.Message{
 				Role:       "tool",
@@ -310,6 +364,9 @@ func (o *Orchestrator) handleTextMarkers(content string) string {
 
 // Close cleans up the LLM client.
 func (o *Orchestrator) Close() {
+	if o.pythonRepl != nil {
+		o.pythonRepl.Close()
+	}
 	if gp, ok := o.provider.(*GeminiProvider); ok {
 		gp.Close()
 	}

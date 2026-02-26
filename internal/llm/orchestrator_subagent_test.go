@@ -97,7 +97,7 @@ func TestOrchestrator_DelegatesToSubagent(t *testing.T) {
 	}}
 
 	agent := &fakeSubagent{name: "call_research_assistant", result: "Flanking gives +2."}
-	orch := NewOrchestrator(context.Background(), provider, deps)
+	orch, _ := NewOrchestrator(context.Background(), provider, deps, "", "")
 	orch.RegisterSubagents(agent)
 
 	got, err := orch.ProcessInput(context.Background(), "Can I flank the enemy?", nil)

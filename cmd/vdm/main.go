@@ -145,6 +145,11 @@ func main() {
 		slog.Error("failed to initialize subagents", "error", err)
 		os.Exit(1)
 	}
+
+	wd, _ := os.Getwd()
+	python := subagents.FindPythonPath(wd)
+	script := filepath.Join(wd, "py", "restricted_python.py")
+
 	orchestratorPromptBytes, err2 := os.ReadFile(cfg.OrchestratorPromptFile)
 	if err2 != nil {
 		slog.Error("failed to read orchestrator prompt", "error", err2)
@@ -169,12 +174,12 @@ func main() {
 			os.Exit(1)
 		}
 		s.Identify.Intents = discordgo.IntentGuildMessages | discordgo.IntentMessageContent
-		runDiscord(context.Background(), cfg, &discordSessionWrapper{s}, p, agents, deps, orchestratorPrompt)
+		runDiscord(context.Background(), cfg, &discordSessionWrapper{s}, p, agents, deps, orchestratorPrompt, python, script)
 	} else {
 		if cfg.DryRun {
 			slog.Info("DRY RUN MODE ENABLED. Prompts will be echoed back.")
 		}
-		runCLI(context.Background(), os.Stdin, os.Stdout, cfg, p, agents, deps, orchestratorPrompt)
+		runCLI(context.Background(), os.Stdin, os.Stdout, cfg, p, agents, deps, orchestratorPrompt, python, script)
 	}
 }
 
@@ -295,13 +300,18 @@ func parseConfig(args []string) (cfg *Config, useDiscord bool, verbose bool, err
 	return cfg, *useDiscordPtr, *verbosePtr, nil
 }
 
-func runCLI(ctx context.Context, in io.Reader, out io.Writer, cfg *Config, p llmtypes.Provider, agents []llmtypes.Subagent, deps cli.Deps, orchestratorPrompt string) {
+func runCLI(ctx context.Context, in io.Reader, out io.Writer, cfg *Config, p llmtypes.Provider, agents []llmtypes.Subagent, deps cli.Deps, orchestratorPrompt string, pythonPath, scriptPath string) {
 	slog.Info("Starting CLI mode...")
 
 	var orch *llm.Orchestrator
 
 	if p != nil {
-		orch = llm.NewOrchestrator(ctx, p, deps)
+		var err error
+		orch, err = llm.NewOrchestrator(ctx, p, deps, pythonPath, scriptPath)
+		if err != nil {
+			slog.Error("failed to initialize orchestrator", "error", err)
+			os.Exit(1)
+		}
 		orch.SetPrompt(orchestratorPrompt)
 		orch.RegisterSubagents(agents...)
 		// Load history
@@ -489,7 +499,12 @@ func runDiscord(ctx context.Context, cfg *Config, s DiscordSession, p llmtypes.P
 
 	var orch *llm.Orchestrator
 	if p != nil {
-		orch = llm.NewOrchestrator(ctx, p, deps)
+		var err error
+		orch, err = llm.NewOrchestrator(ctx, p, deps, pythonPath, scriptPath)
+		if err != nil {
+			slog.Error("failed to initialize orchestrator", "error", err)
+			os.Exit(1)
+		}
 		orch.SetPrompt(orchestratorPrompt)
 		orch.RegisterSubagents(agents...)
 		// Load history

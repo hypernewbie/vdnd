@@ -20,7 +20,7 @@ func TestOrchestrator_GetVDManual(t *testing.T) {
 	deps := cli.Deps{
 		Store: &mockManualStore{},
 	}
-	o := NewOrchestrator(context.Background(), nil, deps)
+	o, _ := NewOrchestrator(context.Background(), nil, deps, "", "")
 	
 	content, err := o.getVDManual()
 	if err != nil {
@@ -33,7 +33,7 @@ func TestOrchestrator_GetVDManual(t *testing.T) {
 }
 
 func TestOrchestrator_RegisterManualTool(t *testing.T) {
-	o := NewOrchestrator(context.Background(), nil, cli.Deps{})
+	o, _ := NewOrchestrator(context.Background(), nil, cli.Deps{}, "", "")
 	o.RegisterSubagents() // Register with no agents
 	
 	found := false
