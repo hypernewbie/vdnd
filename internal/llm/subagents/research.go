@@ -78,7 +78,7 @@ func (a *ResearchSubagent) Run(ctx context.Context, query string, history []llmt
 	messages = append(messages, llmtypes.Message{Role: "system", Content: a.prompt})
 	messages = append(messages, llmtypes.Message{Role: "user", Content: query})
 
-	for i := 0; i < 10; i++ {
+	for i := 0; i < 150; i++ {
 		response, err := a.provider.GenerateWithTools(ctx, messages, []llmtypes.Tool{researchPythonTool()})
 		if err != nil {
 			return "", err

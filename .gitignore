@@ -11,3 +11,4 @@ vdm.log
 TEMP*.md
 TEMP.md
 vdm
+py/__pycache__/

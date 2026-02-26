@@ -324,10 +324,13 @@ func runCLI(ctx context.Context, in io.Reader, out io.Writer, cfg *Config, p llm
 			slog.Warn("failed to load history", "error", err)
 		}
 		defer func() {
+			cli.PrintInfo("\n[VDM] Shutting down... (Persisting state)")
 			if err := orch.SaveHistory(cfg.HistoryFile); err != nil {
 				slog.Error("failed to save history", "error", err)
 			}
+			cli.PrintInfo("[VDM] Cleaning up sandbox...")
 			orch.Close()
+			cli.PrintInfo("[VDM] Goodbye.")
 		}()
 		fmt.Fprintf(out, "LLM mode enabled (Generative DM using %s/%s with subagents). Type 'exit' to quit.\n", cfg.LLMProvider, cfg.LLMModel)
 	} else {
@@ -517,10 +520,13 @@ func runDiscord(ctx context.Context, cfg *Config, s DiscordSession, p llmtypes.P
 			slog.Warn("failed to load history", "error", err)
 		}
 		defer func() {
+			cli.PrintInfo("\n[VDM] Shutting down... (Persisting state)")
 			if err := orch.SaveHistory(cfg.HistoryFile); err != nil {
 				slog.Error("failed to save history", "error", err)
 			}
+			cli.PrintInfo("[VDM] Cleaning up sandbox...")
 			orch.Close()
+			cli.PrintInfo("[VDM] Goodbye.")
 		}()
 	}
 

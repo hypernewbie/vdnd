@@ -74,7 +74,7 @@ func (a *ExecutionSubagent) Run(ctx context.Context, instruction string, history
 	messages = append(messages, llmtypes.Message{Role: "system", Content: a.prompt})
 	messages = append(messages, llmtypes.Message{Role: "user", Content: instruction})
 
-	for i := 0; i < 5; i++ {
+	for i := 0; i < 150; i++ {
 		response, err := a.provider.GenerateWithTools(ctx, messages, a.engine.Tools())
 		if err != nil {
 			return "", err

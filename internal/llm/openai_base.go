@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -16,7 +17,7 @@ import (
 // OpenAIInternalMessage represents the message format used by OpenAI-compatible APIs.
 type OpenAIInternalMessage struct {
 	Role             string           `json:"role"`
-	Content          string           `json:"content,omitempty"`
+	Content          string           `json:"content"`                     // Required by some providers (e.g. Minimax)
 	Reasoning        string           `json:"reasoning,omitempty"`         // Used by Groq
 	ReasoningContent string           `json:"reasoning_content,omitempty"` // Used by DeepSeek
 	ToolCalls        []OpenAIToolCall `json:"tool_calls,omitempty"`
@@ -123,6 +124,9 @@ func (p *OpenAIProvider) GenerateWithTools(ctx context.Context, messages []llmty
 		return llmtypes.GenerationResponse{}, err
 	}
 
+	// DEBUG: Log outgoing request JSON
+	slog.Debug("OPENAI_REQUEST", "url", p.config.BaseURL, "body", string(jsonData))
+
 	req, err := http.NewRequestWithContext(ctx, "POST", p.config.BaseURL, bytes.NewBuffer(jsonData))
 	if err != nil {
 		return llmtypes.GenerationResponse{}, err
@@ -142,6 +146,7 @@ func (p *OpenAIProvider) GenerateWithTools(ctx context.Context, messages []llmty
 
 	body, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusOK {
+		slog.Error("OPENAI_ERROR_RESPONSE", "status", resp.StatusCode, "body", string(body))
 		var errResp OpenAIChatResponse
 		json.Unmarshal(body, &errResp)
 		if errResp.Error.Message != "" {
@@ -360,12 +365,14 @@ func (p *OpenAIProvider) convertToOpenAIMessages(messages []llmtypes.Message) []
 			// First message: The reasoning/thinking turn
 			oaMsgs = append(oaMsgs, OpenAIInternalMessage{
 				Role:      role,
+				Content:   "", // Ensure field is present for strict validators
 				Reasoning: m.Thinking, // OpenRouter normalized key
 			})
 
 			// Second message: The action/tool_calls turn
 			om := OpenAIInternalMessage{
-				Role: role,
+				Role:    role,
+				Content: "", // Ensure field is present
 			}
 			for _, tc := range m.ToolCalls {
 				otc := OpenAIToolCall{

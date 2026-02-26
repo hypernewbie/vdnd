@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 
@@ -103,7 +104,7 @@ func (o *Orchestrator) RegisterSubagents(agents ...llmtypes.Subagent) {
 	})
 	o.tools = append(o.tools, llmtypes.Tool{
 		Name:        "execute_python",
-		Description: "Execute Python code in the persistent sandbox for reading/writing files and performing logic.",
+		Description: "Execute Python code in the sandbox. CRITICAL: DO NOT import os/json. Use list_dir('sandbox') to see your files. message_history is available.",
 		Parameters: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
@@ -148,7 +149,7 @@ func (o *Orchestrator) ProcessInput(ctx context.Context, input string, reporter 
 	messages = append(messages, llmtypes.Message{Role: "system", Content: systemPrompt})
 	messages = append(messages, llmtypes.Message{Role: "user", Content: input})
 
-	for i := 0; i < 12; i++ {
+	for i := 0; i < 300; i++ {
 		response, err := o.provider.GenerateWithTools(runCtx, messages, o.tools)
 		if err != nil {
 			return "", err
@@ -186,6 +187,7 @@ func (o *Orchestrator) ProcessInput(ctx context.Context, input string, reporter 
 			}
 
 			finalResp = o.handleTextMarkers(finalResp)
+			finalResp = o.filterThinkingTags(finalResp)
 			o.history = append(o.history, llmtypes.Message{Role: "user", Content: input})
 			o.history = append(o.history, llmtypes.Message{Role: "model", Content: finalResp, Thinking: response.Thinking})
 			slog.Info("ORCHESTRATOR_END", "response", finalResp)
@@ -239,12 +241,28 @@ func (o *Orchestrator) executeSubagentToolCalls(ctx context.Context, messages *[
 				return fmt.Errorf("error parsing arguments: %w", err)
 			}
 			code, _ := args["code"].(string)
+			
+			// INTERCEPT: Catch common mistakes early
+			if misuse := o.detectPythonMisuse(code); misuse != "" {
+				cli.PrintWarning(fmt.Sprintf("Intercepted Python Misuse: %s", code))
+				*messages = append(*messages, llmtypes.Message{
+					Role:       "tool",
+					Name:       call.Name,
+					ToolCallID: call.ID,
+					Content:    misuse,
+				})
+				continue
+			}
+
 			fullCode := o.injectSandboxState() + "\n" + code
 			result, err := o.pythonRepl.Execute(fullCode)
 			content := ""
 			if err != nil {
 				content = fmt.Sprintf("System Error: %v", err)
 			} else if result.Error != "" {
+				// Log raw error for debugging to vdm.log
+				slog.Error("PYTHON_EXEC_ERROR", "error", result.Error, "code", code)
+
 				// Sanitize the error for both the CLI and the LLM
 				sanitizedError := o.pruneOutput(result.Error)
 				cli.PrintError(fmt.Sprintf("Orchestrator Python Error: %s", sanitizedError))
@@ -307,8 +325,11 @@ func (o *Orchestrator) executeSubagentToolCalls(ctx context.Context, messages *[
 		slog.Info("SUBAGENT_CALL", "name", call.Name, "input", agentInput)
 		result, err := agent.Run(ctx, agentInput, nil)
 		if err != nil {
+			slog.Error("SUBAGENT_FAILED", "name", call.Name, "error", err)
 			cli.PrintWarning(fmt.Sprintf("Subagent %s failed: %v", call.Name, err))
 			result = fmt.Sprintf("Error: %v", err)
+		} else {
+			slog.Debug("SUBAGENT_RESULT", "name", call.Name, "output", result)
 		}
 
 		*messages = append(*messages, llmtypes.Message{
@@ -440,6 +461,7 @@ func (o *Orchestrator) saveSandboxHistory() {
 	if o.pythonRepl == nil {
 		return
 	}
+	cli.PrintInfo("  [VDM] Syncing full history from sandbox...")
 	// Query current message_history from sandbox
 	code := `import json; print(json.dumps(message_history))`
 	result, err := o.pythonRepl.Execute(code)
@@ -448,6 +470,7 @@ func (o *Orchestrator) saveSandboxHistory() {
 		return
 	}
 
+	cli.PrintInfo("  [VDM] Persisting deep history to disk...")
 	sandboxHistoryPath := filepath.Join(filepath.Dir(o.scriptPath), "..", "sandbox", "message_history.json")
 	if err := os.WriteFile(sandboxHistoryPath, []byte(result.Stdout), 0644); err != nil {
 		slog.Warn("failed to save sandbox history", "error", err)
@@ -517,6 +540,43 @@ func (o *Orchestrator) truncateHistory() {
 	if keepIdx > 0 {
 		o.history = o.history[keepIdx:]
 	}
+}
+
+func (o *Orchestrator) filterThinkingTags(content string) string {
+	re := regexp.MustCompile(`(?s)<think>.*?</think>`)
+	content = re.ReplaceAllString(content, "")
+	
+	// Minimax often puts its plan before a horizontal rule or double newline.
+	if strings.Contains(content, "---") {
+		parts := strings.SplitN(content, "---", 2)
+		// If the first part looks like a plan (short, lists, or meta-talk), take the second part.
+		first := strings.ToLower(parts[0])
+		isPlan := len(parts[0]) < 800 && (strings.Contains(first, "1.") || 
+			strings.Contains(first, "* ") || 
+			strings.Contains(first, "- ") || 
+			strings.Contains(first, "let me") || 
+			strings.Contains(first, "i will") ||
+			strings.Contains(first, "okay,"))
+		
+		if isPlan {
+			content = parts[1]
+		}
+	}
+
+	return strings.TrimSpace(content)
+}
+
+func (o *Orchestrator) detectPythonMisuse(code string) string {
+	if strings.Contains(code, "import os") {
+		return "Python Error: 'import os' is forbidden. Use the pre-injected global 'list_dir(\"sandbox\")' to see files."
+	}
+	if strings.Contains(code, "list_dir(\"/\")") || strings.Contains(code, "list_dir('/')") {
+		return "Python Error: Access to root '/' is forbidden. You only have access to 'sandbox/'. Use 'list_dir(\"sandbox\")'."
+	}
+	if strings.Contains(code, "list_dir(\".\")") || strings.Contains(code, "list_dir('.')") {
+		return "Python Error: Current directory listing is restricted. Use 'list_dir(\"sandbox\")' to see your campaign files."
+	}
+	return ""
 }
 
 func (o *Orchestrator) pruneOutput(output string) string {

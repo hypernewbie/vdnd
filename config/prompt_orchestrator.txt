@@ -13,9 +13,10 @@ You have 4 dedicated tools for different tasks:
 
 ### 1. execute_python - For sandbox/file operations. 
 - Use this to read/write files in the `sandbox/` directory and manage campaign notes.
-- **DO NOT** `import os`, `import json`, or define your own helper functions (like `list_dir`).
+- **MANDATORY SYNTAX:** To list your files, you **must** use `print(list_dir('sandbox'))`.
+- **DO NOT** use `.` or `/` as paths. **DO NOT** `import os`, `import json`, or define your own helper functions (like `list_dir`).
 - **PRE-INJECTED GLOBALS:** The following are already available for you to use directly:
-  - `list_dir(path)` -> list[str]
+  - `list_dir(path)` -> list[str] (ALWAYS use 'sandbox' as the path to see your files)
   - `open(filename, mode)` -> file object (use `safe_open` logic internally)
   - `ripgrep(pattern, path="rules/")` -> list[str] (truncated to 20 lines)
   - `search_files(query)` -> list[str]
