@@ -183,6 +183,7 @@ func (e *VDEngine) ExecuteTool(call llmtypes.ToolCall) (stdout string, exitCode 
 		if e.pythonSubagent == nil {
 			return "", 1, nil, fmt.Errorf("python subagent not available")
 		}
+		cli.PrintVDEngineExecution(call.Name, "(read-only sandbox)")
 		var args map[string]any
 		if err := json.Unmarshal([]byte(call.Arguments), &args); err != nil {
 			return "", 1, nil, fmt.Errorf("error parsing arguments: %w", err)

@@ -74,6 +74,8 @@ func PrintSubagentInvocation(name, payload string) {
 		uxPrintf(draculaOrange, "[Orchestrator -> ExecutionAgent] %s\n", summary)
 	case "execute_python":
 		uxPrintf(draculaGreen, "[Orchestrator -> Sandbox] %s\n", summary)
+	case "execute_python_readonly":
+		uxPrintf(draculaGreen, "[Orchestrator -> Sandbox (read-only)] %s\n", summary)
 	default:
 		uxPrintf(draculaCyan, "[Orchestrator -> %s] %s\n", name, summary)
 	}
@@ -84,7 +86,7 @@ func PrintSandboxExecution() {
 }
 
 func PrintVDEngineExecution(toolName, args string) {
-	uxPrintf(draculaGreen, "[VD Engine] %s %s\n", toolName, truncateUX(args, 120))
+	uxPrintf(draculaGreen, "  [VD Engine] %s %s\n", toolName, truncateUX(args, 120))
 }
 
 func PrintWarning(msg string) {

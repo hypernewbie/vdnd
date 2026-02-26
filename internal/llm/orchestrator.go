@@ -163,6 +163,7 @@ func (o *Orchestrator) executeSubagentToolCalls(ctx context.Context, messages *[
 	*messages = append(*messages, llmtypes.Message{Role: "model", ToolCalls: calls, Thinking: thinking})
 	for _, call := range calls {
 		if call.Name == "get_vd_manual" {
+			cli.PrintInfo("[Orchestrator] Reading VD manual...")
 			content, err := o.getVDManual()
 			if err != nil {
 				content = fmt.Sprintf("Error: %v", err)

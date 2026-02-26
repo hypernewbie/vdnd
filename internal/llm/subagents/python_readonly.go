@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"uaa/vdnd/internal/cli"
 	"uaa/vdnd/internal/llm/llmtypes"
 )
 
@@ -50,6 +51,7 @@ func (a *PythonReadOnlySubagent) Run(ctx context.Context, code string, history [
 
 	observation := result.Stdout
 	if result.Error != "" {
+		cli.PrintError(fmt.Sprintf("Python Read-Only Error: %s", result.Error))
 		observation += "\nError:\n" + result.Error
 	}
 	if observation == "" {
