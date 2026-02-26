@@ -14,15 +14,30 @@ import (
 
 // ExecutionSubagent handles state mutation via VDEngine tools.
 type ExecutionSubagent struct {
-	provider llmtypes.Provider
-	engine   *vdengine.VDEngine
-	prompt   string
+	provider       llmtypes.Provider
+	engine         *vdengine.VDEngine
+	prompt         string
+	pythonSubagent llmtypes.Subagent
 }
 
 func NewExecutionSubagent(p llmtypes.Provider, deps cli.Deps) *ExecutionSubagent {
 	return &ExecutionSubagent{
 		provider: p,
 		engine:   vdengine.New(deps),
+	}
+}
+
+func NewExecutionSubagentWithPython(p llmtypes.Provider, deps cli.Deps, pythonSubagent llmtypes.Subagent) *ExecutionSubagent {
+	var engine *vdengine.VDEngine
+	if pythonSubagent != nil {
+		engine = vdengine.NewWithPython(deps, pythonSubagent)
+	} else {
+		engine = vdengine.New(deps)
+	}
+	return &ExecutionSubagent{
+		provider:       p,
+		engine:         engine,
+		pythonSubagent: pythonSubagent,
 	}
 }
 

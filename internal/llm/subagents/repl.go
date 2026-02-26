@@ -33,9 +33,12 @@ type REPLExecutor struct {
 	reader *bufio.Reader
 }
 
-// NewREPLExecutor creates and starts a new Python REPL executor.
-func NewREPLExecutor(pythonPath, scriptPath string) (*REPLExecutor, error) {
+// NewREPLExecutorWithEnv creates and starts a new Python REPL executor with custom environment variables.
+func NewREPLExecutorWithEnv(pythonPath, scriptPath string, env []string) (*REPLExecutor, error) {
 	cmd := exec.Command(pythonPath, scriptPath)
+	if env != nil {
+		cmd.Env = append(os.Environ(), env...)
+	}
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get stdin pipe: %w", err)
@@ -58,6 +61,11 @@ func NewREPLExecutor(pythonPath, scriptPath string) (*REPLExecutor, error) {
 		stdout: stdout,
 		reader: bufio.NewReader(stdout),
 	}, nil
+}
+
+// NewREPLExecutor creates and starts a new Python REPL executor.
+func NewREPLExecutor(pythonPath, scriptPath string) (*REPLExecutor, error) {
+	return NewREPLExecutorWithEnv(pythonPath, scriptPath, nil)
 }
 
 // Execute sends code to the REPL and returns the result.

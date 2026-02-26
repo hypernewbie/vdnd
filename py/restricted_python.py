@@ -24,6 +24,8 @@ ALLOWED_DIRS = {
     os.path.join(PROJECT_ROOT, "sandbox"),
 }
 
+READONLY_MODE = os.getenv("VDM_PYTHON_READONLY") == "1"
+
 def safe_open(filename, mode="r", *args, **kwargs):
     # Normalize path
     filename = os.path.realpath(filename)
@@ -42,6 +44,10 @@ def safe_open(filename, mode="r", *args, **kwargs):
     if not allowed:
         raise PermissionError(f"Access to '{filename}' is not allowed")
 
+    # Enforce read-only mode globally
+    if READONLY_MODE and mode not in ("r", "rb"):
+        raise PermissionError(f"Read-only mode: cannot open '{filename}' in mode '{mode}'")
+    
     # Enforce read-only for non-sandbox areas
     if not is_sandbox and mode not in ("r", "rb"):
         raise PermissionError("Write access is only allowed in the sandbox directory")
@@ -186,7 +192,12 @@ class SandboxREPL:
                 return ["error: " + (result.stderr.strip() or "Unknown ripgrep error")]
 
             # Ripgrep with --heading separates files with empty lines
-            blocks = result.stdout.strip().split("\n\n")
+            output = result.stdout.strip()
+            lines = output.split("\n")
+            if len(lines) > 20:
+                output = "\n".join(lines[:20]) + f"\n... (truncated, {len(lines)} lines total)"
+            
+            blocks = output.split("\n\n")
             return blocks
         except Exception as e:
             return ["error: " + str(e)]

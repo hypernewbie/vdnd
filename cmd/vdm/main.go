@@ -217,7 +217,7 @@ func initProvider(ctx context.Context, cfg *Config) (llmtypes.Provider, error) {
 	return p, err
 }
 
-func initSubagents(cfg *Config, p llmtypes.Provider, deps cli.Deps) ([]llm.Subagent, error) {
+func initSubagents(cfg *Config, p llmtypes.Provider, deps cli.Deps) ([]llmtypes.Subagent, error) {
 	if p == nil {
 		return nil, nil
 	}
@@ -233,7 +233,12 @@ func initSubagents(cfg *Config, p llmtypes.Provider, deps cli.Deps) ([]llm.Subag
 	}
 	researchAgent.SetPrompt(string(researcherPrompt))
 
-	execAgent := subagents.NewExecutionSubagent(p, deps)
+	pythonReadOnlyAgent, err := subagents.NewPythonReadOnlySubagent(python, script)
+	if err != nil {
+		return nil, fmt.Errorf("failed to start read-only python subagent: %w", err)
+	}
+
+	execAgent := subagents.NewExecutionSubagentWithPython(p, deps, pythonReadOnlyAgent)
 	vdPrompt, err := os.ReadFile(cfg.VDPromptFile)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read execution prompt: %w", err)
@@ -245,7 +250,7 @@ func initSubagents(cfg *Config, p llmtypes.Provider, deps cli.Deps) ([]llm.Subag
 		return nil, fmt.Errorf("failed to start python subagent: %w", err)
 	}
 
-	return []llm.Subagent{researchAgent, execAgent, pythonAgent}, nil
+	return []llmtypes.Subagent{researchAgent, execAgent, pythonAgent}, nil
 }
 
 func parseConfig(args []string) (cfg *Config, useDiscord bool, verbose bool, err error) {
@@ -290,7 +295,7 @@ func parseConfig(args []string) (cfg *Config, useDiscord bool, verbose bool, err
 	return cfg, *useDiscordPtr, *verbosePtr, nil
 }
 
-func runCLI(ctx context.Context, in io.Reader, out io.Writer, cfg *Config, p llmtypes.Provider, agents []llm.Subagent, deps cli.Deps, orchestratorPrompt string) {
+func runCLI(ctx context.Context, in io.Reader, out io.Writer, cfg *Config, p llmtypes.Provider, agents []llmtypes.Subagent, deps cli.Deps, orchestratorPrompt string) {
 	slog.Info("Starting CLI mode...")
 
 	var orch *llm.Orchestrator
@@ -407,7 +412,7 @@ func collectCLIFeedback(in io.Reader, out io.Writer, cfg *Config, p llmtypes.Pro
 	}
 }
 
-func runDiscord(ctx context.Context, cfg *Config, s DiscordSession, p llmtypes.Provider, agents []llm.Subagent, deps cli.Deps, orchestratorPrompt string) {
+func runDiscord(ctx context.Context, cfg *Config, s DiscordSession, p llmtypes.Provider, agents []llmtypes.Subagent, deps cli.Deps, orchestratorPrompt string) {
 	cache := NewMessageCache(100)
 	// Define commands
 	commands := []*discordgo.ApplicationCommand{

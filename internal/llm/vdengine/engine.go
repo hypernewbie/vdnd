@@ -1,6 +1,7 @@
 package vdengine
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"strconv"
@@ -11,7 +12,8 @@ import (
 
 // VDEngine handles VD tool execution.
 type VDEngine struct {
-	deps cli.Deps
+	deps           cli.Deps
+	pythonSubagent llmtypes.Subagent
 }
 
 // New creates a new VDEngine.
@@ -19,9 +21,14 @@ func New(deps cli.Deps) *VDEngine {
 	return &VDEngine{deps: deps}
 }
 
+// NewWithPython creates a new VDEngine with Python read-only subagent.
+func NewWithPython(deps cli.Deps, pythonSubagent llmtypes.Subagent) *VDEngine {
+	return &VDEngine{deps: deps, pythonSubagent: pythonSubagent}
+}
+
 // Tools returns the list of VD tools.
 func (e *VDEngine) Tools() []llmtypes.Tool {
-	return []llmtypes.Tool{
+	tools := []llmtypes.Tool{
 		{
 			Name:        "vd_scene_new",
 			Description: "Create a new combat scene",
@@ -138,6 +145,13 @@ func (e *VDEngine) Tools() []llmtypes.Tool {
 			Parameters:  nil,
 		},
 	}
+
+	// Add Python read-only tool if subagent is available
+	if e.pythonSubagent != nil {
+		tools = append(tools, e.pythonSubagent.ToolDefinition())
+	}
+
+	return tools
 }
 
 // ExecuteTool handles a VD tool call.
@@ -164,6 +178,24 @@ func (e *VDEngine) ExecuteTool(call llmtypes.ToolCall) (stdout string, exitCode 
 			return "", 1, nil, fmt.Errorf("could not read vd_manual.md: %w", err)
 		}
 		return content, 0, nil, nil
+
+	case "execute_python_readonly":
+		if e.pythonSubagent == nil {
+			return "", 1, nil, fmt.Errorf("python subagent not available")
+		}
+		var args map[string]any
+		if err := json.Unmarshal([]byte(call.Arguments), &args); err != nil {
+			return "", 1, nil, fmt.Errorf("error parsing arguments: %w", err)
+		}
+		code, _ := args["code"].(string)
+		if code == "" {
+			return "", 1, nil, fmt.Errorf("missing 'code' field")
+		}
+		result, err := e.pythonSubagent.Run(context.Background(), code, nil)
+		if err != nil {
+			return "", 1, nil, err
+		}
+		return result, 0, nil, nil
 
 	}
 

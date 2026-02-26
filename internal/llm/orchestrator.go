@@ -29,9 +29,17 @@ type Orchestrator struct {
 	provider     llmtypes.Provider
 	deps         cli.Deps
 	prompt       string
-	subagents    map[string]Subagent
+	subagents    map[string]llmtypes.Subagent
 	tools        []llmtypes.Tool
 	history      []llmtypes.Message
+}
+
+func (o *Orchestrator) getVDManual() (string, error) {
+	content, err := o.deps.Store.GetManual()
+	if err != nil {
+		return "", fmt.Errorf("failed to read VD manual: %w", err)
+	}
+	return content, nil
 }
 
 // SetPrompt sets the system prompt for the orchestrator.
@@ -44,7 +52,7 @@ func NewOrchestrator(context context.Context, provider llmtypes.Provider, deps c
 	o := &Orchestrator{
 		provider:  provider,
 		deps:      deps,
-		subagents: make(map[string]Subagent),
+		subagents: make(map[string]llmtypes.Subagent),
 	}
 
 	o.history = []llmtypes.Message{
@@ -55,8 +63,8 @@ func NewOrchestrator(context context.Context, provider llmtypes.Provider, deps c
 }
 
 // RegisterSubagents sets the available subagents as callable tools.
-func (o *Orchestrator) RegisterSubagents(agents ...Subagent) {
-	o.subagents = make(map[string]Subagent)
+func (o *Orchestrator) RegisterSubagents(agents ...llmtypes.Subagent) {
+	o.subagents = make(map[string]llmtypes.Subagent)
 	o.tools = o.tools[:0]
 	for _, agent := range agents {
 		if agent == nil {
@@ -65,6 +73,12 @@ func (o *Orchestrator) RegisterSubagents(agents ...Subagent) {
 		o.subagents[agent.Name()] = agent
 		o.tools = append(o.tools, agent.ToolDefinition())
 	}
+
+	// Add direct tools
+	o.tools = append(o.tools, llmtypes.Tool{
+		Name:        "get_vd_manual",
+		Description: "Get the full VD CLI manual for command reference.",
+	})
 }
 
 // ProviderInfo returns the provider name and model name.
@@ -148,6 +162,20 @@ func (o *Orchestrator) ProcessInput(ctx context.Context, input string, reporter 
 func (o *Orchestrator) executeSubagentToolCalls(ctx context.Context, messages *[]llmtypes.Message, calls []llmtypes.ToolCall, thinking string, reporter StreamReporter) error {
 	*messages = append(*messages, llmtypes.Message{Role: "model", ToolCalls: calls, Thinking: thinking})
 	for _, call := range calls {
+		if call.Name == "get_vd_manual" {
+			content, err := o.getVDManual()
+			if err != nil {
+				content = fmt.Sprintf("Error: %v", err)
+			}
+			*messages = append(*messages, llmtypes.Message{
+				Role:       "tool",
+				Name:       call.Name,
+				ToolCallID: call.ID,
+				Content:    content,
+			})
+			continue
+		}
+
 		agent, ok := o.subagents[call.Name]
 		if !ok {
 			cli.PrintWarning(fmt.Sprintf("Unknown subagent requested: %s", call.Name))

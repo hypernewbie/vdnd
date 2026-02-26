@@ -46,3 +46,11 @@ type Provider interface {
 	GenerateStream(ctx context.Context, messages []Message, tools []Tool, callback func(chunk string) error) (GenerationResponse, error)
 	SupportsToolCalling() bool
 }
+
+// Subagent is a specialized worker tool callable by the orchestrator.
+type Subagent interface {
+	Name() string
+	Description() string
+	Run(ctx context.Context, query string, history []Message) (string, error)
+	ToolDefinition() Tool
+}
