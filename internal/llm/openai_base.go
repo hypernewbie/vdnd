@@ -80,6 +80,7 @@ type OpenAIProviderConfig struct {
 	APIKey        string
 	Model         string
 	SupportsTools bool
+	ExtraHeaders  map[string]string
 }
 
 // OpenAIProvider is a generic provider for OpenAI-compatible APIs.
@@ -129,6 +130,9 @@ func (p *OpenAIProvider) GenerateWithTools(ctx context.Context, messages []llmty
 
 	req.Header.Set("Authorization", "Bearer "+p.config.APIKey)
 	req.Header.Set("Content-Type", "application/json")
+	for k, v := range p.config.ExtraHeaders {
+		req.Header.Set(k, v)
+	}
 
 	resp, err := p.client.Do(req)
 	if err != nil {
@@ -208,6 +212,9 @@ func (p *OpenAIProvider) GenerateStream(ctx context.Context, messages []llmtypes
 	}
 	req.Header.Set("Authorization", "Bearer "+p.config.APIKey)
 	req.Header.Set("Content-Type", "application/json")
+	for k, v := range p.config.ExtraHeaders {
+		req.Header.Set(k, v)
+	}
 
 	resp, err := p.client.Do(req)
 	if err != nil {
@@ -347,12 +354,41 @@ func (p *OpenAIProvider) convertToOpenAIMessages(messages []llmtypes.Message) []
 			role = "assistant"
 		}
 
+		// Handle Assistant messages with both thinking and tool calls by splitting them.
+		// Many providers (Minimax, DeepSeek) forbid combined reasoning + tools in history.
+		if role == "assistant" && m.Thinking != "" && len(m.ToolCalls) > 0 {
+			// First message: The reasoning/thinking turn
+			oaMsgs = append(oaMsgs, OpenAIInternalMessage{
+				Role:      role,
+				Reasoning: m.Thinking, // OpenRouter normalized key
+			})
+
+			// Second message: The action/tool_calls turn
+			om := OpenAIInternalMessage{
+				Role: role,
+			}
+			for _, tc := range m.ToolCalls {
+				otc := OpenAIToolCall{
+					ID:   tc.ID,
+					Type: "function",
+				}
+				if otc.ID == "" {
+					otc.ID = fmt.Sprintf("call_gen_%d", time.Now().UnixNano())
+				}
+				otc.Function.Name = tc.Name
+				otc.Function.Arguments = tc.Arguments
+				om.ToolCalls = append(om.ToolCalls, otc)
+			}
+			oaMsgs = append(oaMsgs, om)
+			continue
+		}
+
 		om := OpenAIInternalMessage{
 			Role:             role,
 			Content:          m.Content,
 			Name:             m.Name,
-			ReasoningContent: m.Thinking, // For DeepSeek
-			Reasoning:        m.Thinking, // For Groq
+			Reasoning:        m.Thinking, // Use 'reasoning' for history turns
+			ReasoningContent: m.Thinking, // Keep 'reasoning_content' for dual-support
 		}
 
 		if m.ToolCallID != "" {
@@ -364,6 +400,9 @@ func (p *OpenAIProvider) convertToOpenAIMessages(messages []llmtypes.Message) []
 				otc := OpenAIToolCall{
 					ID:   tc.ID,
 					Type: "function",
+				}
+				if otc.ID == "" {
+					otc.ID = fmt.Sprintf("call_gen_%d", time.Now().UnixNano())
 				}
 				otc.Function.Name = tc.Name
 				otc.Function.Arguments = tc.Arguments

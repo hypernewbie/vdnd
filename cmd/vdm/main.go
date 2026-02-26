@@ -108,7 +108,11 @@ func main() {
 	slog.SetDefault(slog.New(handler))
 
 	// Load .env file if it exists
-	_ = godotenv.Load()
+	_ = godotenv.Overload()
+
+	// Handle graceful shutdown signals for the entire stack
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer cancel()
 
 	cfg, useDiscord, verbose, err := parseConfig(os.Args[1:])
 	if err != nil {
@@ -135,7 +139,7 @@ func main() {
 		fmt.Printf("------------------------\n")
 	}
 
-	p, err := initProvider(context.Background(), cfg)
+	p, err := initProvider(ctx, cfg)
 	if err != nil {
 		slog.Error("failed to initialize provider", "error", err)
 		os.Exit(1)
@@ -176,12 +180,12 @@ func main() {
 			os.Exit(1)
 		}
 		s.Identify.Intents = discordgo.IntentGuildMessages | discordgo.IntentMessageContent
-		runDiscord(context.Background(), cfg, &discordSessionWrapper{s}, p, agents, deps, orchestratorPrompt, python, script)
+		runDiscord(ctx, cfg, &discordSessionWrapper{s}, p, agents, deps, orchestratorPrompt, python, script)
 	} else {
 		if cfg.DryRun {
 			slog.Info("DRY RUN MODE ENABLED. Prompts will be echoed back.")
 		}
-		runCLI(context.Background(), os.Stdin, os.Stdout, cfg, p, agents, deps, orchestratorPrompt, python, script)
+		runCLI(ctx, os.Stdin, os.Stdout, cfg, p, agents, deps, orchestratorPrompt, python, script)
 	}
 }
 
@@ -550,14 +554,10 @@ func runDiscord(ctx context.Context, cfg *Config, s DiscordSession, p llmtypes.P
 
 	// Wait here until context is canceled or term signal is received.
 	slog.Info("bot is now running. Press CTRL-C to exit.")
-	stop := make(chan os.Signal, 1)
-	signal.Notify(stop, os.Interrupt)
 
 	select {
-	case <-stop:
-		slog.Info("interrupt signal received")
 	case <-ctx.Done():
-		slog.Info("context canceled")
+		slog.Info("context canceled or interrupt received")
 	}
 
 	// Cleanup

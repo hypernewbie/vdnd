@@ -246,9 +246,9 @@ func (o *Orchestrator) executeSubagentToolCalls(ctx context.Context, messages *[
 				content = fmt.Sprintf("Error: %v", err)
 			} else if result.Error != "" {
 				cli.PrintError(fmt.Sprintf("Orchestrator Python Error: %s", result.Error))
-				content = fmt.Sprintf("Python Error: %s", result.Error)
+				content = o.pruneOutput(fmt.Sprintf("Python Error: %s", result.Error))
 			} else {
-				content = result.Stdout
+				content = o.pruneOutput(result.Stdout)
 			}
 			if content == "" {
 				content = "(Success: no output)"
@@ -504,4 +504,30 @@ func (o *Orchestrator) truncateHistory() {
 	if keepIdx > 0 {
 		o.history = o.history[keepIdx:]
 	}
+}
+
+func (o *Orchestrator) pruneOutput(output string) string {
+	// 1. Mask absolute paths
+	wd, _ := os.Getwd()
+	if wd != "" {
+		output = strings.ReplaceAll(output, wd, "[PROJECT_ROOT]")
+	}
+
+	// 2. Truncate by lines
+	lines := strings.Split(output, "\n")
+	const maxLines = 50
+	if len(lines) > maxLines {
+		half := maxLines / 2
+		output = strings.Join(lines[:half], "\n") +
+			"\n\n[... Output truncated for brevity/safety ...]\n\n" +
+			strings.Join(lines[len(lines)-half:], "\n")
+	}
+
+	// 3. Final safety length check (roughly 4KB max)
+	const maxChars = 4096
+	if len(output) > maxChars {
+		output = output[:maxChars] + " (truncated...)"
+	}
+
+	return output
 }

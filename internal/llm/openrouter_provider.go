@@ -18,7 +18,11 @@ func NewOpenRouterProvider(apiKey string, model string) (*OpenRouterProvider, er
 		BaseURL:       "https://openrouter.ai/api/v1/chat/completions",
 		APIKey:        apiKey,
 		Model:         model,
-		SupportsTools: true, // OpenRouter generally supports tool calling for many models
+		SupportsTools: true,
+		ExtraHeaders: map[string]string{
+			"HTTP-Referer": "https://github.com/google/gemini-cli", // Required for some OpenRouter rankings/models
+			"X-Title":      "VDND Virtual Dungeon Master",
+		},
 	}
 	return &OpenRouterProvider{
 		OpenAIProvider: NewOpenAIProvider(config),

@@ -8,6 +8,7 @@ import random
 import math
 import subprocess
 import shutil
+import signal
 from contextlib import redirect_stdout
 from RestrictedPython import compile_restricted
 from RestrictedPython.Guards import safe_builtins, full_write_guard, safer_getattr, guarded_iter_unpack_sequence
@@ -320,25 +321,29 @@ def main():
     
     # Process requests from stdin
     # Format: {"code": "..."}
-    for line in sys.stdin:
-        line = line.strip()
-        if not line:
-            continue
-            
-        try:
-            request = json.loads(line)
-            code = request.get("code", "")
-            
-            response = repl.execute(code)
-            response["type"] = "result"
-            
-            # Output structured response
-            print(json.dumps(response), flush=True)
-            
-        except json.JSONDecodeError:
-            print(json.dumps({"error": "Invalid JSON input"}), flush=True)
-        except Exception as e:
-            print(json.dumps({"error": str(e)}), flush=True)
+    try:
+        for line in sys.stdin:
+            line = line.strip()
+            if not line:
+                continue
+                
+            try:
+                request = json.loads(line)
+                code = request.get("code", "")
+                
+                response = repl.execute(code)
+                response["type"] = "result"
+                
+                # Output structured response
+                print(json.dumps(response), flush=True)
+                
+            except json.JSONDecodeError:
+                print(json.dumps({"error": "Invalid JSON input"}), flush=True)
+            except Exception as e:
+                print(json.dumps({"error": str(e)}), flush=True)
+    except (KeyboardInterrupt, EOFError):
+        # Exit silently
+        pass
 
 if __name__ == "__main__":
     main()
