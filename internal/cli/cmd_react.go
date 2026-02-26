@@ -11,7 +11,7 @@ import (
 func cmdPending(args []string, deps Deps) (string, error) {
 	gameState, err := deps.Store.Load()
 	if err != nil {
-		return "", err
+		return "", WrapSystemError(err, "failed to load state")
 	}
 
 	if len(gameState.PendingEvents) == 0 {
@@ -39,18 +39,18 @@ func cmdPending(args []string, deps Deps) (string, error) {
 func cmdReact(args []string, deps Deps) (string, error) {
 	positional, _ := ParseFlags(args)
 	if len(positional) < 2 {
-		return "", fmt.Errorf("usage: vd react <entity_id> <reaction_name>")
+		return "", NewUsageError("missing reactor or reaction name", "vd react <entity_id> <reaction_name>")
 	}
 	reactorID := positional[0]
 	reactionName := positional[1]
 
 	gameState, err := deps.Store.Load()
 	if err != nil {
-		return "", err
+		return "", WrapSystemError(err, "failed to load state")
 	}
 
 	if len(gameState.PendingEvents) == 0 {
-		return "", fmt.Errorf("no pending events to react to")
+		return "", NewStateError("no pending events to react to", "Run 'vd pending' to see if there are any events.")
 	}
 
 	eventIdx := len(gameState.PendingEvents) - 1
@@ -65,7 +65,7 @@ func cmdReact(args []string, deps Deps) (string, error) {
 		}
 	}
 	if foundIdx == -1 {
-		return "", fmt.Errorf("entity %s cannot perform reaction %s for this event", reactorID, reactionName)
+		return "", NewRuleError(fmt.Sprintf("entity %s cannot perform reaction %s for this event", reactorID, reactionName), "Check 'vd pending' for valid reactors.")
 	}
 
 	reactor := gameState.Entities[reactorID]
@@ -79,7 +79,7 @@ func cmdReact(args []string, deps Deps) (string, error) {
 		// Perform a Strike
 		// For simplicity, use first weapon
 		if len(reactor.WieldedWeapons) == 0 {
-			return "", fmt.Errorf("reactor has no weapons")
+			return "", NewRuleError("reactor has no weapons", "An actor must have a weapon to perform an Attack of Opportunity.")
 		}
 		weapon := reactor.WieldedWeapons[0]
 		
@@ -94,13 +94,23 @@ func cmdReact(args []string, deps Deps) (string, error) {
 
 		if res.Degree == check.Success || res.Degree == check.CriticalSuccess {
 			dmgRoll, _ := dice.Parse(weapon.Damage)
-			dmgResults := deps.Roller.Roll(dmgRoll.Count, dmgRoll.Sides)
 			totalDmg := 0
-			for _, r := range dmgResults { totalDmg += r }
+			for _, g := range dmgRoll.Groups {
+				count := g.Count
+				if count < 0 { count = -count }
+				results := deps.Roller.Roll(count, g.Sides)
+				groupTotal := 0
+				for _, r := range results { groupTotal += r }
+				if g.Count < 0 {
+					totalDmg -= groupTotal
+				} else {
+					totalDmg += groupTotal
+				}
+			}
 			totalDmg += dmgRoll.Modifier + reactor.Abilities.Strength
 			if res.Degree == check.CriticalSuccess {
 				totalDmg *= 2
-				disrupted = true // AoO disrupts on Critical Hit (usually for manipulate/cast, but let's follow plan)
+				disrupted = true // AoO disrupts on Critical Hit
 				sb.WriteString(fmt.Sprintf("- **Damage:** **%d** (Critical!)\n", totalDmg))
 			} else {
 				sb.WriteString(fmt.Sprintf("- **Damage:** **%d**\n", totalDmg))
@@ -147,11 +157,11 @@ func cmdReactSkip(args []string, deps Deps) (string, error) {
 	
 	gameState, err := deps.Store.Load()
 	if err != nil {
-		return "", err
+		return "", WrapSystemError(err, "failed to load state")
 	}
 
 	if len(gameState.PendingEvents) == 0 {
-		return "", fmt.Errorf("no pending events")
+		return "", NewStateError("no pending events", "There are no actions currently waiting for reactions.")
 	}
 
 	eventIdx := len(gameState.PendingEvents) - 1
@@ -167,12 +177,10 @@ func cmdReactSkip(args []string, deps Deps) (string, error) {
 			}
 		}
 		if foundIdx == -1 {
-			return "", fmt.Errorf("entity %s is not a potential reactor", reactorID)
+			return "", NewNotFoundError("Reactor", reactorID, "Check 'vd pending' for valid reactors.")
 		}
 		event.Reactors = append(event.Reactors[:foundIdx], event.Reactors[foundIdx+1:]...)
 	} else {
-		// Skip all? Plan says "If no ID: skip current turn's reaction? (usually used to say 'I don't want to react')"
-		// Let's just skip the first reactor if none specified, or better: require ID for skip, and have skip_all.
 		if len(event.Reactors) > 0 {
 			event.Reactors = event.Reactors[1:]
 		}
@@ -191,7 +199,7 @@ func cmdReactSkip(args []string, deps Deps) (string, error) {
 	}
 
 	if err := deps.Store.Save(gameState); err != nil {
-		return "", err
+		return "", WrapSystemError(err, "failed to save state")
 	}
 
 	return sb.String(), nil
@@ -200,11 +208,11 @@ func cmdReactSkip(args []string, deps Deps) (string, error) {
 func cmdReactSkipAll(args []string, deps Deps) (string, error) {
 	gameState, err := deps.Store.Load()
 	if err != nil {
-		return "", err
+		return "", WrapSystemError(err, "failed to load state")
 	}
 
 	if len(gameState.PendingEvents) == 0 {
-		return "", fmt.Errorf("no pending events")
+		return "", NewStateError("no pending events", "There are no actions currently waiting for reactions.")
 	}
 
 	eventIdx := len(gameState.PendingEvents) - 1
@@ -219,7 +227,7 @@ func cmdReactSkipAll(args []string, deps Deps) (string, error) {
 	gameState.PendingEvents = append(gameState.PendingEvents[:eventIdx], gameState.PendingEvents[eventIdx+1:]...)
 
 	if err := deps.Store.Save(gameState); err != nil {
-		return "", err
+		return "", WrapSystemError(err, "failed to save state")
 	}
 
 	return sb.String(), nil
@@ -227,7 +235,7 @@ func cmdReactSkipAll(args []string, deps Deps) (string, error) {
 
 func resolveEvent(event state.PendingEvent, gameState *state.GameState) (string, error) {
 	actor, ok := gameState.Entities[event.ActorID]
-	if !ok { return "", fmt.Errorf("actor not found") }
+	if !ok { return "", NewNotFoundError("Actor", event.ActorID, "") }
 
 	switch event.Type {
 	case "movement":
@@ -236,6 +244,6 @@ func resolveEvent(event state.PendingEvent, gameState *state.GameState) (string,
 		actor.Position = toZone
 		return fmt.Sprintf("**%s** finished moving from **%s** to **%s**.\n", actor.Name, fromZone, toZone), nil
 	default:
-		return "", fmt.Errorf("unknown event type: %s", event.Type)
+		return "", &VDError{Category: CatSystem, Message: fmt.Sprintf("unknown event type: %s", event.Type)}
 	}
 }

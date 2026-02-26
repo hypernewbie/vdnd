@@ -8,3 +8,6 @@ coverage.out
 run.sh
 vdm_history.json
 vdm.log
+TEMP*.md
+TEMP.md
+vdm

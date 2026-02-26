@@ -3,35 +3,64 @@ package cli
 import (
 	"fmt"
 	"strconv"
+	"strings"
 	"uaa/vdnd/pkg/rules/check"
 	"uaa/vdnd/pkg/rules/dice"
 )
 
 func cmdRoll(args []string, deps Deps) (string, error) {
 	if len(args) < 1 {
-		return "", fmt.Errorf("usage: vd roll <expression>")
+		return "", NewUsageError("missing dice expression", "vd roll <expression> (e.g., 2d6+4, d20, 1d8+1d6)")
 	}
-	expr := args[0]
+	expr := strings.Join(args, "")
 
 	d, err := dice.Parse(expr)
 	if err != nil {
-		return "", err
+		return "", NewRuleError(fmt.Sprintf("invalid dice expression: %s", expr), "Use standard notation like '2d6+4' or shorthand like 'd20'.")
 	}
 
-	results := deps.Roller.Roll(d.Count, d.Sides)
+	var allResults []string
 	total := 0
-	for _, r := range results {
-		total += r
+	
+	for _, g := range d.Groups {
+		count := g.Count
+		if count < 0 { count = -count }
+		
+		results := deps.Roller.Roll(count, g.Sides)
+		groupTotal := 0
+		for _, r := range results {
+			groupTotal += r
+		}
+		
+		if g.Count < 0 {
+			total -= groupTotal
+			allResults = append(allResults, fmt.Sprintf("-[%v]", formatResults(results)))
+		} else {
+			total += groupTotal
+			allResults = append(allResults, fmt.Sprintf("[%v]", formatResults(results)))
+		}
 	}
+	
 	total += d.Modifier
+	if d.Modifier != 0 || len(allResults) == 0 {
+		allResults = append(allResults, fmt.Sprintf("%+d", d.Modifier))
+	}
 
-	return fmt.Sprintf("Rolled **%s**: %v + %d = **%d**\n", expr, results, d.Modifier, total), nil
+	return fmt.Sprintf("Rolled **%s**: %s = **%d**\n", expr, strings.Join(allResults, " "), total), nil
+}
+
+func formatResults(res []int) string {
+	str := make([]string, len(res))
+	for i, v := range res {
+		str[i] = strconv.Itoa(v)
+	}
+	return strings.Join(str, ", ")
 }
 
 func cmdCheck(args []string, deps Deps) (string, error) {
 	positional, flags := ParseFlags(args)
 	if len(positional) < 2 {
-		return "", fmt.Errorf("usage: vd check <entity_id> <skill> [--dc <N>]")
+		return "", NewUsageError("missing entity or skill", "vd check <entity_id> <skill> [--dc <N>]")
 	}
 	entityID := positional[0]
 	skill := positional[1]
@@ -43,12 +72,12 @@ func cmdCheck(args []string, deps Deps) (string, error) {
 
 	gameState, err := deps.Store.Load()
 	if err != nil {
-		return "", err
+		return "", WrapSystemError(err, "failed to load state")
 	}
 
 	entity, ok := gameState.Entities[entityID]
 	if !ok {
-		return "", fmt.Errorf("entity not found: %s", entityID)
+		return "", NewNotFoundError("Entity", entityID, "")
 	}
 
 	mod := entity.GetSkillModifier(skill)

@@ -22,14 +22,14 @@ func TestErrorStates(t *testing.T) {
 
 	t.Run("Strike Invalid Target", func(t *testing.T) {
 		_, err := cmdActionStrike([]string{"hero", "ghost"}, deps)
-		if err == nil || !strings.Contains(err.Error(), "target not found") {
+		if err == nil || !strings.Contains(strings.ToLower(err.Error()), "target 'ghost' not found") {
 			t.Errorf("Expected 'target not found' error, got: %v", err)
 		}
 	})
 
 	t.Run("Strike Invalid Actor", func(t *testing.T) {
 		_, err := cmdActionStrike([]string{"ghost", "hero"}, deps)
-		if err == nil || !strings.Contains(err.Error(), "actor not found") {
+		if err == nil || !strings.Contains(strings.ToLower(err.Error()), "actor 'ghost' not found") {
 			t.Errorf("Expected 'actor not found' error, got: %v", err)
 		}
 	})

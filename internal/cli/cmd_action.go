@@ -12,23 +12,23 @@ import (
 func cmdActionStrike(args []string, deps Deps) (string, error) {
 	positional, flags := ParseFlags(args)
 	if len(positional) < 2 {
-		return "", fmt.Errorf("usage: vd action strike <actor_id> <target_id> [--weapon <id>] [--map <0|1|2>]")
+		return "", NewUsageError("missing actor or target ID", "vd action strike <actor_id> <target_id> [--weapon <id>] [--map <0|1|2>]")
 	}
 	actorID := positional[0]
 	targetID := positional[1]
 
 	gameState, err := deps.Store.Load()
 	if err != nil {
-		return "", fmt.Errorf("failed to load state: %w", err)
+		return "", WrapSystemError(err, "failed to load state")
 	}
 
 	actor, ok := gameState.Entities[actorID]
 	if !ok {
-		return "", fmt.Errorf("actor not found: %s", actorID)
+		return "", NewNotFoundError("Actor", actorID, "")
 	}
 	target, ok := gameState.Entities[targetID]
 	if !ok {
-		return "", fmt.Errorf("target not found: %s", targetID)
+		return "", NewNotFoundError("Target", targetID, "")
 	}
 
 	// 1. Select Weapon
@@ -42,14 +42,12 @@ func cmdActionStrike(args []string, deps Deps) (string, error) {
 			}
 		}
 		if weapon == nil {
-			return "", fmt.Errorf("weapon not found: %s", weaponID)
+			return "", NewNotFoundError("Weapon", weaponID, fmt.Sprintf("Use 'vd entity get %s' to see wielded weapons.", actorID))
 		}
 	} else if len(actor.WieldedWeapons) > 0 {
 		weapon = &actor.WieldedWeapons[0]
 	} else {
-		// Default to Unarmed Strike if no weapons?
-		// For Phase 5, let's just require a weapon or error.
-		return "", fmt.Errorf("actor has no weapons wielded")
+		return "", NewRuleError("actor has no weapons wielded", "An actor must have at least one weapon wielded to Strike. Use 'vd entity set' to add weapons.")
 	}
 
 	// 2. Calculate Modifiers
@@ -89,25 +87,39 @@ func cmdActionStrike(args []string, deps Deps) (string, error) {
 	if res.Degree == check.Success || res.Degree == check.CriticalSuccess {
 		dmgRoll, err := dice.Parse(weapon.Damage)
 		if err != nil {
-			return "", fmt.Errorf("invalid damage expression: %w", err)
+			return "", NewRuleError(fmt.Sprintf("invalid damage expression: %s", weapon.Damage), "Ensure weapon damage is in standard dice format like '1d6+2'.")
 		}
 		
-		dmgResults := deps.Roller.Roll(dmgRoll.Count, dmgRoll.Sides)
 		totalDmg := 0
-		for _, r := range dmgResults {
-			totalDmg += r
+		var dmgBreakdown []string
+		for _, g := range dmgRoll.Groups {
+			count := g.Count
+			if count < 0 { count = -count }
+			results := deps.Roller.Roll(count, g.Sides)
+			groupTotal := 0
+			for _, r := range results {
+				groupTotal += r
+			}
+			if g.Count < 0 {
+				totalDmg -= groupTotal
+				dmgBreakdown = append(dmgBreakdown, fmt.Sprintf("-%v", results))
+			} else {
+				totalDmg += groupTotal
+				dmgBreakdown = append(dmgBreakdown, fmt.Sprintf("%v", results))
+			}
 		}
+
 		totalDmg += dmgRoll.Modifier
 		// Melee adds STR to damage
 		totalDmg += actor.Abilities.Strength
 
 		if res.Degree == check.CriticalSuccess {
 			totalDmg *= 2
-			sb.WriteString(fmt.Sprintf("- **Damage:** (rolled %v + %d + %d STR) x 2 = **%d** %s\n", 
-				dmgResults, dmgRoll.Modifier, actor.Abilities.Strength, totalDmg, weapon.DamageType))
+			sb.WriteString(fmt.Sprintf("- **Damage:** (rolled %s + %d + %d STR) x 2 = **%d** %s\n", 
+				strings.Join(dmgBreakdown, " + "), dmgRoll.Modifier, actor.Abilities.Strength, totalDmg, weapon.DamageType))
 		} else {
-			sb.WriteString(fmt.Sprintf("- **Damage:** rolled %v + %d + %d STR = **%d** %s\n", 
-				dmgResults, dmgRoll.Modifier, actor.Abilities.Strength, totalDmg, weapon.DamageType))
+			sb.WriteString(fmt.Sprintf("- **Damage:** rolled %s + %d + %d STR = **%d** %s\n", 
+				strings.Join(dmgBreakdown, " + "), dmgRoll.Modifier, actor.Abilities.Strength, totalDmg, weapon.DamageType))
 		}
 
 		target.HP -= totalDmg
@@ -129,26 +141,26 @@ func cmdActionStrike(args []string, deps Deps) (string, error) {
 func cmdActionStride(args []string, deps Deps) (string, error) {
 	positional, flags := ParseFlags(args)
 	if len(positional) < 1 {
-		return "", fmt.Errorf("usage: vd action stride <actor_id> --to <zone_id>")
+		return "", NewUsageError("missing actor ID", "vd action stride <actor_id> --to <zone_id>")
 	}
 	actorID := positional[0]
 	toZone := flags["to"]
 	if toZone == "" {
-		return "", fmt.Errorf("missing --to flag")
+		return "", NewUsageError("missing --to flag", "vd action stride <actor_id> --to <zone_id>")
 	}
 
 	gameState, err := deps.Store.Load()
 	if err != nil {
-		return "", fmt.Errorf("failed to load state: %w", err)
+		return "", WrapSystemError(err, "failed to load state")
 	}
 
 	actor, ok := gameState.Entities[actorID]
 	if !ok {
-		return "", fmt.Errorf("actor not found: %s", actorID)
+		return "", NewNotFoundError("Actor", actorID, "")
 	}
 
 	if _, ok := gameState.Positions[toZone]; !ok {
-		return "", fmt.Errorf("zone not found: %s", toZone)
+		return "", NewNotFoundError("Zone", toZone, "Check available zones in the scene description or map.")
 	}
 
 	// Phase 6: Reaction Trigger Detection (Attack of Opportunity)
@@ -210,26 +222,26 @@ func cmdActionStep(args []string, deps Deps) (string, error) {
 	// Identical to stride for Phase 5, but semantic difference for Phase 6 (no reactions)
 	positional, flags := ParseFlags(args)
 	if len(positional) < 1 {
-		return "", fmt.Errorf("usage: vd action step <actor_id> --to <zone_id>")
+		return "", NewUsageError("missing actor ID", "vd action step <actor_id> --to <zone_id>")
 	}
 	actorID := positional[0]
 	toZone := flags["to"]
 	if toZone == "" {
-		return "", fmt.Errorf("missing --to flag")
+		return "", NewUsageError("missing --to flag", "vd action step <actor_id> --to <zone_id>")
 	}
 
 	gameState, err := deps.Store.Load()
 	if err != nil {
-		return "", fmt.Errorf("failed to load state: %w", err)
+		return "", WrapSystemError(err, "failed to load state")
 	}
 
 	actor, ok := gameState.Entities[actorID]
 	if !ok {
-		return "", fmt.Errorf("actor not found: %s", actorID)
+		return "", NewNotFoundError("Actor", actorID, "")
 	}
 
 	if _, ok := gameState.Positions[toZone]; !ok {
-		return "", fmt.Errorf("zone not found: %s", toZone)
+		return "", NewNotFoundError("Zone", toZone, "Check available zones in the scene description or map.")
 	}
 
 	oldZone := actor.Position

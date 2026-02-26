@@ -57,7 +57,7 @@ func NewOrchestrator(context context.Context, provider llmtypes.Provider, deps c
 	var repl *subagents.REPLExecutor
 	var err error
 	if pythonPath != "" && scriptPath != "" {
-		repl, err = subagents.NewREPLExecutorWithEnv(pythonPath, scriptPath, []string{"VDM_PYTHON_READONLY=1"})
+		repl, err = subagents.NewREPLExecutor(pythonPath, scriptPath)
 		if err != nil {
 			return nil, fmt.Errorf("failed to initialize orchestrator python: %w", err)
 		}
@@ -102,8 +102,8 @@ func (o *Orchestrator) RegisterSubagents(agents ...llmtypes.Subagent) {
 		Description: "Get the full VD CLI manual for command reference.",
 	})
 	o.tools = append(o.tools, llmtypes.Tool{
-		Name:        "execute_python_readonly",
-		Description: "Execute read-only Python code in the persistent sandbox. Use this to query message_history, context, or read files.",
+		Name:        "execute_python",
+		Description: "Execute Python code in the persistent sandbox for reading/writing files and performing logic.",
 		Parameters: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
@@ -223,7 +223,7 @@ func (o *Orchestrator) executeSubagentToolCalls(ctx context.Context, messages *[
 			continue
 		}
 
-		if call.Name == "execute_python_readonly" {
+		if call.Name == "execute_python" {
 			cli.PrintSubagentInvocation(call.Name, call.Arguments)
 			var args map[string]any
 			if err := json.Unmarshal([]byte(call.Arguments), &args); err != nil {

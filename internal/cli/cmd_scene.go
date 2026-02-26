@@ -10,12 +10,12 @@ import (
 func cmdSceneNew(args []string, deps Deps) (string, error) {
 	// usage: vd scene new "My Scene"
 	if len(args) < 1 {
-		return "", fmt.Errorf("usage: vd scene new <name>")
+		return "", NewUsageError("missing scene name", "vd scene new <name>")
 	}
 	name := strings.Join(args, " ") // Allow "My Scene" as multiple args if unquoted
 
 	if deps.Store.Exists() {
-		return "", fmt.Errorf("session already exists in this directory")
+		return "", NewStateError("session already exists in this directory", "You can only have one active session per directory. Move the existing 'state.json' or use a different directory.")
 	}
 
 	newState := &state.GameState{
@@ -26,7 +26,7 @@ func cmdSceneNew(args []string, deps Deps) (string, error) {
 	}
 
 	if err := deps.Store.Save(newState); err != nil {
-		return "", fmt.Errorf("failed to save scene: %w", err)
+		return "", WrapSystemError(err, "failed to save scene")
 	}
 
 	return "# Scene Created: " + name + "\n\nSession initialized.", nil
@@ -34,28 +34,28 @@ func cmdSceneNew(args []string, deps Deps) (string, error) {
 
 func cmdSceneSave(args []string, deps Deps) (string, error) {
 	if !deps.Store.Exists() {
-		return "", fmt.Errorf("no active session")
+		return "", NewStateError("no active session", "Start a new scene first with 'vd scene new <name>'.")
 	}
 	state, err := deps.Store.Load()
 	if err != nil {
-		return "", fmt.Errorf("failed to load state: %w", err)
+		return "", WrapSystemError(err, "failed to load state")
 	}
 	if err := deps.Store.Save(state); err != nil {
-		return "", fmt.Errorf("failed to save: %w", err)
+		return "", WrapSystemError(err, "failed to save")
 	}
 	return "Scene saved.", nil
 }
 
 func cmdSceneLoad(args []string, deps Deps) (string, error) {
 	if len(args) < 1 {
-		return "", fmt.Errorf("usage: vd scene load <path>")
+		return "", NewUsageError("missing file path", "vd scene load <path>")
 	}
 	path := args[0]
 
 	// For now, let's just check if the file exists as a mock "load"
 	// In a real implementation we might copy it to state.json
 	if _, err := os.Stat(path); err != nil {
-		return "", fmt.Errorf("failed to load scene: %w", err)
+		return "", WrapSystemError(err, fmt.Sprintf("failed to load scene from: %s", path))
 	}
 
 	return fmt.Sprintf("# Scene Loaded: %s\n\n(Note: This currently only validates the file exists)", path), nil

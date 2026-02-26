@@ -56,7 +56,7 @@ func (a *ResearchSubagent) ToolDefinition() llmtypes.Tool {
 }
 
 func (a *ResearchSubagent) Run(ctx context.Context, query string, history []llmtypes.Message) (string, error) {
-	repl, err := NewREPLExecutor(a.pythonPath, a.scriptPath)
+	repl, err := NewREPLExecutorWithEnv(a.pythonPath, a.scriptPath, []string{"VDM_PYTHON_READONLY=1"})
 	if err != nil {
 		return "", err
 	}

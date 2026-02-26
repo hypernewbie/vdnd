@@ -209,8 +209,8 @@ Ask the system about the battlefield state.
 Ad-hoc resolution.
 
 - **`vd roll <expression>`**
-  Rolls dice.
-  *Example:* `vd roll 4d6+2`
+  Rolls dice. Supports multiple groups, flat modifiers, and shorthand (e.g., `d20`).
+  *Examples:* `vd roll d20+7`, `vd roll 2d8+1d6+4`, `vd roll +5`
 
 - **`vd check <id> <skill>`**
   Performs a skill check for an entity (adding modifiers).

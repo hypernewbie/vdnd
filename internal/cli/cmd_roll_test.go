@@ -24,15 +24,40 @@ func TestRollAndCheck(t *testing.T) {
 	}
 	deps.Store.Save(s)
 
-	t.Run("Roll", func(t *testing.T) {
+	t.Run("Roll Basic", func(t *testing.T) {
 		roller.Results = []int{3, 5}
 		roller.Index = 0
 		out, err := cmdRoll([]string{"2d6+4"}, deps)
 		if err != nil {
 			t.Fatalf("Roll failed: %v", err)
 		}
-		if !strings.Contains(out, "**12**") {
-			t.Errorf("Expected 12, got: %s", out)
+		// New format: Rolled **2d6+4**: [3, 5] +4 = **12**
+		if !strings.Contains(out, "[3, 5] +4") || !strings.Contains(out, "**12**") {
+			t.Errorf("Unexpected output format: %s", out)
+		}
+	})
+
+	t.Run("Roll Shorthand", func(t *testing.T) {
+		roller.Results = []int{15}
+		roller.Index = 0
+		out, err := cmdRoll([]string{"d20+5"}, deps)
+		if err != nil {
+			t.Fatalf("Roll failed: %v", err)
+		}
+		if !strings.Contains(out, "[15] +5") || !strings.Contains(out, "**20**") {
+			t.Errorf("Unexpected output format: %s", out)
+		}
+	})
+
+	t.Run("Roll Multiple Groups", func(t *testing.T) {
+		roller.Results = []int{4, 3}
+		roller.Index = 0
+		out, err := cmdRoll([]string{"1d8+1d6"}, deps)
+		if err != nil {
+			t.Fatalf("Roll failed: %v", err)
+		}
+		if !strings.Contains(out, "[4] [3]") || !strings.Contains(out, "**7**") {
+			t.Errorf("Unexpected output format: %s", out)
 		}
 	})
 

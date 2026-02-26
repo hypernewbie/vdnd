@@ -53,19 +53,19 @@ var builtInSpells = map[string]SpellDefinition{
 func cmdActionCast(args []string, deps Deps) (string, error) {
 	positional, flags := ParseFlags(args)
 	if len(positional) < 2 {
-		return "", fmt.Errorf("usage: vd action cast <actor_id> <spell_name> [flags]")
+		return "", NewUsageError("missing actor or spell name", "vd action cast <actor_id> <spell_name> [flags]")
 	}
 	actorID := positional[0]
 	spellName := strings.ToLower(positional[1])
 
 	gameState, err := deps.Store.Load()
 	if err != nil {
-		return "", err
+		return "", WrapSystemError(err, "failed to load state")
 	}
 
 	actor, ok := gameState.Entities[actorID]
 	if !ok {
-		return "", fmt.Errorf("actor not found: %s", actorID)
+		return "", NewNotFoundError("Actor", actorID, "")
 	}
 
 	// 1. Get Spell Definition
@@ -114,7 +114,7 @@ func cmdActionCast(args []string, deps Deps) (string, error) {
 		if t, ok := gameState.Entities[targetID]; ok {
 			targets = append(targets, t)
 		} else {
-			return "", fmt.Errorf("target not found: %s", targetID)
+			return "", NewNotFoundError("Target", targetID, "")
 		}
 	} else if zoneName != "" {
 		for _, e := range gameState.Entities {
@@ -129,14 +129,14 @@ func cmdActionCast(args []string, deps Deps) (string, error) {
 	}
 
 	if len(targets) == 0 && spell.Type != "utility" {
-		return "", fmt.Errorf("no targets specified or found")
+		return "", NewUsageError("no targets specified or found", "Provide a --target <id> or --zone <name>.")
 	}
 
 	// 3. Resolve Mechanics
 	switch spell.Type {
 	case "attack":
 		if len(targets) == 0 {
-			return "", fmt.Errorf("attack spells require a target")
+			return "", NewUsageError("attack spells require a target", "vd action cast <actor> <spell> --target <id>")
 		}
 		target := targets[0]
 		naturalRoll := deps.Roller.Roll(1, 20)[0]
@@ -152,7 +152,7 @@ func cmdActionCast(args []string, deps Deps) (string, error) {
 
 	case "save":
 		if dc == 0 {
-			return "", fmt.Errorf("--dc is required for save spells")
+			return "", NewUsageError("--dc is required for save spells", "vd action cast <actor> <spell> --dc <N>")
 		}
 		// Roll damage once for all targets in AoE (standard PF2E)
 		baseDmg := rollSpellDamage(spell, deps, false)
@@ -227,7 +227,7 @@ func cmdActionCast(args []string, deps Deps) (string, error) {
 	}
 
 	if err := deps.Store.Save(gameState); err != nil {
-		return "", err
+		return "", WrapSystemError(err, "failed to save state")
 	}
 
 	return sb.String(), nil
@@ -238,10 +238,20 @@ func rollSpellDamage(spell SpellDefinition, deps Deps, isCrit bool) int {
 	if err != nil {
 		return 0
 	}
-	results := deps.Roller.Roll(d.Count, d.Sides)
 	total := 0
-	for _, r := range results {
-		total += r
+	for _, g := range d.Groups {
+		count := g.Count
+		if count < 0 { count = -count }
+		results := deps.Roller.Roll(count, g.Sides)
+		groupTotal := 0
+		for _, r := range results {
+			groupTotal += r
+		}
+		if g.Count < 0 {
+			total -= groupTotal
+		} else {
+			total += groupTotal
+		}
 	}
 	total += d.Modifier
 	if isCrit {

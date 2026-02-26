@@ -9,11 +9,16 @@ import (
 	"time"
 )
 
-// DieRoll represents a collection of dice of the same side, plus a flat modifier.
+// DiceGroup represents a collection of dice of the same side.
+type DiceGroup struct {
+	Count int
+	Sides int
+}
+
+// DieRoll represents multiple dice groups and a flat modifier.
 type DieRoll struct {
-	Count    int // Number of dice (e.g., 2 in "2d6")
-	Sides    int // Die type (e.g., 6 in "2d6")
-	Modifier int // Flat bonus (e.g., 4 in "2d6+4")
+	Groups   []DiceGroup
+	Modifier int
 }
 
 // Roller abstracts dice rolling for testability.
@@ -41,36 +46,75 @@ func (d DieRoll) Roll() int {
 
 // RollWithRNG allows injecting a random source for testing.
 func (d DieRoll) RollWithRNG(rng *rand.Rand) int {
-	if d.Sides <= 0 {
-		return d.Modifier
-	}
 	total := 0
-	for i := 0; i < d.Count; i++ {
-		total += rng.Intn(d.Sides) + 1
+	for _, g := range d.Groups {
+		if g.Sides <= 0 {
+			continue
+		}
+		for i := 0; i < g.Count; i++ {
+			total += rng.Intn(g.Sides) + 1
+		}
 	}
 	return total + d.Modifier
 }
 
-var diceRegex = regexp.MustCompile(`^(\d+)d(\d+)([+-]\d+)?$`)
+var dicePartRegex = regexp.MustCompile(`^([+-])?(\d+)?d(\d+)$`)
+var modPartRegex = regexp.MustCompile(`^([+-])?(\d+)$`)
 
-// Parse converts a string like "2d6+4" or "1d20" into a DieRoll.
+// Parse converts a string like "2d6+1d4+4", "d20", or "+5" into a DieRoll.
 func Parse(expr string) (DieRoll, error) {
-	expr = strings.ReplaceAll(expr, " ", "")
-	matches := diceRegex.FindStringSubmatch(expr)
-	if matches == nil {
-		return DieRoll{}, fmt.Errorf("invalid dice expression: %s", expr)
+	// Normalize: lowercase and remove all whitespace
+	clean := strings.ToLower(strings.ReplaceAll(expr, " ", ""))
+	if clean == "" {
+		return DieRoll{}, fmt.Errorf("empty dice expression")
 	}
 
-	count, _ := strconv.Atoi(matches[1])
-	sides, _ := strconv.Atoi(matches[2])
-	modifier := 0
-	if matches[3] != "" {
-		modifier, _ = strconv.Atoi(matches[3])
+	// Split by + or -, but keep the operators
+	var parts []string
+	var current strings.Builder
+	for i, r := range clean {
+		if (r == '+' || r == '-') && i > 0 {
+			parts = append(parts, current.String())
+			current.Reset()
+		}
+		current.WriteRune(r)
+	}
+	parts = append(parts, current.String())
+
+	dr := DieRoll{}
+	for _, part := range parts {
+		// Try dice group
+		if strings.Contains(part, "d") {
+			matches := dicePartRegex.FindStringSubmatch(part)
+			if matches == nil {
+				return DieRoll{}, fmt.Errorf("invalid dice segment: %s", part)
+			}
+			
+			sign := 1
+			if matches[1] == "-" {
+				sign = -1
+			}
+
+			count := 1
+			if matches[2] != "" {
+				count, _ = strconv.Atoi(matches[2])
+			}
+
+			sides, _ := strconv.Atoi(matches[3])
+			dr.Groups = append(dr.Groups, DiceGroup{
+				Count: count * sign,
+				Sides: sides,
+			})
+		} else {
+			// Try modifier
+			matches := modPartRegex.FindStringSubmatch(part)
+			if matches == nil {
+				return DieRoll{}, fmt.Errorf("invalid modifier segment: %s", part)
+			}
+			val, _ := strconv.Atoi(matches[0])
+			dr.Modifier += val
+		}
 	}
 
-	return DieRoll{
-		Count:    count,
-		Sides:    sides,
-		Modifier: modifier,
-	}, nil
+	return dr, nil
 }

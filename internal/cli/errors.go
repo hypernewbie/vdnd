@@ -27,8 +27,7 @@ func (e *VDError) Error() string {
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("[%s Error] %s", e.Category, e.Message))
 	if e.Hint != "" {
-		sb.WriteString("
-Hint: ")
+		sb.WriteString("\nHint: ")
 		sb.WriteString(e.Hint)
 	}
 	return sb.String()

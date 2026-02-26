@@ -250,12 +250,7 @@ func initSubagents(cfg *Config, p llmtypes.Provider, deps cli.Deps) ([]llmtypes.
 	}
 	execAgent.SetPrompt(string(vdPrompt))
 
-	pythonAgent, err := subagents.NewPythonSubagent(python, script)
-	if err != nil {
-		return nil, fmt.Errorf("failed to start python subagent: %w", err)
-	}
-
-	return []llmtypes.Subagent{researchAgent, execAgent, pythonAgent}, nil
+	return []llmtypes.Subagent{researchAgent, execAgent}, nil
 }
 
 func parseConfig(args []string) (cfg *Config, useDiscord bool, verbose bool, err error) {
@@ -422,7 +417,7 @@ func collectCLIFeedback(in io.Reader, out io.Writer, cfg *Config, p llmtypes.Pro
 	}
 }
 
-func runDiscord(ctx context.Context, cfg *Config, s DiscordSession, p llmtypes.Provider, agents []llmtypes.Subagent, deps cli.Deps, orchestratorPrompt string) {
+func runDiscord(ctx context.Context, cfg *Config, s DiscordSession, p llmtypes.Provider, agents []llmtypes.Subagent, deps cli.Deps, orchestratorPrompt string, pythonPath, scriptPath string) {
 	cache := NewMessageCache(100)
 	// Define commands
 	commands := []*discordgo.ApplicationCommand{

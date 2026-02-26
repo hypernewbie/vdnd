@@ -13,29 +13,33 @@ import (
 func cmdEntityAdd(args []string, deps Deps) (string, error) {
 	positional, flags := ParseFlags(args)
 	if len(positional) < 1 {
-		return "", fmt.Errorf("usage: vd entity add <id> --file <path>")
+		return "", NewUsageError("missing entity ID", "vd entity add <id> --file <path>")
 	}
 	id := positional[0]
 	filePath := flags["file"]
 	if filePath == "" {
-		return "", fmt.Errorf("missing --file flag")
+		return "", NewUsageError("missing --file flag", "vd entity add <id> --file <path>")
 	}
 
 	f, err := os.Open(filePath)
 	if err != nil {
-		return "", fmt.Errorf("failed to open file: %w", err)
+		return "", WrapSystemError(err, fmt.Sprintf("failed to open file: %s", filePath))
 	}
 	defer f.Close()
 
 	entity, err := parser.ParseEntity(f)
 	if err != nil {
-		return "", fmt.Errorf("failed to parse entity: %w", err)
+		return "", &VDError{
+			Category: CatSystem,
+			Message:  fmt.Sprintf("failed to parse entity from %s: %v", filePath, err),
+			Hint:     "Ensure the file is a valid JSON character template.",
+		}
 	}
 	entity.ID = id
 
 	gameState, err := deps.Store.Load()
 	if err != nil {
-		return "", fmt.Errorf("failed to load state: %w", err)
+		return "", WrapSystemError(err, "failed to load state")
 	}
 
 	if gameState.Entities == nil {
@@ -44,7 +48,7 @@ func cmdEntityAdd(args []string, deps Deps) (string, error) {
 	gameState.Entities[id] = entity
 
 	if err := deps.Store.Save(gameState); err != nil {
-		return "", fmt.Errorf("failed to save state: %w", err)
+		return "", WrapSystemError(err, "failed to save state")
 	}
 
 	return fmt.Sprintf("Added entity: **%s** (%s)\n", entity.Name, id), nil
@@ -53,18 +57,18 @@ func cmdEntityAdd(args []string, deps Deps) (string, error) {
 func cmdEntityGet(args []string, deps Deps) (string, error) {
 	positional, flags := ParseFlags(args)
 	if len(positional) < 1 {
-		return "", fmt.Errorf("usage: vd entity get <id> [--field <name>]")
+		return "", NewUsageError("missing entity ID", "vd entity get <id> [--field <name>]")
 	}
 	id := positional[0]
 
 	gameState, err := deps.Store.Load()
 	if err != nil {
-		return "", fmt.Errorf("failed to load state: %w", err)
+		return "", WrapSystemError(err, "failed to load state")
 	}
 
 	entity, ok := gameState.Entities[id]
 	if !ok {
-		return "", fmt.Errorf("entity not found: %s", id)
+		return "", NewNotFoundError("Entity", id, "")
 	}
 
 	field := flags["field"]
@@ -81,7 +85,7 @@ func cmdEntityGet(args []string, deps Deps) (string, error) {
 		case "position":
 			return entity.Position, nil
 		default:
-			return "", fmt.Errorf("unknown field: %s", field)
+			return "", NewUsageError(fmt.Sprintf("unknown field: %s", field), "Available fields: hp, ac, level, name, position")
 		}
 	}
 
@@ -100,7 +104,7 @@ func cmdEntityGet(args []string, deps Deps) (string, error) {
 func cmdEntitySet(args []string, deps Deps) (string, error) {
 	positional, _ := ParseFlags(args)
 	if len(positional) < 3 {
-		return "", fmt.Errorf("usage: vd entity set <id> <field> <value>")
+		return "", NewUsageError("missing arguments for entity set", "vd entity set <id> <field> <value>")
 	}
 	id := positional[0]
 	field := strings.ToLower(positional[1])
@@ -108,12 +112,12 @@ func cmdEntitySet(args []string, deps Deps) (string, error) {
 
 	gameState, err := deps.Store.Load()
 	if err != nil {
-		return "", fmt.Errorf("failed to load state: %w", err)
+		return "", WrapSystemError(err, "failed to load state")
 	}
 
 	entity, ok := gameState.Entities[id]
 	if !ok {
-		return "", fmt.Errorf("entity not found: %s", id)
+		return "", NewNotFoundError("Entity", id, "")
 	}
 
 	switch field {
@@ -131,11 +135,11 @@ func cmdEntitySet(args []string, deps Deps) (string, error) {
 	case "name":
 		entity.Name = value
 	default:
-		return "", fmt.Errorf("unsupported field for set: %s", field)
+		return "", NewUsageError(fmt.Sprintf("unsupported field for set: %s", field), "Supported fields: hp, max_hp, ac, position, name")
 	}
 
 	if err := deps.Store.Save(gameState); err != nil {
-		return "", fmt.Errorf("failed to save state: %w", err)
+		return "", WrapSystemError(err, "failed to save state")
 	}
 
 	return fmt.Sprintf("Updated %s for **%s**: %s\n", field, id, value), nil
@@ -147,7 +151,7 @@ func cmdEntityList(args []string, deps Deps) (string, error) {
 
 	gameState, err := deps.Store.Load()
 	if err != nil {
-		return "", fmt.Errorf("failed to load state: %w", err)
+		return "", WrapSystemError(err, "failed to load state")
 	}
 
 	if len(gameState.Entities) == 0 {
@@ -185,7 +189,7 @@ func cmdEntityList(args []string, deps Deps) (string, error) {
 func cmdEntitySpawn(args []string, deps Deps) (string, error) {
 	positional, flags := ParseFlags(args)
 	if len(positional) < 1 {
-		return "", fmt.Errorf("usage: vd entity spawn <template_path> [--count N] [--prefix str]")
+		return "", NewUsageError("missing template path", "vd entity spawn <template_path> [--count N] [--prefix str]")
 	}
 	templatePath := positional[0]
 	countStr := flags["count"]
@@ -200,18 +204,22 @@ func cmdEntitySpawn(args []string, deps Deps) (string, error) {
 
 	f, err := os.Open(templatePath)
 	if err != nil {
-		return "", fmt.Errorf("failed to open template: %w", err)
+		return "", WrapSystemError(err, fmt.Sprintf("failed to open template: %s", templatePath))
 	}
 	defer f.Close()
 
 	templateEntity, err := parser.ParseEntity(f)
 	if err != nil {
-		return "", fmt.Errorf("failed to parse template: %w", err)
+		return "", &VDError{
+			Category: CatSystem,
+			Message:  fmt.Sprintf("failed to parse template: %v", err),
+			Hint:     "Ensure the template file is a valid JSON character template.",
+		}
 	}
 
 	gameState, err := deps.Store.Load()
 	if err != nil {
-		return "", fmt.Errorf("failed to load state: %w", err)
+		return "", WrapSystemError(err, "failed to load state")
 	}
 
 	if gameState.Entities == nil {
