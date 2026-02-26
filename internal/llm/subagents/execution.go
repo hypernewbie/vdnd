@@ -12,10 +12,6 @@ import (
 	"uaa/vdnd/internal/llm/vdhelpers"
 )
 
-const defaultExecutionPrompt = `You are the VD Execution Agent.
-Translate the instruction into precise tool calls that mutate game state.
-Verify entity IDs and summarize what actually happened based on tool outputs.`
-
 // ExecutionSubagent handles state mutation via VDEngine tools.
 type ExecutionSubagent struct {
 	provider llmtypes.Provider
@@ -27,7 +23,6 @@ func NewExecutionSubagent(p llmtypes.Provider, deps cli.Deps) *ExecutionSubagent
 	return &ExecutionSubagent{
 		provider: p,
 		engine:   vdengine.New(deps),
-		prompt:   defaultExecutionPrompt,
 	}
 }
 

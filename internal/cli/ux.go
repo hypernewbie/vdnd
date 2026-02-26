@@ -72,6 +72,8 @@ func PrintSubagentInvocation(name, payload string) {
 		uxPrintf(draculaPurple, "[Orchestrator -> ResearchAssistant] %s\n", summary)
 	case "call_vdm_execution":
 		uxPrintf(draculaOrange, "[Orchestrator -> ExecutionAgent] %s\n", summary)
+	case "execute_python":
+		uxPrintf(draculaGreen, "[Orchestrator -> Sandbox] %s\n", summary)
 	default:
 		uxPrintf(draculaCyan, "[Orchestrator -> %s] %s\n", name, summary)
 	}

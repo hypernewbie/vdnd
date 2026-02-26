@@ -21,5 +21,3 @@ CRITICAL INSTRUCTIONS:
 RESEARCH NOTES:
 The text above "Research notes:" contains findings from your research assistant.
 Use those findings to inform your decisions, but your job is strictly execution.
-
-Depth: %d

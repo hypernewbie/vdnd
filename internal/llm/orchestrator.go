@@ -22,20 +22,21 @@ type StreamReporter interface {
 	Chunk(delta string)
 }
 
-const defaultBossPrompt = `You are the Virtual Dungeon Master.
-- Use call_research_assistant for rules lookups, uncertain adjudication, and state inspection questions.
-- Use call_vdm_execution for concrete state-changing actions.
-- Always narrate outcomes clearly after delegating tools.`
-
 // Orchestrator coordinates communication between the user, the LLM, and subagents.
 type Orchestrator struct {
 	mu           sync.Mutex
 	activeCancel context.CancelFunc
 	provider     llmtypes.Provider
 	deps         cli.Deps
+	prompt       string
 	subagents    map[string]Subagent
 	tools        []llmtypes.Tool
 	history      []llmtypes.Message
+}
+
+// SetPrompt sets the system prompt for the orchestrator.
+func (o *Orchestrator) SetPrompt(prompt string) {
+	o.prompt = prompt
 }
 
 // NewOrchestrator creates a new LLM orchestrator.
@@ -95,7 +96,7 @@ func (o *Orchestrator) ProcessInput(ctx context.Context, input string, reporter 
 	}
 	cli.PrintInfo("Orchestrator processing player input")
 
-	systemPrompt := fmt.Sprintf("%s\n\nCurrent game state:\n%s", defaultBossPrompt, stdout)
+	systemPrompt := fmt.Sprintf("%s\n\nCurrent game state:\n%s", o.prompt, stdout)
 	messages := append([]llmtypes.Message{}, o.history...)
 	messages = append(messages, llmtypes.Message{Role: "system", Content: systemPrompt})
 	messages = append(messages, llmtypes.Message{Role: "user", Content: input})
@@ -214,6 +215,8 @@ func (o *Orchestrator) streamFinalResponse(ctx context.Context, messages []llmty
 
 func statusMessageForTool(name string) string {
 	switch name {
+	case "execute_python":
+		return "*(The DM is interacting with the sandbox...)*\n"
 	case "call_research_assistant":
 		return "*(The DM is checking the rules...)*\n"
 	case "call_vdm_execution":
@@ -233,7 +236,7 @@ func toolInputForSubagent(call llmtypes.ToolCall) (string, error) {
 		return "", fmt.Errorf("invalid tool arguments: %w", err)
 	}
 
-	for _, key := range []string{"query", "instruction"} {
+	for _, key := range []string{"query", "instruction", "code"} {
 		if v, ok := args[key].(string); ok && strings.TrimSpace(v) != "" {
 			return v, nil
 		}

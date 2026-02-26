@@ -11,10 +11,6 @@ import (
 	"uaa/vdnd/internal/llm/llmtypes"
 )
 
-const defaultResearchPrompt = `You are the Rules & Research Assistant.
-Use execute_python to search RULES_MAP.md, rules/, rules_derived/, and current context.
-Return concise, accurate research notes for the DM.`
-
 // ResearchSubagent handles rules lookup and game-state research through the Python sandbox.
 type ResearchSubagent struct {
 	provider   llmtypes.Provider
@@ -28,7 +24,6 @@ func NewResearchSubagent(p llmtypes.Provider, python, script string) *ResearchSu
 		provider:   p,
 		pythonPath: python,
 		scriptPath: script,
-		prompt:     defaultResearchPrompt,
 	}
 }
 

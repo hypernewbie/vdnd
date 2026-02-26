@@ -65,22 +65,23 @@ func saveFeedback(f Feedback) error {
 
 // Config holds the application configuration
 type Config struct {
-	Token             string `env:"DISCORD_TOKEN"`
-	RemoveCommands    bool   `env:"DISCORD_REMOVE_COMMANDS" envDefault:"true"`
-	GeminiKey         string `env:"GEMINI_API_KEY"`
-	GroqKey           string `env:"GROQ_API_KEY"`
-	DeepSeekKey       string `env:"DEEPSEEK_API_KEY"`
-	GLMKey            string `env:"GLM_API_KEY"`
-	AnthropicKey      string `env:"ANTHROPIC_API_KEY"`
-	OpenAIKey         string `env:"OPENAI_API_KEY"`
-	OllamaURL         string `env:"OLLAMA_URL"`
-	LLMProvider       string `env:"LLM_PROVIDER" envDefault:"groq"`
-	LLMModel          string `env:"LLM_MODEL" envDefault:"qwen/qwen3-32b"`
-	DryRun            bool   `env:"DRY_RUN" envDefault:"false"`
-	Feedback          bool   `env:"FEEDBACK" envDefault:"false"`
-	SandboxPromptFile string `env:"SANDBOX_PROMPT_FILE" envDefault:"config/prompt_sandbox.txt"`
-	VDPromptFile      string `env:"VD_PROMPT_FILE" envDefault:""`
-	HistoryFile       string `env:"VDM_HISTORY_FILE" envDefault:"vdm_history.json"`
+	Token                  string `env:"DISCORD_TOKEN"`
+	RemoveCommands         bool   `env:"DISCORD_REMOVE_COMMANDS" envDefault:"true"`
+	GeminiKey              string `env:"GEMINI_API_KEY"`
+	GroqKey                string `env:"GROQ_API_KEY"`
+	DeepSeekKey            string `env:"DEEPSEEK_API_KEY"`
+	GLMKey                 string `env:"GLM_API_KEY"`
+	AnthropicKey           string `env:"ANTHROPIC_API_KEY"`
+	OpenAIKey              string `env:"OPENAI_API_KEY"`
+	OllamaURL              string `env:"OLLAMA_URL"`
+	LLMProvider            string `env:"LLM_PROVIDER" envDefault:"groq"`
+	LLMModel               string `env:"LLM_MODEL" envDefault:"qwen/qwen3-32b"`
+	DryRun                 bool   `env:"DRY_RUN" envDefault:"false"`
+	Feedback               bool   `env:"FEEDBACK" envDefault:"false"`
+	ResearcherPromptFile   string `env:"RESEARCHER_PROMPT_FILE" envDefault:"config/prompt_researcher.txt"`
+	VDPromptFile           string `env:"VD_PROMPT_FILE" envDefault:"config/prompt_vd.txt"`
+	OrchestratorPromptFile string `env:"ORCHESTRATOR_PROMPT_FILE" envDefault:"config/prompt_orchestrator.txt"`
+	HistoryFile            string `env:"VDM_HISTORY_FILE" envDefault:"vdm_history.json"`
 }
 
 // loadConfig reads configuration from environment variables
@@ -144,6 +145,13 @@ func main() {
 		slog.Error("failed to initialize subagents", "error", err)
 		os.Exit(1)
 	}
+	orchestratorPromptBytes, err2 := os.ReadFile(cfg.OrchestratorPromptFile)
+	if err2 != nil {
+		slog.Error("failed to read orchestrator prompt", "error", err2)
+		os.Exit(1)
+	}
+	orchestratorPrompt := string(orchestratorPromptBytes)
+
 	historyBytes := 0
 	if fi, statErr := os.Stat(cfg.HistoryFile); statErr == nil {
 		historyBytes = int(fi.Size())
@@ -161,12 +169,12 @@ func main() {
 			os.Exit(1)
 		}
 		s.Identify.Intents = discordgo.IntentGuildMessages | discordgo.IntentMessageContent
-		runDiscord(context.Background(), cfg, &discordSessionWrapper{s}, p, agents, deps)
+		runDiscord(context.Background(), cfg, &discordSessionWrapper{s}, p, agents, deps, orchestratorPrompt)
 	} else {
 		if cfg.DryRun {
 			slog.Info("DRY RUN MODE ENABLED. Prompts will be echoed back.")
 		}
-		runCLI(context.Background(), os.Stdin, os.Stdout, cfg, p, agents, deps)
+		runCLI(context.Background(), os.Stdin, os.Stdout, cfg, p, agents, deps, orchestratorPrompt)
 	}
 }
 
@@ -219,24 +227,25 @@ func initSubagents(cfg *Config, p llmtypes.Provider, deps cli.Deps) ([]llm.Subag
 	script := filepath.Join(wd, "py", "restricted_python.py")
 
 	researchAgent := subagents.NewResearchSubagent(p, python, script)
-	if cfg.SandboxPromptFile != "" {
-		sandboxPrompt, err := os.ReadFile(cfg.SandboxPromptFile)
-		if err != nil {
-			return nil, fmt.Errorf("failed to read sandbox prompt: %w", err)
-		}
-		researchAgent.SetPrompt(string(sandboxPrompt))
+	researcherPrompt, err := os.ReadFile(cfg.ResearcherPromptFile)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read researcher prompt: %w", err)
 	}
+	researchAgent.SetPrompt(string(researcherPrompt))
 
 	execAgent := subagents.NewExecutionSubagent(p, deps)
-	if cfg.VDPromptFile != "" {
-		vdPrompt, err := os.ReadFile(cfg.VDPromptFile)
-		if err != nil {
-			return nil, fmt.Errorf("failed to read execution prompt: %w", err)
-		}
-		execAgent.SetPrompt(string(vdPrompt))
+	vdPrompt, err := os.ReadFile(cfg.VDPromptFile)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read execution prompt: %w", err)
+	}
+	execAgent.SetPrompt(string(vdPrompt))
+
+	pythonAgent, err := subagents.NewPythonSubagent(python, script)
+	if err != nil {
+		return nil, fmt.Errorf("failed to start python subagent: %w", err)
 	}
 
-	return []llm.Subagent{researchAgent, execAgent}, nil
+	return []llm.Subagent{researchAgent, execAgent, pythonAgent}, nil
 }
 
 func parseConfig(args []string) (cfg *Config, useDiscord bool, verbose bool, err error) {
@@ -281,13 +290,14 @@ func parseConfig(args []string) (cfg *Config, useDiscord bool, verbose bool, err
 	return cfg, *useDiscordPtr, *verbosePtr, nil
 }
 
-func runCLI(ctx context.Context, in io.Reader, out io.Writer, cfg *Config, p llmtypes.Provider, agents []llm.Subagent, deps cli.Deps) {
+func runCLI(ctx context.Context, in io.Reader, out io.Writer, cfg *Config, p llmtypes.Provider, agents []llm.Subagent, deps cli.Deps, orchestratorPrompt string) {
 	slog.Info("Starting CLI mode...")
 
 	var orch *llm.Orchestrator
 
 	if p != nil {
 		orch = llm.NewOrchestrator(ctx, p, deps)
+		orch.SetPrompt(orchestratorPrompt)
 		orch.RegisterSubagents(agents...)
 		// Load history
 		if err := orch.LoadHistory(cfg.HistoryFile); err != nil {
@@ -397,7 +407,7 @@ func collectCLIFeedback(in io.Reader, out io.Writer, cfg *Config, p llmtypes.Pro
 	}
 }
 
-func runDiscord(ctx context.Context, cfg *Config, s DiscordSession, p llmtypes.Provider, agents []llm.Subagent, deps cli.Deps) {
+func runDiscord(ctx context.Context, cfg *Config, s DiscordSession, p llmtypes.Provider, agents []llm.Subagent, deps cli.Deps, orchestratorPrompt string) {
 	cache := NewMessageCache(100)
 	// Define commands
 	commands := []*discordgo.ApplicationCommand{
@@ -475,6 +485,7 @@ func runDiscord(ctx context.Context, cfg *Config, s DiscordSession, p llmtypes.P
 	var orch *llm.Orchestrator
 	if p != nil {
 		orch = llm.NewOrchestrator(ctx, p, deps)
+		orch.SetPrompt(orchestratorPrompt)
 		orch.RegisterSubagents(agents...)
 		// Load history
 		if err := orch.LoadHistory(cfg.HistoryFile); err != nil {
