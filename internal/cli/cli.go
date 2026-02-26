@@ -67,7 +67,7 @@ func Run(args []string, deps Deps) (stdout string, exitCode int) {
 	// Execute handler
 	result, err := handler(cmdArgs, deps)
 	if err != nil {
-		fmt.Fprintln(deps.Stderr, "error:", err)
+		fmt.Fprintln(deps.Stderr, err)
 		return "", 1
 	}
 
@@ -103,7 +103,7 @@ func cmdHelp(args []string, deps Deps) (string, error) {
 func cmdStatus(args []string, deps Deps) (string, error) {
 	state, err := deps.Store.Load()
 	if err != nil {
-		return "", fmt.Errorf("failed to load state: %w", err)
+		return "", WrapSystemError(err, "failed to load state")
 	}
 
 	var sb strings.Builder

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 
@@ -34,6 +35,8 @@ import (
 	tools        []llmtypes.Tool
 	history      []llmtypes.Message
 	pythonRepl   *subagents.REPLExecutor
+	pythonPath   string
+	scriptPath   string
 	}
 
 func (o *Orchestrator) getVDManual() (string, error) {
@@ -51,9 +54,13 @@ func (o *Orchestrator) SetPrompt(prompt string) {
 
 // NewOrchestrator creates a new LLM orchestrator.
 func NewOrchestrator(context context.Context, provider llmtypes.Provider, deps cli.Deps, pythonPath, scriptPath string) (*Orchestrator, error) {
-	repl, err := subagents.NewREPLExecutorWithEnv(pythonPath, scriptPath, []string{"VDM_PYTHON_READONLY=1"})
-	if err != nil {
-		return nil, fmt.Errorf("failed to initialize orchestrator python: %w", err)
+	var repl *subagents.REPLExecutor
+	var err error
+	if pythonPath != "" && scriptPath != "" {
+		repl, err = subagents.NewREPLExecutorWithEnv(pythonPath, scriptPath, []string{"VDM_PYTHON_READONLY=1"})
+		if err != nil {
+			return nil, fmt.Errorf("failed to initialize orchestrator python: %w", err)
+		}
 	}
 
 	o := &Orchestrator{
@@ -61,6 +68,8 @@ func NewOrchestrator(context context.Context, provider llmtypes.Provider, deps c
 		deps:       deps,
 		subagents:  make(map[string]llmtypes.Subagent),
 		pythonRepl: repl,
+		pythonPath: pythonPath,
+		scriptPath: scriptPath,
 	}
 
 	o.history = []llmtypes.Message{
@@ -176,11 +185,24 @@ func (o *Orchestrator) ProcessInput(ctx context.Context, input string, reporter 
 			o.history = append(o.history, llmtypes.Message{Role: "user", Content: input})
 			o.history = append(o.history, llmtypes.Message{Role: "model", Content: finalResp, Thinking: response.Thinking})
 			slog.Info("ORCHESTRATOR_END", "response", finalResp)
+
+			// Sync to Python sandbox
+			o.syncToSandbox()
+
 			return finalResp, nil
 		}
 	}
 
 	return "", fmt.Errorf("max orchestrator iterations exceeded")
+}
+
+func (o *Orchestrator) syncToSandbox() {
+	if o.pythonRepl == nil {
+		return
+	}
+	historyJSON, _ := json.Marshal(o.history)
+	code := fmt.Sprintf("message_history = json.loads(%q)", string(historyJSON))
+	o.pythonRepl.Execute(code)
 }
 
 func (o *Orchestrator) executeSubagentToolCalls(ctx context.Context, messages *[]llmtypes.Message, calls []llmtypes.ToolCall, thinking string, reporter StreamReporter) error {
@@ -386,7 +408,28 @@ func (o *Orchestrator) SaveHistory(path string) error {
 		return fmt.Errorf("failed to write history file: %w", err)
 	}
 
+	// Save full history to sandbox
+	o.saveSandboxHistory()
+
 	return nil
+}
+
+func (o *Orchestrator) saveSandboxHistory() {
+	if o.pythonRepl == nil {
+		return
+	}
+	// Query current message_history from sandbox
+	code := `import json; print(json.dumps(message_history))`
+	result, err := o.pythonRepl.Execute(code)
+	if err != nil || result.Error != "" {
+		slog.Warn("failed to get message_history from sandbox", "error", err, "result", result.Error)
+		return
+	}
+
+	sandboxHistoryPath := filepath.Join(filepath.Dir(o.scriptPath), "..", "sandbox", "message_history.json")
+	if err := os.WriteFile(sandboxHistoryPath, []byte(result.Stdout), 0644); err != nil {
+		slog.Warn("failed to save sandbox history", "error", err)
+	}
 }
 
 // LoadHistory loads the conversation history from a JSON file.
@@ -408,11 +451,32 @@ func (o *Orchestrator) LoadHistory(path string) error {
 	}
 
 	o.history = history
+
+	// Also load into Python sandbox
+	o.loadSandboxHistory()
+
 	return nil
 }
 
+func (o *Orchestrator) loadSandboxHistory() {
+	if o.pythonRepl == nil {
+		return
+	}
+	sandboxHistoryPath := filepath.Join(filepath.Dir(o.scriptPath), "..", "sandbox", "message_history.json")
+	if _, err := os.Stat(sandboxHistoryPath); os.IsNotExist(err) {
+		return // No history file yet
+	}
+	data, err := os.ReadFile(sandboxHistoryPath)
+	if err != nil {
+		slog.Warn("failed to read sandbox history", "error", err)
+		return
+	}
+	code := fmt.Sprintf("message_history = json.loads(%q)", string(data))
+	o.pythonRepl.Execute(code)
+}
+
 func (o *Orchestrator) truncateHistory() {
-	const maxSizeBytes = 10 * 1024
+	const maxSizeBytes = 20 * 1024
 	if len(o.history) == 0 {
 		return
 	}

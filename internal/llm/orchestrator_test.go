@@ -90,23 +90,23 @@ func TestOrchestrator_TruncateHistory(t *testing.T) {
 		{Role: "model", Content: initialMessage},
 	}
 
-	// Add many large messages to exceed 10KB
-	// 10KB is 10240 bytes. Let's add 15 messages of 1KB each.
-	for i := 0; i < 15; i++ {
+	// Add many large messages to exceed 20KB
+	// 20KB is 20480 bytes. Let's add 25 messages of 1KB each.
+	for i := 0; i < 25; i++ {
 		content := fmt.Sprintf("Message %d: %s", i, strings.Repeat("a", 1024))
 		o.history = append(o.history, llmtypes.Message{Role: "user", Content: content})
 	}
 
-	// Verify history size before truncation (should be 16 messages total)
-	if len(o.history) != 16 {
-		t.Fatalf("Expected 16 messages before truncation, got %d", len(o.history))
+	// Verify history size before truncation (should be 26 messages total)
+	if len(o.history) != 26 {
+		t.Fatalf("Expected 26 messages before truncation, got %d", len(o.history))
 	}
 
 	// Run truncation
 	o.truncateHistory()
 
-	// Verify history size after truncation (should be <= 10KB)
-	if len(o.history) >= 16 {
+	// Verify history size after truncation (should be <= 20KB)
+	if len(o.history) >= 26 {
 		t.Errorf("History was not truncated, still has %d messages", len(o.history))
 	}
 
@@ -122,12 +122,12 @@ func TestOrchestrator_TruncateHistory(t *testing.T) {
 		t.Errorf("Initial message at index 0 was expected to be removed during truncation")
 	}
 
-	// Verify total size is under 10KB (rough check)
+	// Verify total size is under 20KB (rough check)
 	totalSize := 0
 	for _, msg := range o.history {
 		totalSize += len(msg.Content)
 	}
-	if totalSize > 10*1024 {
-		t.Errorf("Total size %d exceeds 10KB limit", totalSize)
+	if totalSize > 20*1024 {
+		t.Errorf("Total size %d exceeds 20KB limit", totalSize)
 	}
 }
