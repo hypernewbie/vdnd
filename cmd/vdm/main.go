@@ -29,6 +29,7 @@ import (
 type DiscordSession interface {
 	AddHandler(handler interface{}) func()
 	ApplicationCommandCreate(appID, guildID string, cmd *discordgo.ApplicationCommand, options ...discordgo.RequestOption) (ccmd *discordgo.ApplicationCommand, err error)
+	ApplicationCommandBulkOverwrite(appID, guildID string, commands []*discordgo.ApplicationCommand, options ...discordgo.RequestOption) (ccmds []*discordgo.ApplicationCommand, err error)
 	ApplicationCommandDelete(appID, guildID, cmdID string, options ...discordgo.RequestOption) error
 	InteractionRespond(i *discordgo.Interaction, r *discordgo.InteractionResponse, options ...discordgo.RequestOption) error
 	Open() error
@@ -66,7 +67,7 @@ func saveFeedback(f Feedback) error {
 // Config holds the application configuration
 type Config struct {
 	Token                  string `env:"DISCORD_TOKEN"`
-	RemoveCommands         bool   `env:"DISCORD_REMOVE_COMMANDS" envDefault:"true"`
+	RemoveCommands         bool   `env:"DISCORD_REMOVE_COMMANDS" envDefault:"false"`
 	GeminiKey              string `env:"GEMINI_API_KEY"`
 	GroqKey                string `env:"GROQ_API_KEY"`
 	DeepSeekKey            string `env:"DEEPSEEK_API_KEY"`
@@ -324,12 +325,12 @@ func runCLI(ctx context.Context, in io.Reader, out io.Writer, cfg *Config, p llm
 			slog.Warn("failed to load history", "error", err)
 		}
 		defer func() {
-			cli.PrintInfo("\n[VDM] Shutting down... (Persisting state)")
+			cli.PrintInfo("\n[VDM] Shutting down...")
 			if err := orch.SaveHistory(cfg.HistoryFile); err != nil {
 				slog.Error("failed to save history", "error", err)
 			}
-			cli.PrintInfo("[VDM] Cleaning up sandbox...")
 			orch.Close()
+			cli.PrintInfo("[VDM] Cleaning up sandbox...")
 			cli.PrintInfo("[VDM] Goodbye.")
 		}()
 		fmt.Fprintf(out, "LLM mode enabled (Generative DM using %s/%s with subagents). Type 'exit' to quit.\n", cfg.LLMProvider, cfg.LLMModel)
@@ -520,12 +521,12 @@ func runDiscord(ctx context.Context, cfg *Config, s DiscordSession, p llmtypes.P
 			slog.Warn("failed to load history", "error", err)
 		}
 		defer func() {
-			cli.PrintInfo("\n[VDM] Shutting down... (Persisting state)")
+			cli.PrintInfo("\n[VDM] Shutting down...")
 			if err := orch.SaveHistory(cfg.HistoryFile); err != nil {
 				slog.Error("failed to save history", "error", err)
 			}
-			cli.PrintInfo("[VDM] Cleaning up sandbox...")
 			orch.Close()
+			cli.PrintInfo("[VDM] Cleaning up sandbox...")
 			cli.PrintInfo("[VDM] Goodbye.")
 		}()
 	}
@@ -546,16 +547,12 @@ func runDiscord(ctx context.Context, cfg *Config, s DiscordSession, p llmtypes.P
 	slog.Info("session opened")
 
 	// Register commands
-	slog.Info("registering commands...")
-	registeredCommands := make([]*discordgo.ApplicationCommand, len(commands))
-	for i, v := range commands {
-		cmd, err := s.ApplicationCommandCreate(s.GetState().User.ID, "", v)
-		if err != nil {
-			slog.Error("cannot create command", "name", v.Name, "error", err)
-			continue // Or exit/panic depending on strictness
-		}
-		registeredCommands[i] = cmd
-		slog.Info("registered command", "name", v.Name)
+	cli.PrintInfo("[Discord] Registering slash commands (Bulk Sync)...")
+	registeredCommands, err := s.ApplicationCommandBulkOverwrite(s.GetState().User.ID, "", commands)
+	if err != nil {
+		slog.Error("cannot bulk overwrite commands", "error", err)
+	} else {
+		cli.PrintInfo(fmt.Sprintf("[Discord] %d commands synced successfully.", len(registeredCommands)))
 	}
 
 	// Wait here until context is canceled or term signal is received.
@@ -568,13 +565,14 @@ func runDiscord(ctx context.Context, cfg *Config, s DiscordSession, p llmtypes.P
 
 	// Cleanup
 	if cfg.RemoveCommands {
-		slog.Info("removing commands...")
+		cli.PrintInfo("[Discord] Removing commands (Cleanup)...")
 		for _, v := range registeredCommands {
 			err := s.ApplicationCommandDelete(s.GetState().User.ID, "", v.ID)
 			if err != nil {
 				slog.Error("cannot delete command", "name", v.Name, "error", err)
 			}
 		}
+		cli.PrintInfo("[Discord] Commands removed.")
 	}
 
 	slog.Info("gracefully shutting down")

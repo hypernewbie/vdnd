@@ -59,7 +59,7 @@ func NewREPLExecutorWithEnv(pythonPath, scriptPath string, env []string) (*REPLE
 		cmd:    cmd,
 		stdin:  stdin,
 		stdout: stdout,
-		reader: bufio.NewReader(stdout),
+		reader: bufio.NewReaderSize(stdout, 1024*1024), // 1MB buffer
 	}, nil
 }
 

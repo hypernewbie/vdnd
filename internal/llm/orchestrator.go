@@ -461,20 +461,20 @@ func (o *Orchestrator) saveSandboxHistory() {
 	if o.pythonRepl == nil {
 		return
 	}
-	cli.PrintInfo("  [VDM] Syncing full history from sandbox...")
-	// Query current message_history from sandbox
-	code := `import json; print(json.dumps(message_history))`
-	result, err := o.pythonRepl.Execute(code)
+	cli.PrintInfo("  [VDM] Flushing Deep History to sandbox disk...")
+	// We tell Python to save its internal message_history directly to the file.
+	// This is much faster than pulling the JSON through a pipe.
+	saveCode := `
+import json
+with open('sandbox/message_history.json', 'w') as f:
+    json.dump(message_history, f)
+`
+	result, err := o.pythonRepl.Execute(saveCode)
 	if err != nil || result == nil || result.Error != "" {
-		slog.Warn("failed to get message_history from sandbox", "error", err)
+		slog.Warn("failed to save message_history via python", "error", err)
 		return
 	}
-
-	cli.PrintInfo("  [VDM] Persisting deep history to disk...")
-	sandboxHistoryPath := filepath.Join(filepath.Dir(o.scriptPath), "..", "sandbox", "message_history.json")
-	if err := os.WriteFile(sandboxHistoryPath, []byte(result.Stdout), 0644); err != nil {
-		slog.Warn("failed to save sandbox history", "error", err)
-	}
+	cli.PrintInfo("  [VDM] Deep History sync complete.")
 }
 
 // LoadHistory loads the conversation history from a JSON file.
@@ -516,8 +516,14 @@ func (o *Orchestrator) loadSandboxHistory() {
 		slog.Warn("failed to read sandbox history", "error", err)
 		return
 	}
+	cli.PrintInfo("  [VDM] Injecting Deep History into sandbox...")
 	code := fmt.Sprintf("message_history = json.loads(%q)", string(data))
-	_, _ = o.pythonRepl.Execute(code)
+	result, err := o.pythonRepl.Execute(code)
+	if err != nil || result == nil || result.Error != "" {
+		slog.Warn("failed to inject history into python", "error", err)
+		return
+	}
+	cli.PrintInfo("  [VDM] Deep History loaded.")
 }
 
 func (o *Orchestrator) truncateHistory() {
