@@ -243,10 +243,23 @@ func (o *Orchestrator) executeSubagentToolCalls(ctx context.Context, messages *[
 			result, err := o.pythonRepl.Execute(fullCode)
 			content := ""
 			if err != nil {
-				content = fmt.Sprintf("Error: %v", err)
+				content = fmt.Sprintf("System Error: %v", err)
 			} else if result.Error != "" {
-				cli.PrintError(fmt.Sprintf("Orchestrator Python Error: %s", result.Error))
-				content = o.pruneOutput(fmt.Sprintf("Python Error: %s", result.Error))
+				// Sanitize the error for both the CLI and the LLM
+				sanitizedError := o.pruneOutput(result.Error)
+				cli.PrintError(fmt.Sprintf("Orchestrator Python Error: %s", sanitizedError))
+				
+				// Add helpful hints to the LLM to prevent loops
+				hint := ""
+				if strings.Contains(result.Error, "import ") {
+					hint = "\n\nHINT: Imports are forbidden. Use pre-injected globals (list_dir, ripgrep, open, etc.) directly."
+				} else if strings.Contains(result.Error, "PermissionError") {
+					hint = "\n\nHINT: You only have Write access to the 'sandbox/' directory. 'rules/' is Read-Only."
+				} else if strings.Contains(result.Error, "NameError") && strings.Contains(result.Error, "os") {
+					hint = "\n\nHINT: Use 'list_dir()' instead of 'os.listdir()'."
+				}
+				
+				content = "Python Error: " + sanitizedError + hint
 			} else {
 				content = o.pruneOutput(result.Stdout)
 			}
@@ -430,8 +443,8 @@ func (o *Orchestrator) saveSandboxHistory() {
 	// Query current message_history from sandbox
 	code := `import json; print(json.dumps(message_history))`
 	result, err := o.pythonRepl.Execute(code)
-	if err != nil || result.Error != "" {
-		slog.Warn("failed to get message_history from sandbox", "error", err, "result", result.Error)
+	if err != nil || result == nil || result.Error != "" {
+		slog.Warn("failed to get message_history from sandbox", "error", err)
 		return
 	}
 
@@ -481,7 +494,7 @@ func (o *Orchestrator) loadSandboxHistory() {
 		return
 	}
 	code := fmt.Sprintf("message_history = json.loads(%q)", string(data))
-	o.pythonRepl.Execute(code)
+	_, _ = o.pythonRepl.Execute(code)
 }
 
 func (o *Orchestrator) truncateHistory() {
@@ -513,7 +526,12 @@ func (o *Orchestrator) pruneOutput(output string) string {
 		output = strings.ReplaceAll(output, wd, "[PROJECT_ROOT]")
 	}
 
-	// 2. Truncate by lines
+	// 2. Strip sandbox internal trace noise
+	// RestrictedPython tracebacks often include lines like 'File "<sandbox>", line 1, in <module>'
+	// We want to keep the error type and message but minimize the file stack noise.
+	output = strings.ReplaceAll(output, "File \"<sandbox>\", ", "")
+
+	// 3. Truncate by lines
 	lines := strings.Split(output, "\n")
 	const maxLines = 50
 	if len(lines) > maxLines {
@@ -523,7 +541,7 @@ func (o *Orchestrator) pruneOutput(output string) string {
 			strings.Join(lines[len(lines)-half:], "\n")
 	}
 
-	// 3. Final safety length check (roughly 4KB max)
+	// 4. Final safety length check (roughly 4KB max)
 	const maxChars = 4096
 	if len(output) > maxChars {
 		output = output[:maxChars] + " (truncated...)"
