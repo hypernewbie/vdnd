@@ -132,6 +132,10 @@ type EntityState struct {
 	Reactions []string `json:"reactions,omitempty"` // Available reaction types
 }
 
+func (e *EntityState) GetAbilityModifier(score int) int {
+	return (score - 10) / 2
+}
+
 func (e *EntityState) GetAC() int {
 	ac := e.AC
 	for _, c := range e.Conditions {

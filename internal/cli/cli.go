@@ -15,8 +15,9 @@ var commands = map[string]CommandHandler{
 	"scene load":         cmdSceneLoad,
 	"status":             cmdStatus,
 	"entity add":         cmdEntityAdd,
+	"entity edit":        cmdEntityEdit,
 	"entity get":         cmdEntityGet,
-	"entity set":         cmdEntitySet,
+	"entity set":         cmdEntityEdit, // Alias set to edit
 	"entity list":        cmdEntityList,
 	"entity spawn":       cmdEntitySpawn,
 	"action strike":      cmdActionStrike,
@@ -133,10 +134,10 @@ Commands:
   scene new <name>        Create a new scene
   scene save <path>       Save current scene to file
   scene load <path>       Load scene from file
-  entity add <id> --file <path>  Add entity from file
-  entity get <id>         Show entity details
-  entity set <id> <field> <val>  Update entity field
-  entity list             List all entities
+  entity add <id> [--file path] [stats...]  Add entity
+  entity edit <id> [stats...]               Update entity stats
+  entity get <id>                           Show entity details
+  entity list                               List all entities
   entity spawn <path>     Spawn multiple entities from template
   action strike <actor> <target> [--weapon <id>] [--map <0|1|2>]
   action stride <actor> --to <zone>

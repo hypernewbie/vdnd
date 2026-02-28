@@ -10,41 +10,194 @@ import (
 	"uaa/vdnd/internal/state"
 )
 
+func applyEntityFlags(e *state.EntityState, flags map[string]string) {
+	if val, ok := flags["name"]; ok {
+		e.Name = val
+	}
+	if val, ok := flags["level"]; ok {
+		lvl, _ := strconv.Atoi(val)
+		e.Level = lvl
+	}
+	if val, ok := flags["hp"]; ok {
+		hp, _ := strconv.Atoi(val)
+		e.HP = hp
+		e.MaxHP = hp
+	}
+	if val, ok := flags["maxhp"]; ok {
+		hp, _ := strconv.Atoi(val)
+		e.MaxHP = hp
+	}
+	if val, ok := flags["temphp"]; ok {
+		hp, _ := strconv.Atoi(val)
+		e.TempHP = hp
+	}
+	if val, ok := flags["ac"]; ok {
+		ac, _ := strconv.Atoi(val)
+		e.AC = ac
+	}
+	if val, ok := flags["speed"]; ok {
+		spd, _ := strconv.Atoi(strings.TrimSuffix(val, "ft"))
+		e.Speed = spd
+	}
+	if val, ok := flags["ancestry"]; ok {
+		e.Ancestry = val
+	}
+	if val, ok := flags["class"]; ok {
+		e.Class = val
+	}
+	if val, ok := flags["background"]; ok {
+		e.Background = val
+	}
+
+	// Ability Scores
+	if val, ok := flags["str"]; ok {
+		e.Abilities.Strength, _ = strconv.Atoi(val)
+	}
+	if val, ok := flags["dex"]; ok {
+		e.Abilities.Dexterity, _ = strconv.Atoi(val)
+	}
+	if val, ok := flags["con"]; ok {
+		e.Abilities.Constitution, _ = strconv.Atoi(val)
+	}
+	if val, ok := flags["int"]; ok {
+		e.Abilities.Intelligence, _ = strconv.Atoi(val)
+	}
+	if val, ok := flags["wis"]; ok {
+		e.Abilities.Wisdom, _ = strconv.Atoi(val)
+	}
+	if val, ok := flags["cha"]; ok {
+		e.Abilities.Charisma, _ = strconv.Atoi(val)
+	}
+
+	// Saves & Perception
+	if val, ok := flags["fort"]; ok {
+		e.Fortitude, _ = strconv.Atoi(val)
+	}
+	if val, ok := flags["ref"]; ok {
+		e.Reflex, _ = strconv.Atoi(val)
+	}
+	if val, ok := flags["will"]; ok {
+		e.Will, _ = strconv.Atoi(val)
+	}
+	if val, ok := flags["perception"]; ok {
+		e.Perception, _ = strconv.Atoi(val)
+	}
+
+	// Skills (e.g. --skill stealth=5)
+	if val, ok := flags["skill"]; ok {
+		parts := strings.Split(val, "=")
+		if len(parts) == 2 {
+			if e.Skills == nil {
+				e.Skills = make(map[string]int)
+			}
+			skillName := strings.ToLower(strings.TrimSpace(parts[0]))
+			bonus, _ := strconv.Atoi(strings.TrimSpace(parts[1]))
+			e.Skills[skillName] = bonus
+		}
+	}
+
+	// Weapon (e.g. --weapon longsword:1d8:slashing)
+	if val, ok := flags["weapon"]; ok {
+		parts := strings.Split(val, ":")
+		if len(parts) == 3 {
+			w := state.WeaponState{
+				ID:         parts[0],
+				Damage:     parts[1],
+				DamageType: parts[2],
+			}
+			e.WieldedWeapons = append(e.WieldedWeapons, w)
+		}
+	}
+}
+
+func getEntitySummary(e *state.EntityState) string {
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("# Entity Status: %s (%s)\n\n", e.Name, e.ID))
+	sb.WriteString(fmt.Sprintf("**Level:** %d | **HP:** %d/%d (Temp: %d) | **AC:** %d | **Speed:** %dft\n",
+		e.Level, e.HP, e.MaxHP, e.TempHP, e.AC, e.Speed))
+	sb.WriteString(fmt.Sprintf("**Ancestry:** %s | **Class:** %s | **Background:** %s\n\n",
+		e.Ancestry, e.Class, e.Background))
+
+	sb.WriteString("### Ability Scores\n")
+	sb.WriteString(fmt.Sprintf("- **STR:** %d (%+d) | **DEX:** %d (%+d) | **CON:** %d (%+d)\n",
+		e.Abilities.Strength, e.GetAbilityModifier(e.Abilities.Strength),
+		e.Abilities.Dexterity, e.GetAbilityModifier(e.Abilities.Dexterity),
+		e.Abilities.Constitution, e.GetAbilityModifier(e.Abilities.Constitution)))
+	sb.WriteString(fmt.Sprintf("- **INT:** %d (%+d) | **WIS:** %d (%+d) | **CHA:** %d (%+d)\n\n",
+		e.Abilities.Intelligence, e.GetAbilityModifier(e.Abilities.Intelligence),
+		e.Abilities.Wisdom, e.GetAbilityModifier(e.Abilities.Wisdom),
+		e.Abilities.Charisma, e.GetAbilityModifier(e.Abilities.Charisma)))
+
+	sb.WriteString("### Saves & Perception\n")
+	sb.WriteString(fmt.Sprintf("- **Fort:** %+d | **Ref:** %+d | **Will:** %+d | **Perception:** %+d\n\n",
+		e.Fortitude, e.Reflex, e.Will, e.Perception))
+
+	if len(e.Skills) > 0 {
+		sb.WriteString("### Skills\n")
+		var skills []string
+		for k, v := range e.Skills {
+			skills = append(skills, fmt.Sprintf("%s: %+d", k, v))
+		}
+		sort.Strings(skills)
+		sb.WriteString("- " + strings.Join(skills, ", ") + "\n\n")
+	}
+
+	// Yakka check
+	var missing []string
+	if e.MaxHP <= 0 { missing = append(missing, "HP") }
+	if e.AC <= 0 { missing = append(missing, "AC") }
+	if e.Level < 1 { missing = append(missing, "Level") }
+	if e.Abilities.Strength == 0 && e.Abilities.Dexterity == 0 { missing = append(missing, "Ability Scores") }
+	if e.Fortitude == 0 && e.Reflex == 0 && e.Will == 0 { missing = append(missing, "Saves") }
+	if e.Perception == 0 { missing = append(missing, "Perception") }
+
+	if len(missing) > 0 {
+		sb.WriteString("⚠️ **NEEDS YAKKA (Missing Core Stats):**\n")
+		for _, m := range missing {
+			sb.WriteString(fmt.Sprintf("- %s\n", m))
+		}
+		sb.WriteString("\n*Hint: Use 'vd entity edit' to fill these in.*\n")
+	} else {
+		sb.WriteString("✅ **Mechanical Yakka Complete.** Entity is ready for combat.\n")
+	}
+
+	return sb.String()
+}
+
 func cmdEntityAdd(args []string, deps Deps) (string, error) {
 	positional, flags := ParseFlags(args)
 	if len(positional) < 1 {
-		return "", NewUsageError("missing entity ID", "vd entity add <id> --file <path>")
+		return "", NewUsageError("missing entity ID", "vd entity add <id> [--file <path>] [stats...]")
 	}
 	id := positional[0]
 	filePath := flags["file"]
 
-	// Detect common hallucinated flags to provide better hints
-	hallucinated := []string{"hp", "ac", "level", "str", "dex", "con", "int", "wis", "cha"}
-	for _, h := range hallucinated {
-		if _, ok := flags[h]; ok {
-			return "", NewUsageError(fmt.Sprintf("unsupported flag: --%s", h), "Inline stats are NOT supported. You MUST provide a character file using the --file flag.\nExample: vd entity add hero1 --file sandbox/hero.md")
+	var entity *state.EntityState
+	var parseErr error
+
+	if filePath != "" {
+		f, err := os.Open(filePath)
+		if err != nil {
+			return "", WrapSystemError(err, fmt.Sprintf("failed to open file: %s", filePath))
+		}
+		defer f.Close()
+
+		entity, parseErr = parser.ParseEntity(f)
+		if parseErr != nil {
+			return "", WrapSystemError(parseErr, fmt.Sprintf("failed to parse file: %s", filePath))
+		}
+	} else {
+		entity = &state.EntityState{
+			Skills: make(map[string]int),
 		}
 	}
 
-	if filePath == "" {
-		return "", NewUsageError("missing --file flag", "vd entity add <id> --file <path>\nHint: Character stats must be defined in a file, not as CLI flags.")
-	}
-
-	f, err := os.Open(filePath)
-	if err != nil {
-		return "", WrapSystemError(err, fmt.Sprintf("failed to open file: %s", filePath))
-	}
-	defer f.Close()
-
-	entity, err := parser.ParseEntity(f)
-	if err != nil {
-		return "", &VDError{
-			Category: CatSystem,
-			Message:  fmt.Sprintf("failed to parse entity from %s: %v", filePath, err),
-			Hint:     "Ensure the file is a valid JSON character template.",
-		}
-	}
 	entity.ID = id
+	applyEntityFlags(entity, flags)
+
+	if entity.Name == "" {
+		entity.Name = id
+	}
 
 	gameState, err := deps.Store.Load()
 	if err != nil {
@@ -60,7 +213,33 @@ func cmdEntityAdd(args []string, deps Deps) (string, error) {
 		return "", WrapSystemError(err, "failed to save state")
 	}
 
-	return fmt.Sprintf("Added entity: **%s** (%s)\n", entity.Name, id), nil
+	return getEntitySummary(entity), nil
+}
+
+func cmdEntityEdit(args []string, deps Deps) (string, error) {
+	positional, flags := ParseFlags(args)
+	if len(positional) < 1 {
+		return "", NewUsageError("missing entity ID", "vd entity edit <id> [stats...]")
+	}
+	id := positional[0]
+
+	gameState, err := deps.Store.Load()
+	if err != nil {
+		return "", WrapSystemError(err, "failed to load state")
+	}
+
+	entity, ok := gameState.Entities[id]
+	if !ok {
+		return "", NewNotFoundError("Entity", id, "")
+	}
+
+	applyEntityFlags(entity, flags)
+
+	if err := deps.Store.Save(gameState); err != nil {
+		return "", WrapSystemError(err, "failed to save state")
+	}
+
+	return getEntitySummary(entity), nil
 }
 
 func cmdEntityGet(args []string, deps Deps) (string, error) {

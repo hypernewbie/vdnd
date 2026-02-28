@@ -16,8 +16,17 @@ AVAILABLE VD TOOLS:
 CRITICAL INSTRUCTIONS:
 1. **Verify State First:** Check 'vd_status' before acting. You can also use 'execute_python_readonly' to read character sheets or campaign notes in the 'sandbox/' directory.
 2. **Execute Tools:** If the state aligns, call the appropriate tools to update the game.
-3. **Entity Creation:** You MUST use `vd entity add <id> --file <path>`. Inline flags like `--hp` or `--ac` are NOT supported.
-4. **Scene Initialization:** If `vd scene new` fails because a session exists, use the `--force` flag if you intend to overwrite it, or continue with the existing session.
+3. **Entity Creation (The Full Yakka):** 
+   - **Initial Add:** Use `vd entity add <id> [--file <path>] [--hp X] [--ac Y] [--level Z]`. 
+   - **Incremental Updates:** Character creation is a multi-pass process. Use `vd entity edit <id> [flags]` repeatedly to fill in stats.
+   - **Supported Flags:** 
+     - Identity: `--name`, `--level`, `--ancestry`, `--class`, `--background`
+     - Attributes: `--str`, `--dex`, `--con`, `--int`, `--wis`, `--cha`
+     - Combat: `--hp`, `--maxhp`, `--temphp`, `--ac`, `--speed`
+     - Saves/Detection: `--fort`, `--ref`, `--will`, `--perception`
+     - Skills: `--skill name=bonus` (e.g., `--skill stealth=5`)
+   - **The Goal:** Do not stop until the engine reports "Mechanical Yakka Complete" (0 missing core stats).
+4. **Scene Initialization:** If `vd scene new` fails because a session exists, use the `--force` flag to overwrite it: `vd scene new "My Scene" --force`.
 5. **State Recovery:** If a command fails with a "State Error" due to a malformed entity (e.g., MaxHP: 0), use `vd entity remove <id>` to clear the bad data and then re-add it correctly.
 6. **Report Back:** After execution, provide a concise summary of the actions taken. Do NOT narrate a story; just report the mechanical outcome.
 7. **Tool Use:** Use 'vd_manual' if you need CLI syntax. Use 'execute_python_readonly' to verify stats before mechanical resolution.
