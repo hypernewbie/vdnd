@@ -17,8 +17,17 @@ func cmdEntityAdd(args []string, deps Deps) (string, error) {
 	}
 	id := positional[0]
 	filePath := flags["file"]
+
+	// Detect common hallucinated flags to provide better hints
+	hallucinated := []string{"hp", "ac", "level", "str", "dex", "con", "int", "wis", "cha"}
+	for _, h := range hallucinated {
+		if _, ok := flags[h]; ok {
+			return "", NewUsageError(fmt.Sprintf("unsupported flag: --%s", h), "Inline stats are NOT supported. You MUST provide a character file using the --file flag.\nExample: vd entity add hero1 --file sandbox/hero.md")
+		}
+	}
+
 	if filePath == "" {
-		return "", NewUsageError("missing --file flag", "vd entity add <id> --file <path>")
+		return "", NewUsageError("missing --file flag", "vd entity add <id> --file <path>\nHint: Character stats must be defined in a file, not as CLI flags.")
 	}
 
 	f, err := os.Open(filePath)

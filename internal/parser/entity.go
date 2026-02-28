@@ -18,6 +18,10 @@ func ParseEntity(r io.Reader) (*state.EntityState, error) {
 	s := bufio.NewScanner(r)
 	e := &state.EntityState{}
 
+	foundName := false
+	foundLevel := false
+	foundHP := false
+
 	for s.Scan() {
 		line := strings.TrimSpace(s.Text())
 		if line == "" {
@@ -26,6 +30,7 @@ func ParseEntity(r io.Reader) (*state.EntityState, error) {
 
 		if strings.HasPrefix(line, "# ") {
 			e.Name = strings.TrimPrefix(line, "# ")
+			foundName = true
 			continue
 		}
 
@@ -45,6 +50,7 @@ func ParseEntity(r io.Reader) (*state.EntityState, error) {
 		switch key {
 		case "level":
 			e.Level, _ = strconv.Atoi(val)
+			foundLevel = true
 		case "hp":
 			hpParts := strings.Split(val, "/")
 			e.HP, _ = strconv.Atoi(strings.TrimSpace(hpParts[0]))
@@ -53,6 +59,7 @@ func ParseEntity(r io.Reader) (*state.EntityState, error) {
 			} else {
 				e.MaxHP = e.HP
 			}
+			foundHP = true
 		case "ac":
 			e.AC, _ = strconv.Atoi(val)
 		case "speed":
@@ -90,6 +97,16 @@ func ParseEntity(r io.Reader) (*state.EntityState, error) {
 			}
 			e.Skills[key] = parseModifier(val)
 		}
+	}
+
+	if !foundName {
+		return nil, fmt.Errorf("missing entity name (use # Name)")
+	}
+	if !foundLevel {
+		return nil, fmt.Errorf("missing level")
+	}
+	if !foundHP || e.MaxHP <= 0 {
+		return nil, fmt.Errorf("missing or invalid HP (must be > 0)")
 	}
 
 	return e, nil

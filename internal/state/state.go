@@ -46,12 +46,24 @@ func (g *GameState) Validate() error {
 		if entity == nil {
 			return fmt.Errorf("entity %s is nil", id)
 		}
-		if entity.MaxHP <= 0 {
-			return fmt.Errorf("entity %s has invalid MaxHP: %d", id, entity.MaxHP)
-		}
-		if entity.AC <= 0 {
-			return fmt.Errorf("entity %s has invalid AC: %d", id, entity.AC)
-		}
+		// We no longer fail the entire state if one entity has bad stats.
+		// Use entity.Validate() for specific checks.
+	}
+	return nil
+}
+
+func (e *EntityState) Validate() error {
+	if e.ID == "" {
+		return fmt.Errorf("entity ID cannot be empty")
+	}
+	if e.Name == "" {
+		return fmt.Errorf("entity name cannot be empty")
+	}
+	if e.MaxHP <= 0 {
+		return fmt.Errorf("entity %s has invalid MaxHP: %d", e.ID, e.MaxHP)
+	}
+	if e.AC <= 0 {
+		return fmt.Errorf("entity %s has invalid AC: %d", e.ID, e.AC)
 	}
 	return nil
 }

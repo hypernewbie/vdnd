@@ -114,6 +114,8 @@ class SandboxREPL:
         self.globals_dict["min"] = min
         self.globals_dict["max"] = max
         self.globals_dict["sum"] = sum
+        self.globals_dict["any"] = any
+        self.globals_dict["all"] = all
         self.globals_dict["dir"] = dir
         self.globals_dict["enumerate"] = enumerate
         self.globals_dict["hasattr"] = hasattr

@@ -8,14 +8,16 @@ import (
 )
 
 func cmdSceneNew(args []string, deps Deps) (string, error) {
-	// usage: vd scene new "My Scene"
-	if len(args) < 1 {
-		return "", NewUsageError("missing scene name", "vd scene new <name>")
+	// usage: vd scene new "My Scene" [--force]
+	positional, flags := ParseFlags(args)
+	if len(positional) < 1 {
+		return "", NewUsageError("missing scene name", "vd scene new <name> [--force]")
 	}
-	name := strings.Join(args, " ") // Allow "My Scene" as multiple args if unquoted
+	name := strings.Join(positional, " ") 
+	force := flags["force"] == "true"
 
-	if deps.Store.Exists() {
-		return "", NewStateError("session already exists in this directory", "You can only have one active session per directory. Move the existing 'state.json' or use a different directory.")
+	if deps.Store.Exists() && !force {
+		return "", NewStateError("session already exists in this directory", "Use the --force flag to overwrite the existing session, or use a different directory.")
 	}
 
 	newState := &state.GameState{
